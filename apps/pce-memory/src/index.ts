@@ -16,6 +16,18 @@ type Scope = "session" | "project" | "principle";
 
 let currentPolicy: BoundaryPolicy = defaultPolicy.boundary;
 
+type ErrorCode =
+  | "POLICY_INVALID"
+  | "UPSERT_FAILED"
+  | "ACTIVATE_FAILED"
+  | "BOUNDARY_ERROR"
+  | "FEEDBACK_FAILED"
+  | "VALIDATION_ERROR";
+
+function err(code: ErrorCode, message: string) {
+  return { error: { code, message } };
+}
+
 function applyPolicy(yaml?: string) {
   const doc = yaml ? parsePolicy(yaml) : { ok: true, value: defaultPolicy };
   if (!doc.ok || !doc.value) throw new Error(doc.errors?.join(",") ?? "policy apply failed");
@@ -42,14 +54,14 @@ async function registerTools(server: Server) {
     const reqId = crypto.randomUUID();
     try {
       if (!text || !kind || !scope || !boundary_class || !content_hash) {
-        throw new Error("missing fields");
+        return err("VALIDATION_ERROR", "missing fields");
       }
       const claim = upsertClaim({ text, kind, scope, boundary_class, content_hash });
       appendLog({ id: `log_${reqId}`, op: "upsert", ok: true, req: reqId });
       return { id: claim.id };
     } catch (e: any) {
       appendLog({ id: `log_${reqId}`, op: "upsert", ok: false, req: reqId });
-      return { error: { code: "UPSERT_FAILED", message: e.message } };
+      return err("UPSERT_FAILED", e.message ?? String(e));
     }
   });
 
@@ -57,7 +69,10 @@ async function registerTools(server: Server) {
     const { scope, allow, top_k } = req.params as any;
     const reqId = crypto.randomUUID();
     try {
-      if (!Array.isArray(scope) || !Array.isArray(allow)) throw new Error("scope/allow must be arrays");
+      if (!Array.isArray(scope) || !Array.isArray(allow)) return err("VALIDATION_ERROR", "scope/allow must be arrays");
+      const invalidScope = scope.some((s: string) => !["session", "project", "principle"].includes(s));
+      if (invalidScope) return err("VALIDATION_ERROR", "unknown scope");
+      if (allow.some((a: any) => typeof a !== "string")) return err("VALIDATION_ERROR", "allow must be string[]");
       const claims: Claim[] = listClaimsByScope(scope, top_k ?? 12);
       const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
       saveActiveContext({ id: acId, claims });
@@ -65,7 +80,7 @@ async function registerTools(server: Server) {
       return { active_context_id: acId, claims };
     } catch (e: any) {
       appendLog({ id: `log_${reqId}`, op: "activate", ok: false, req: reqId });
-      return { error: { code: "ACTIVATE_FAILED", message: e.message } };
+      return err("ACTIVATE_FAILED", e.message ?? String(e));
     }
   });
 
@@ -78,7 +93,7 @@ async function registerTools(server: Server) {
       return res;
     } catch (e: any) {
       appendLog({ id: `log_${reqId}`, op: "boundary.validate", ok: false, req: reqId });
-      return { error: { code: "BOUNDARY_ERROR", message: e.message } };
+      return err("BOUNDARY_ERROR", e.message ?? String(e));
     }
   });
 
@@ -86,13 +101,13 @@ async function registerTools(server: Server) {
     const { claim_id, signal, score } = req.params as any;
     const reqId = crypto.randomUUID();
     try {
-      if (!claim_id || !signal) throw new Error("claim_id/signal required");
+      if (!claim_id || !signal) return err("VALIDATION_ERROR", "claim_id/signal required");
       const res = recordFeedback({ claim_id, signal, score });
       appendLog({ id: `log_${reqId}`, op: "feedback", ok: true, req: reqId });
       return res;
     } catch (e: any) {
       appendLog({ id: `log_${reqId}`, op: "feedback", ok: false, req: reqId });
-      return { error: { code: "FEEDBACK_FAILED", message: e.message } };
+      return err("FEEDBACK_FAILED", e.message ?? String(e));
     }
   });
 }
