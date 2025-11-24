@@ -1,69 +1,70 @@
-#!/usr/bin/env node
-
 /**
- * 簡易インメモリ実装の MCP ツール群。
- * 本番では DuckDB・正式な MCP transport に置き換えること。
+ * PCE Memory MCP Server (stdio)
+ * 本番用の最小実装: DuckDB ストア + ポリシー適用 + 境界チェック + upsert/activate/feedback
  */
-import { parsePolicy, defaultPolicy } from "@pce/policy-schemas";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { parsePolicy, defaultPolicy, BoundaryPolicy } from "@pce/policy-schemas";
 import { boundaryValidate } from "@pce/boundary";
+import { initSchema } from "./db/connection";
+import { upsertClaim, listClaimsByScope, Claim } from "./store/claims";
+import { saveActiveContext } from "./store/activeContext";
+import { recordFeedback } from "./store/feedback";
 
 type Scope = "session" | "project" | "principle";
 
-interface Claim {
-  id: string;
-  text: string;
-  kind: string;
-  scope: Scope;
-  boundary_class: string;
-  content_hash: string;
-}
+let currentPolicy: BoundaryPolicy = defaultPolicy.boundary;
 
-interface ActiveContext {
-  id: string;
-  claims: Claim[];
-}
-
-const claimsStore: Map<string, Claim> = new Map();
-const acStore: Map<string, ActiveContext> = new Map();
-
-// util
-function newId(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export function policyApply(yaml?: string) {
+function applyPolicy(yaml?: string) {
   const doc = yaml ? parsePolicy(yaml) : { ok: true, value: defaultPolicy };
-  if (!doc.ok) throw new Error(doc.errors?.join(",") ?? "policy apply failed");
-  currentPolicy = doc.value!.boundary;
-  return { policy_version: doc.value!.version };
+  if (!doc.ok || !doc.value) throw new Error(doc.errors?.join(",") ?? "policy apply failed");
+  currentPolicy = doc.value.boundary;
+  return { policy_version: doc.value.version };
 }
 
-let currentPolicy = defaultPolicy.boundary;
+async function registerTools(server: Server) {
+  server.setRequestHandler("pce.memory.policy.apply", async (req) => {
+    const yaml = req.params?.yaml as string | undefined;
+    return applyPolicy(yaml);
+  });
 
-export function upsert(input: Omit<Claim, "id">) {
-  if (!input.content_hash) throw new Error("content_hash required");
-  if (claimsStore.has(input.content_hash)) return { id: claimsStore.get(input.content_hash)!.id };
-  const id = newId("clm");
-  const claim: Claim = { id, ...input };
-  claimsStore.set(input.content_hash, claim);
-  return { id };
+  server.setRequestHandler("pce.memory.upsert", async (req) => {
+    const { text, kind, scope, boundary_class, content_hash } = req.params as any;
+    if (!text || !kind || !scope || !boundary_class || !content_hash) throw new Error("missing fields");
+    const claim = upsertClaim({ text, kind, scope, boundary_class, content_hash });
+    return { id: claim.id };
+  });
+
+  server.setRequestHandler("pce.memory.activate", async (req) => {
+    const { scope, allow, top_k } = req.params as any;
+    if (!Array.isArray(scope) || !Array.isArray(allow)) throw new Error("scope/allow must be arrays");
+    const claims: Claim[] = listClaimsByScope(scope, top_k ?? 12);
+    const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
+    saveActiveContext({ id: acId, claims });
+    return { active_context_id: acId, claims };
+  });
+
+  server.setRequestHandler("pce.memory.boundary.validate", async (req) => {
+    const { payload, allow, scope } = req.params as any;
+    return boundaryValidate({ payload, allow, scope }, currentPolicy);
+  });
+
+  server.setRequestHandler("pce.memory.feedback", async (req) => {
+    const { claim_id, signal, score } = req.params as any;
+    if (!claim_id || !signal) throw new Error("claim_id/signal required");
+    return recordFeedback({ claim_id, signal, score });
+  });
 }
 
-export function activate(params: { q: string; scope: Scope[]; allow: string[]; top_k?: number }) {
-  const acId = newId("ac");
-  const matched = Array.from(claimsStore.values()).filter((c) => params.scope.includes(c.scope));
-  const limited = matched.slice(0, params.top_k ?? 12);
-  const ac: ActiveContext = { id: acId, claims: limited };
-  acStore.set(acId, ac);
-  return { active_context_id: acId, claims: limited };
+async function main() {
+  initSchema();
+  const server = new Server({});
+  await registerTools(server);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 }
 
-export function boundaryValidateTool(payload: string, allow: string[], scope: Scope) {
-  return boundaryValidate({ payload, allow, scope }, currentPolicy);
-}
-
-export function feedback(input: { claim_id: string; signal: "helpful" | "harmful" | "outdated"; score?: number }) {
-  // 簡易実装: 何も更新しないが成功を返す
-  if (!claimsStore.size) throw new Error("no claims");
-  return { ok: true };
-}
+main().catch((err) => {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});
