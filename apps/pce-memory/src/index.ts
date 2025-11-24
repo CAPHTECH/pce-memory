@@ -11,6 +11,8 @@ import { upsertClaim, listClaimsByScope, Claim } from "./store/claims";
 import { saveActiveContext } from "./store/activeContext";
 import { recordFeedback } from "./store/feedback";
 import { appendLog } from "./store/logs";
+import { initRateState } from "./store/rate";
+import { updateCritic } from "./store/critic";
 
 type Scope = "session" | "project" | "principle";
 
@@ -110,6 +112,9 @@ async function registerTools(server: Server) {
     try {
       if (!claim_id || !signal) return { ...err("VALIDATION_ERROR", "claim_id/signal required", reqId), trace_id: traceId };
       const res = recordFeedback({ claim_id, signal, score });
+      // critic update: helpful +1, harmful -1, outdated -0.5
+      const delta = signal === "helpful" ? 1 : signal === "harmful" ? -1 : -0.5;
+      updateCritic(claim_id, delta, 0, 5);
       appendLog({ id: `log_${reqId}`, op: "feedback", ok: true, req: reqId, trace: traceId, policy_version: currentPolicyVersion });
       return { ...res, policy_version: currentPolicyVersion, request_id: reqId, trace_id: traceId };
     } catch (e: any) {
@@ -121,6 +126,7 @@ async function registerTools(server: Server) {
 
 async function main() {
   initSchema();
+  initRateState();
   const server = new Server({});
   await registerTools(server);
   const transport = new StdioServerTransport();
