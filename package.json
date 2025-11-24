@@ -20,6 +20,9 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "formal:tla": "bash scripts/formal/run_tla.sh",
+    "formal:alloy": "bash scripts/formal/run_alloy.sh",
+    "formal:all": "pnpm formal:tla && pnpm formal:alloy",
     "clean": "pnpm -r run clean && rm -rf node_modules"
   },
   "devDependencies": {

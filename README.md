@@ -126,6 +126,12 @@ PCE Memoryは**Law-Driven Engineering (LDE)**原則に従います：
 3. **Errors as Values**: Either/TaskEither による明示的エラー処理
 4. **Detroit School TDD**: 実際のコンポーネント連携をテスト
 
+## Formal Verification
+
+- `pnpm formal:tla` — TLA+ (TLC)。`tlc` が無い場合は Docker `ghcr.io/tlaplus/tlaplus` を自動利用。
+- `pnpm formal:alloy` — Alloy (SAT4J)。初回実行時に jar を `.cache/formal` に取得し Java で全コマンドを走査。
+- `pnpm formal:all` — 上記まとめ実行。
+
 ### Test Commands
 
 ```bash

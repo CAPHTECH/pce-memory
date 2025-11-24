@@ -54,3 +54,7 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+/.cache
+
+docs/spec/tlaplus/states/
+states/
