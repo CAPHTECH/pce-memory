@@ -35,11 +35,21 @@ export function listClaimsByScope(scopes: string[], limit: number, q?: string): 
     const inClause = scopes.map(() => "?").join(",");
     const hasQuery = q && q.trim().length > 0;
     const sql = hasQuery
-      ? `SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE scope IN (${inClause}) AND text LIKE ? LIMIT ?`
-      : `SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE scope IN (${inClause}) LIMIT ?`;
+      ? `SELECT c.id,c.text,c.kind,c.scope,c.boundary_class,c.content_hash, coalesce(cr.score,0) as score
+         FROM claims c
+         LEFT JOIN critic cr ON cr.claim_id = c.id
+         WHERE c.scope IN (${inClause}) AND c.text LIKE ?
+         ORDER BY score DESC
+         LIMIT ?`
+      : `SELECT c.id,c.text,c.kind,c.scope,c.boundary_class,c.content_hash, coalesce(cr.score,0) as score
+         FROM claims c
+         LEFT JOIN critic cr ON cr.claim_id = c.id
+         WHERE c.scope IN (${inClause})
+         ORDER BY score DESC
+         LIMIT ?`;
     const stmt = db.prepare(sql);
     const args = hasQuery ? [...scopes, `%${q}%`, limit] : [...scopes, limit];
-    const rows = stmt.all(...args) as Claim[];
+    const rows = stmt.all(...args) as (Claim & { score: number })[];
     return rows;
   } finally {
     db.close();

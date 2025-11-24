@@ -19,6 +19,12 @@ type Scope = "session" | "project" | "principle";
 let currentPolicy: BoundaryPolicy = defaultPolicy.boundary;
 let currentPolicyVersion = defaultPolicy.version ?? "0.1";
 
+function validateString(field: string, val: any, max: number) {
+  if (typeof val !== "string" || val.length === 0 || val.length > max) {
+    throw new Error(`INVALID_${field.toUpperCase()}`);
+  }
+}
+
 type ErrorCode =
   | "POLICY_INVALID"
   | "UPSERT_FAILED"
@@ -64,9 +70,12 @@ async function registerTools(server: Server) {
       if (!text || !kind || !scope || !boundary_class || !content_hash) {
         return { ...err("VALIDATION_ERROR", "missing fields", reqId), trace_id: traceId };
       }
-       if (typeof text !== "string" || text.length > 5000) {
-         return { ...err("VALIDATION_ERROR", "text length invalid", reqId), trace_id: traceId };
-       }
+      validateString("text", text, 5000);
+      validateString("kind", kind, 128);
+      validateString("boundary_class", boundary_class, 128);
+      if (!currentPolicy.boundary_classes[boundary_class]) {
+        return { ...err("VALIDATION_ERROR", "unknown boundary_class", reqId), trace_id: traceId };
+      }
       const claim = upsertClaim({ text, kind, scope, boundary_class, content_hash });
       appendLog({ id: `log_${reqId}`, op: "upsert", ok: true, req: reqId, trace: traceId, policy_version: currentPolicyVersion });
       return { id: claim.id, policy_version: currentPolicyVersion, request_id: reqId, trace_id: traceId };
