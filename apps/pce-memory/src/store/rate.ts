@@ -63,9 +63,10 @@ export function checkAndConsume(bucket: string): boolean {
   const win = windowSec();
   let current = row?.value ?? 0;
   const last = row?.last_reset ?? now;
-  if (win > 0 && now - last >= win) {
+  const resetNeeded = win > 0 && now - last >= win;
+  if (resetNeeded) {
     current = 0;
-    setRate(bucket, 0);
+    setRate(bucket, 0); // also refresh last_reset
   }
   const limit = cap();
   if (current >= limit) return false;
