@@ -21,21 +21,28 @@ function redact(payload: string, patterns: string[] = []): string {
   return result;
 }
 
+const SAFE_REDACT_PATTERNS: Record<string, RegExp> = {
+  email: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+  phone: /\b\d{2,4}[- ]?\d{2,4}[- ]?\d{3,4}\b/g,
+};
+
 export function boundaryValidate(
   input: BoundaryValidateInput,
   policy: BoundaryPolicy
 ): BoundaryValidateResult {
   const { payload, allow, scope } = input;
   const bc = policy.boundary_classes;
-  // Simple rule: pick first class that overlaps allow tags
   const matched = Object.values(bc).find((c) => c.allow.some((a) => allow.includes(a) || a === "*"));
   if (!matched) {
     return { allowed: false, reason: "BOUNDARY_DENIED" };
   }
-  // Check scope TTL presence as a coarse scope validation
   if (!policy.scopes[scope as keyof typeof policy.scopes]) {
     return { allowed: false, reason: "SCOPE_UNKNOWN" };
   }
-  const redacted = matched.redact ? redact(payload, matched.redact) : payload;
-  return { allowed: true, redacted };
+  let redactedPayload = payload;
+  if (matched.redact) {
+    const patterns = matched.redact.map((p) => SAFE_REDACT_PATTERNS[p]).filter(Boolean);
+    redactedPayload = patterns.reduce((acc, re) => acc.replace(re, "[REDACTED]"), payload);
+  }
+  return { allowed: true, redacted: redactedPayload };
 }

@@ -19,6 +19,11 @@ export function upsertClaim(c: Omit<Claim, "id">): Claim {
       "INSERT INTO claims (id,text,kind,scope,boundary_class,content_hash) VALUES (?,?,?,?,?,?)"
     ).run(id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash);
     return { id, ...c };
+  } catch (e: any) {
+    // UNIQUE 制約違反などは既存レコードを返す（idempotent upsert）
+    const existing = db.prepare("SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE content_hash = ?").get(c.content_hash) as Claim | undefined;
+    if (existing) return existing;
+    throw e;
   } finally {
     db.close();
   }
