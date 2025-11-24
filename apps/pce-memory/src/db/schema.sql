@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS feedback (
 
 CREATE TABLE IF NOT EXISTS rate_state (
   bucket TEXT PRIMARY KEY,
-  value INTEGER NOT NULL
+  value INTEGER NOT NULL,
+  last_reset INTEGER DEFAULT (strftime('%s','now'))
 );
 
 CREATE TABLE IF NOT EXISTS critic (

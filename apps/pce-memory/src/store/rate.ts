@@ -7,31 +7,44 @@ function cap(): number {
   return Number.isFinite(envCap) && envCap > 0 ? envCap : 100;
 }
 
+function windowSec(): number {
+  const envWin = Number(process.env.PCE_RATE_WINDOW ?? "");
+  return Number.isFinite(envWin) && envWin >= 0 ? envWin : 60; // seconds
+}
+
 export function initRateState() {
   const db = getDb().connect();
   try {
     DEFAULT_BUCKETS.forEach((b) => {
-      db.prepare("INSERT OR IGNORE INTO rate_state (bucket, value) VALUES (?, 0)").run(b);
+      db.prepare("INSERT OR IGNORE INTO rate_state (bucket, value, last_reset) VALUES (?, 0, strftime('%s','now'))").run(b);
     });
   } finally {
     db.close();
   }
 }
 
-export function getRate(bucket: string): number {
+function getRow(bucket: string): { value: number; last_reset: number } | undefined {
   const db = getDb().connect();
   try {
-    const row = db.prepare("SELECT value FROM rate_state WHERE bucket = ?").get(bucket) as { value: number } | undefined;
-    return row?.value ?? 0;
+    const row = db.prepare("SELECT value, last_reset FROM rate_state WHERE bucket = ?").get(bucket) as
+      | { value: number; last_reset: number }
+      | undefined;
+    return row;
   } finally {
     db.close();
   }
 }
 
+export function getRate(bucket: string): number {
+  return getRow(bucket)?.value ?? 0;
+}
+
 export function setRate(bucket: string, value: number) {
   const db = getDb().connect();
   try {
-    db.prepare("INSERT INTO rate_state (bucket, value) VALUES (?, ?) ON CONFLICT(bucket) DO UPDATE SET value=excluded.value").run(
+    db.prepare(
+      "INSERT INTO rate_state (bucket, value, last_reset) VALUES (?, ?, strftime('%s','now')) ON CONFLICT(bucket) DO UPDATE SET value=excluded.value, last_reset=excluded.last_reset"
+    ).run(
       bucket,
       value
     );
@@ -42,10 +55,18 @@ export function setRate(bucket: string, value: number) {
 
 /**
  * 単純な固定上限のカウンタ（時間窓なし）。上限を超えたら false を返す。
- * 実運用で時間窓を導入する場合は schema 拡張が必要。
+ * PCE_RATE_WINDOW (秒) を設定するとその時間でリセット。デフォルト60秒。
  */
 export function checkAndConsume(bucket: string): boolean {
-  const current = getRate(bucket);
+  const row = getRow(bucket);
+  const now = Math.floor(Date.now() / 1000);
+  const win = windowSec();
+  let current = row?.value ?? 0;
+  const last = row?.last_reset ?? now;
+  if (win > 0 && now - last >= win) {
+    current = 0;
+    setRate(bucket, 0);
+  }
   const limit = cap();
   if (current >= limit) return false;
   setRate(bucket, current + 1);
