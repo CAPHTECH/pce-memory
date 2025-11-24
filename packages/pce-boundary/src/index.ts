@@ -1,18 +1,41 @@
-/**
- * @pce/boundary - Security boundaries, policies, and redaction for PCE
- *
- * このパッケージはPCEのBoundary-first原則を実装します：
- * - Boundary validation (境界検証)
- * - Redact-before-send/embed (機密情報除去)
- * - Invariant evaluation (不変条件評価)
- * - Scope-based access control (スコープベースのアクセス制御)
- *
- * @see docs/boundary-policy.md
- */
+import { BoundaryPolicy } from "@pce/policy-schemas";
 
-// TODO: Export types from core-types.md
-// TODO: Implement Boundary validator
-// TODO: Implement Redact functions
-// TODO: Implement InvariantEvaluator
+export interface BoundaryValidateInput {
+  payload: string;
+  allow: string[];
+  scope: "session" | "project" | "principle" | string;
+}
 
-export const PLACEHOLDER = 'pce-boundary';
+export interface BoundaryValidateResult {
+  allowed: boolean;
+  redacted?: string;
+  reason?: string;
+}
+
+function redact(payload: string, patterns: string[] = []): string {
+  let result = payload;
+  patterns.forEach((p) => {
+    const re = new RegExp(p, "gi");
+    result = result.replace(re, "[REDACTED]");
+  });
+  return result;
+}
+
+export function boundaryValidate(
+  input: BoundaryValidateInput,
+  policy: BoundaryPolicy
+): BoundaryValidateResult {
+  const { payload, allow, scope } = input;
+  const bc = policy.boundary_classes;
+  // Simple rule: pick first class that overlaps allow tags
+  const matched = Object.values(bc).find((c) => c.allow.some((a) => allow.includes(a) || a === "*"));
+  if (!matched) {
+    return { allowed: false, reason: "BOUNDARY_DENIED" };
+  }
+  // Check scope TTL presence as a coarse scope validation
+  if (!policy.scopes[scope as keyof typeof policy.scopes]) {
+    return { allowed: false, reason: "SCOPE_UNKNOWN" };
+  }
+  const redacted = matched.redact ? redact(payload, matched.redact) : payload;
+  return { allowed: true, redacted };
+}
