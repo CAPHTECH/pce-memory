@@ -64,6 +64,9 @@ async function registerTools(server: Server) {
       if (!text || !kind || !scope || !boundary_class || !content_hash) {
         return { ...err("VALIDATION_ERROR", "missing fields", reqId), trace_id: traceId };
       }
+       if (typeof text !== "string" || text.length > 5000) {
+         return { ...err("VALIDATION_ERROR", "text length invalid", reqId), trace_id: traceId };
+       }
       const claim = upsertClaim({ text, kind, scope, boundary_class, content_hash });
       appendLog({ id: `log_${reqId}`, op: "upsert", ok: true, req: reqId, trace: traceId, policy_version: currentPolicyVersion });
       return { id: claim.id, policy_version: currentPolicyVersion, request_id: reqId, trace_id: traceId };
@@ -74,7 +77,7 @@ async function registerTools(server: Server) {
   });
 
   server.setRequestHandler("pce.memory.activate", async (req) => {
-    const { scope, allow, top_k } = req.params as any;
+    const { scope, allow, top_k, q } = req.params as any;
     const reqId = crypto.randomUUID();
     const traceId = crypto.randomUUID();
     try {
@@ -83,7 +86,7 @@ async function registerTools(server: Server) {
       const invalidScope = scope.some((s: string) => !["session", "project", "principle"].includes(s));
       if (invalidScope) return { ...err("VALIDATION_ERROR", "unknown scope", reqId), trace_id: traceId };
       if (allow.some((a: any) => typeof a !== "string")) return { ...err("VALIDATION_ERROR", "allow must be string[]", reqId), trace_id: traceId };
-      const claims: Claim[] = listClaimsByScope(scope, top_k ?? 12);
+      const claims: Claim[] = listClaimsByScope(scope, top_k ?? 12, q);
       const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
       saveActiveContext({ id: acId, claims });
       appendLog({ id: `log_${reqId}`, op: "activate", ok: true, req: reqId, trace: traceId, policy_version: currentPolicyVersion });

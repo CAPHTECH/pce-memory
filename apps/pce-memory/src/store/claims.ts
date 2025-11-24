@@ -29,14 +29,17 @@ export function upsertClaim(c: Omit<Claim, "id">): Claim {
   }
 }
 
-export function listClaimsByScope(scopes: string[], limit: number): Claim[] {
+export function listClaimsByScope(scopes: string[], limit: number, q?: string): Claim[] {
   const db = getDb().connect();
   try {
     const inClause = scopes.map(() => "?").join(",");
-    const stmt = db.prepare(
-      `SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE scope IN (${inClause}) LIMIT ?`
-    );
-    const rows = stmt.all(...scopes, limit) as Claim[];
+    const hasQuery = q && q.trim().length > 0;
+    const sql = hasQuery
+      ? `SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE scope IN (${inClause}) AND text LIKE ? LIMIT ?`
+      : `SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE scope IN (${inClause}) LIMIT ?`;
+    const stmt = db.prepare(sql);
+    const args = hasQuery ? [...scopes, `%${q}%`, limit] : [...scopes, limit];
+    const rows = stmt.all(...args) as Claim[];
     return rows;
   } finally {
     db.close();
