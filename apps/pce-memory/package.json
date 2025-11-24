@@ -1,0 +1,32 @@
+{
+  "name": "@pce/memory",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PCE Memory - MCP server for Process-Context Engine",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "pce-memory": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "node --import tsx --watch src/index.ts",
+    "build": "tsdown --entry src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.4.1-r.5",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "fp-ts": "^2.16.11",
+    "io-ts": "^2.2.22",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

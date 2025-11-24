@@ -1,0 +1,18 @@
+# pnpm workspace configuration
+packages:
+  # アプリケーション層（実行可能バイナリ）
+  - "apps/*"
+
+  # ライブラリ層（再利用可能パッケージ）
+  - "packages/*"
+
+  # ツール層（開発支援ツール）
+  - "tools/*"
+
+# テストフィクスチャやサンプルプロジェクトを除外
+exclude:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/dist/**"
+  - "**/node_modules/**"
+  - "**/.turbo/**"

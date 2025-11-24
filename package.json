@@ -1,0 +1,58 @@
+{
+  "name": "pce-memory-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.18.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter='./packages/*' --filter='./apps/*' run build",
+    "dev": "pnpm -r --parallel --filter='./apps/*' run dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:pbt": "vitest run --grep='Property:'",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "clean": "pnpm -r run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "@vitest/ui": "^4.0.8",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-import": "^2.31.0",
+    "fast-check": "^4.0.0",
+    "prettier": "^3.4.2",
+    "tsdown": "^0.14.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.7",
+    "vitest": "^4.0.8"
+  },
+  "pnpm": {
+    "overrides": {
+      "duckdb": "1.4.1-r.5"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "typescript": "5"
+      }
+    }
+  },
+  "keywords": [
+    "PCE",
+    "Process-Context-Engine",
+    "MCP",
+    "LDE",
+    "fp-ts"
+  ],
+  "license": "MIT"
+}

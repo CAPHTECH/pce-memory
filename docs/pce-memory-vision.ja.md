@@ -46,7 +46,7 @@
 4. **Pace‑Aware**：更新テンポ（速・中・遅）に合わせ、**昇格／沈降**の手続きを設ける。  
 5. **Critic‑in‑the‑Loop**：明示的／暗黙的フィードバックで **有用性・信頼度・再現性** を継続更新。  
 6. **Interoperable**：CLI／HTTP／MCP で IDE やエージェントと接続。  
-7. **Self‑Hostable & Portable**：SQLite/DuckDB→Postgres/pgvector へ **可搬**。埋め込みは **OpenAI＋ローカル**の切替。  
+7. **Self‑Hostable & Portable**：DuckDB→Postgres/pgvector へ **可搬**。埋め込みは **OpenAI＋ローカル**の切替。  
 8. **Minimal Capture**：**最小限を覚え、過剰を覚えない**。Observation→Claim→Graph の段階化。  
 9. **Explainable Retrieval**：ハイブリッド検索（Dense＋BM25）＋再ランク（品質・信頼・新しさ）。  
 10. **Ethics & Safety**：PII/Secret は境界で遮断、**Redact‑before‑Send** を徹底。
@@ -189,7 +189,7 @@
 
 ## ロードマップ（Themes）
 
-- **v0.1**：単ノード Core（SQLite／DuckDB／sqlite‑vec）、LCP/AC、Boundary 基本、CLI/MCP  
+- **v0.1**：単ノード Core（DuckDB）、LCP/AC、Boundary 基本、CLI/MCP  
 - **v0.2**：Graph メモリ、Re‑rank、Critic/Telemetry、Provenance 強化  
 - **v0.3**：Pace‑aware 蒸留/沈降、Boundary UI、監査ビュー  
 - **v0.4**：Postgres/pgvector、組織運用、テンプレポリシー、コネクタ  

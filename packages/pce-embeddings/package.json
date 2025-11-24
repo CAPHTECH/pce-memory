@@ -1,0 +1,29 @@
+{
+  "name": "@pce/embeddings",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PCE Embeddings - Embedding provider abstraction for Process-Context Engine",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsdown --entry src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "fp-ts": "^2.16.11",
+    "io-ts": "^2.2.22"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

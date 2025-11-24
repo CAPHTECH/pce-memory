@@ -1,0 +1,32 @@
+{
+  "name": "@pce/policy-schemas",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PCE Policy Schemas - YAML policy schemas and validation for Process-Context Engine",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsdown --entry src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "fp-ts": "^2.16.11",
+    "io-ts": "^2.2.22",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/yaml": "^1.9.7"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
