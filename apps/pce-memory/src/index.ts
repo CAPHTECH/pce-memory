@@ -11,7 +11,7 @@ import { upsertClaim, listClaimsByScope, Claim } from "./store/claims";
 import { saveActiveContext } from "./store/activeContext";
 import { recordFeedback } from "./store/feedback";
 import { appendLog } from "./store/logs";
-import { initRateState } from "./store/rate";
+import { initRateState, checkAndConsume } from "./store/rate";
 import { updateCritic } from "./store/critic";
 
 type Scope = "session" | "project" | "principle";
@@ -25,7 +25,8 @@ type ErrorCode =
   | "ACTIVATE_FAILED"
   | "BOUNDARY_ERROR"
   | "FEEDBACK_FAILED"
-  | "VALIDATION_ERROR";
+  | "VALIDATION_ERROR"
+  | "RATE_LIMIT";
 
 function err(code: ErrorCode, message: string, request_id: string) {
   return { error: { code, message }, request_id };
@@ -59,6 +60,7 @@ async function registerTools(server: Server) {
     const reqId = crypto.randomUUID();
     const traceId = crypto.randomUUID();
     try {
+      if (!checkAndConsume("tool")) return { ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId };
       if (!text || !kind || !scope || !boundary_class || !content_hash) {
         return { ...err("VALIDATION_ERROR", "missing fields", reqId), trace_id: traceId };
       }
@@ -76,6 +78,7 @@ async function registerTools(server: Server) {
     const reqId = crypto.randomUUID();
     const traceId = crypto.randomUUID();
     try {
+      if (!checkAndConsume("activate")) return { ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId };
       if (!Array.isArray(scope) || !Array.isArray(allow)) return { ...err("VALIDATION_ERROR", "scope/allow must be arrays", reqId), trace_id: traceId };
       const invalidScope = scope.some((s: string) => !["session", "project", "principle"].includes(s));
       if (invalidScope) return { ...err("VALIDATION_ERROR", "unknown scope", reqId), trace_id: traceId };
@@ -110,6 +113,7 @@ async function registerTools(server: Server) {
     const reqId = crypto.randomUUID();
     const traceId = crypto.randomUUID();
     try {
+      if (!checkAndConsume("tool")) return { ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId };
       if (!claim_id || !signal) return { ...err("VALIDATION_ERROR", "claim_id/signal required", reqId), trace_id: traceId };
       const res = recordFeedback({ claim_id, signal, score });
       // critic update: helpful +1, harmful -1, outdated -0.5
