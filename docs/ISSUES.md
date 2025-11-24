@@ -24,9 +24,9 @@
 - [ ] P2: config/env ロード（PCE_TOKEN, PCE_POLICY パスなど）
 
 ## P2: テスト・検証
-- [x] P2: ユニットテスト（boundary.validate, rate-limiter, critic, codec）→ 追加済み（boundary invalid, rate limit, feedback critic, upsert dup）
+- [x] P2: ユニットテスト（boundary.validate, rate-limiter, critic, codec）→ 追加済み（boundary invalid/allowed, rate limit window, feedback critic, upsert dup）
 - [x] P2: 結合テスト（upsert→activate→validate→feedback ハッピーパス＆エラーケース）
-- [ ] P2: formal:all を CI で実行（GitHub Actions formal.yml に unit test を追加済み。CI確認は未）
+- [ ] P2: formal:all を CI で実行（GitHub Actions formal.yml に unit test を追加済み。CIでの実走確認は未）
 
 ## P2: 監査・ログ
 - [ ] P2: 監査ログ append-only 実装（request_id / trace_id / policy_version 記録）
