@@ -29,7 +29,26 @@
 - 成功応答の外形：
   `{"data": <payload>, "policy_version":"<semver>", "request_id":"<uuid>", "trace_id":"<uuid>"}`
 - 失敗応答（HTTP 4xx/5xx とともに）：
-  `{"error":{"code":"BOUNDARY_DENIED","message":"...","details":{...}}, "request_id":"<uuid>", "trace_id":"<uuid>"}`
+共通エラーフォーマット：
+
+```
+{"error":{"code":"<CODE>","message":"...","details":{...}}, "request_id":"<uuid>", "trace_id":"<uuid>", "policy_version":"<semver>"}
+```
+
+実装で使用中のコード一覧（詳細は docs/mcp-tools-errors.md 参照）：
+
+| code | 意味 |
+|---|---|
+| POLICY_INVALID | policy.apply 失敗 |
+| VALIDATION_ERROR | 入力不足・型不一致 |
+| UPSERT_FAILED | upsert 実行エラー |
+| ACTIVATE_FAILED | activate 実行エラー |
+| BOUNDARY_ERROR | boundary.validate 実行エラー |
+| BOUNDARY_DENIED | allow/scope 不一致（allowed=false） |
+| FEEDBACK_FAILED | feedback 実行エラー |
+| RATE_LIMIT | レート上限超過 |
+| POLICY_MISSING | policy 未適用（未実装だが予約） |
+| DUPLICATE | content_hash 重複（未実装だが予約） |
 
 ### 1.y Provenance Common Schema
 
