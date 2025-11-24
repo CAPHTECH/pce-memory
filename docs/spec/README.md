@@ -21,13 +21,13 @@
 ## 実装対応の目安
 | 仕様変数/アクション | 想定実装箇所(例) |
 |---|---|
-| `claims` | apps/pce-memory/src/core/claims (LCPストア) |
-| `acs` | apps/pce-memory/src/core/active-context |
-| `logs` | apps/pce-memory/src/core/logger or audit pipeline |
-| `rateState` | apps/pce-memory/src/core/rate-limiter |
-| `critic` | apps/pce-memory/src/core/critic or ranking module |
-| `Upsert/Activate/Validate/Feedback` | apps/pce-memory/src/mcp/tools/*.ts |
-| `RefillTick`(fairness) | rate-limiterの周期補充タスク |
+| `claims` | apps/pce-memory/src/store/claims.ts |
+| `acs` | apps/pce-memory/src/store/activeContext.ts |
+| `logs` | apps/pce-memory/src/store/logs.ts |
+| `rateState` | apps/pce-memory/src/store/rate.ts |
+| `critic` | apps/pce-memory/src/store/critic.ts |
+| `Upsert/Activate/Validate/Feedback` | apps/pce-memory/src/index.ts handlers |
+| `RefillTick`(fairness) | rate-limiterの周期補充（現状は固定カウンタ、時間窓未実装） |
 
 ## 使い方メモ
 - Alloy: `boundary.als` を Alloy Analyzer で開き、`run {}` や `check noDenyLeak` を実行。
