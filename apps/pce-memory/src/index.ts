@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { parsePolicy, defaultPolicy, BoundaryPolicy } from "@pce/policy-schemas";
 import { boundaryValidate } from "@pce/boundary";
 import { initSchema } from "./db/connection";
-import { upsertClaim, listClaimsByScope, Claim } from "./store/claims";
+import { upsertClaim, listClaimsByScope, Claim, findClaimById } from "./store/claims";
 import { saveActiveContext } from "./store/activeContext";
 import { recordFeedback } from "./store/feedback";
 import { appendLog } from "./store/logs";
@@ -115,6 +115,8 @@ async function registerTools(server: Server) {
     try {
       if (!checkAndConsume("tool")) return { ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId };
       if (!claim_id || !signal) return { ...err("VALIDATION_ERROR", "claim_id/signal required", reqId), trace_id: traceId };
+      const exists = findClaimById(claim_id);
+      if (!exists) return { ...err("VALIDATION_ERROR", "claim not found", reqId), trace_id: traceId };
       const res = recordFeedback({ claim_id, signal, score });
       // critic update: helpful +1, harmful -1, outdated -0.5
       const delta = signal === "helpful" ? 1 : signal === "harmful" ? -1 : -0.5;

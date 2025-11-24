@@ -42,3 +42,13 @@ export function listClaimsByScope(scopes: string[], limit: number): Claim[] {
     db.close();
   }
 }
+
+export function findClaimById(id: string): Claim | undefined {
+  const db = getDb().connect();
+  try {
+    const row = db.prepare("SELECT id,text,kind,scope,boundary_class,content_hash FROM claims WHERE id = ?").get(id) as Claim | undefined;
+    return row;
+  } finally {
+    db.close();
+  }
+}
