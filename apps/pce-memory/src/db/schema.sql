@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS logs (
   op TEXT,
   ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   ok BOOLEAN,
-  req TEXT
+  req TEXT,
+  trace TEXT,
+  policy_version TEXT
 );
 
 CREATE TABLE IF NOT EXISTS feedback (
