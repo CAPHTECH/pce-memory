@@ -25,3 +25,5 @@ jobs:
         run: pnpm formal:tla
       - name: Run Alloy
         run: pnpm formal:alloy
+      - name: Run unit tests
+        run: pnpm test -- --runInBand
