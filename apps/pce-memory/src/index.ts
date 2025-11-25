@@ -43,6 +43,16 @@ import {
   transitionToReady,
 } from "./state/memoryState.js";
 
+// layerScopeState モジュールからLayer/Scope管理関数をインポート
+import {
+  registerSystemLayer,
+  enterRequestScope,
+  exitRequestScope,
+  isInActiveScope,
+  addResourceToCurrentScope,
+  getLayerScopeSummary,
+} from "./state/layerScopeState.js";
+
 // サーバー情報
 const SERVER_NAME = "@pce/memory";
 const SERVER_VERSION = "0.1.0";
@@ -81,11 +91,24 @@ async function handleUpsert(args: Record<string, unknown>) {
   const { text, kind, scope, boundary_class, content_hash } = args as Record<string, string>;
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
+
+  // TLA+ EnterScope: リクエストスコープを開始
+  const scopeResult = enterRequestScope(reqId);
+  if (E.isLeft(scopeResult)) {
+    return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", scopeResult.left.message, reqId), trace_id: traceId }) }], isError: true };
+  }
+  const scopeId = scopeResult.right;
+
   try {
     // 状態検証: PolicyApplied または HasClaims からのみ呼び出し可能
     if (!canDoUpsert()) {
       const error = stateError("PolicyApplied or HasClaims", getStateType());
       return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // TLA+ sid ∈ activeScopes: スコープがアクティブか検証
+    if (!isInActiveScope(scopeId)) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", "scope not active", reqId), trace_id: traceId }) }], isError: true };
     }
 
     if (!(await checkAndConsume("tool"))) {
@@ -103,6 +126,13 @@ async function handleUpsert(args: Record<string, unknown>) {
     }
     const { claim, isNew } = await upsertClaim({ text, kind, scope, boundary_class, content_hash });
 
+    // TLA+ scopeResources: 作成したClaimをスコープのリソースとして登録
+    const addResult = addResourceToCurrentScope(scopeId, claim.id);
+    if (E.isLeft(addResult)) {
+      // リソース登録失敗はログのみ（Claimは既に作成済み）
+      console.error(`[${SERVER_NAME}] Failed to add resource to scope: ${addResult.left.message}`);
+    }
+
     // 状態遷移: PolicyApplied | HasClaims → HasClaims
     // 新規挿入の場合のみclaimCountを増加
     transitionToHasClaims(isNew);
@@ -113,6 +143,9 @@ async function handleUpsert(args: Record<string, unknown>) {
     await appendLog({ id: `log_${reqId}`, op: "upsert", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
     const msg = e instanceof Error ? e.message : String(e);
     return { content: [{ type: "text", text: JSON.stringify({ ...err("UPSERT_FAILED", msg, reqId), trace_id: traceId }) }], isError: true };
+  } finally {
+    // TLA+ ExitScope: リクエストスコープを終了（自動リソース解放）
+    exitRequestScope(scopeId);
   }
 }
 
@@ -223,11 +256,19 @@ async function handleGetState(args: Record<string, unknown>) {
   const includeDetails = args?.["debug"] === true;
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
+
+  // 基本サマリ
+  const summary = getStateSummary(includeDetails);
+
+  // デバッグモードではLayer/Scopeサマリも含める
+  const layerScopeSummary = includeDetails ? getLayerScopeSummary() : undefined;
+
   return {
     content: [{
       type: "text",
       text: JSON.stringify({
-        ...getStateSummary(includeDetails),
+        ...summary,
+        ...(layerScopeSummary ? { layer_scope: layerScopeSummary } : {}),
         request_id: reqId,
         trace_id: traceId
       })
@@ -353,6 +394,37 @@ async function main() {
   await initDb();
   await initSchema();
   await initRateState();
+
+  // システムLayer登録（ADR-0001 V2 Effect設計）
+  // TLA+ RegisterLayerに対応: 依存グラフを構築
+  const dbLayerResult = registerSystemLayer(
+    "db",
+    new Set(["db_access"] as const),
+    new Set()
+  );
+  if (E.isLeft(dbLayerResult)) {
+    console.error(`[${SERVER_NAME}] Failed to register db layer: ${dbLayerResult.left.message}`);
+  }
+
+  const policyLayerResult = registerSystemLayer(
+    "policy",
+    new Set(["policy_check"] as const),
+    new Set(["db"]) // policyはdbに依存
+  );
+  if (E.isLeft(policyLayerResult)) {
+    console.error(`[${SERVER_NAME}] Failed to register policy layer: ${policyLayerResult.left.message}`);
+  }
+
+  const schemaLayerResult = registerSystemLayer(
+    "schema",
+    new Set(["schema_validate"] as const),
+    new Set(["db"]) // schemaはdbに依存
+  );
+  if (E.isLeft(schemaLayerResult)) {
+    console.error(`[${SERVER_NAME}] Failed to register schema layer: ${schemaLayerResult.left.message}`);
+  }
+
+  console.error(`[${SERVER_NAME}] System layers registered: ${getLayerScopeSummary().layers.join(", ")}`);
 
   // 状態復元: memoryStateモジュールの初期化
   // DBからポリシーとclaim数を読み込み、適切な状態に復元
