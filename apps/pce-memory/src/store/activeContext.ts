@@ -1,4 +1,4 @@
-import { getDb } from "../db/connection";
+import { getConnection } from "../db/connection";
 import { Claim } from "./claims";
 
 export interface ActiveContext {
@@ -6,11 +6,10 @@ export interface ActiveContext {
   claims: Claim[];
 }
 
-export function saveActiveContext(ac: ActiveContext) {
-  const db = getDb().connect();
-  try {
-    db.prepare("INSERT INTO active_contexts (id, claims) VALUES (?, ?)").run(ac.id, JSON.stringify(ac.claims));
-  } finally {
-    db.close();
-  }
+export async function saveActiveContext(ac: ActiveContext): Promise<void> {
+  const conn = await getConnection();
+  await conn.run(
+    "INSERT INTO active_contexts (id, claims) VALUES ($1, $2)",
+    [ac.id, JSON.stringify(ac.claims)]
+  );
 }

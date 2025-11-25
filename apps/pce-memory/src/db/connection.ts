@@ -1,23 +1,56 @@
-import { Database } from "@duckdb/node-api";
+import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 import { readFileSync } from "fs";
 import { join } from "path";
 
-let db: Database | null = null;
+let instance: DuckDBInstance | null = null;
 
-export function getDb() {
-  if (db) return db;
+/**
+ * DuckDB インスタンスを初期化（非同期）
+ * 起動時に一度だけ呼び出す
+ */
+export async function initDb(): Promise<DuckDBInstance> {
+  if (instance) return instance;
   const dbPath = process.env.PCE_DB ?? ":memory:";
-  db = new Database(dbPath);
-  return db;
+  instance = await DuckDBInstance.create(dbPath);
+  return instance;
 }
 
-export function initSchema() {
+/**
+ * 初期化済みの DuckDB インスタンスを取得
+ * initDb() が先に呼ばれている必要がある
+ */
+export function getDb(): DuckDBInstance {
+  if (!instance) {
+    throw new Error("Database not initialized. Call initDb() first.");
+  }
+  return instance;
+}
+
+/**
+ * コネクションを取得（非同期）
+ */
+export async function getConnection(): Promise<DuckDBConnection> {
+  return getDb().connect();
+}
+
+/**
+ * スキーマを初期化（非同期）
+ */
+export async function initSchema() {
   const sql = readFileSync(join(__dirname, "schema.sql"), "utf-8");
-  const conn = getDb().connect();
-  sql
+  const conn = await getConnection();
+  const statements = sql
     .split(";")
     .map((s) => s.trim())
-    .filter(Boolean)
-    .forEach((stmt) => conn.run(stmt));
-  conn.close();
+    .filter(Boolean);
+  for (const stmt of statements) {
+    await conn.run(stmt);
+  }
+}
+
+/**
+ * テスト用: DB をリセット
+ */
+export function resetDb(): void {
+  instance = null;
 }

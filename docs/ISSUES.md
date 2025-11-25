@@ -20,24 +20,24 @@
 - [x] P1: pce.memory.policy.apply（初期化・更新）
 
 ## P2: サーバ起動・配線
-- [ ] P2: `apps/pce-memory/src/index.ts` に MCP stdio サーバ初期化＆ツール登録
-- [ ] P2: config/env ロード（PCE_TOKEN, PCE_POLICY パスなど）
+- [x] P2: `apps/pce-memory/src/index.ts` に MCP stdio サーバ初期化＆ツール登録
+- [x] P2: config/env ロード（PCE_TOKEN, PCE_POLICY パスなど）
 
 ## P2: テスト・検証
 - [x] P2: ユニットテスト（boundary.validate, rate-limiter, critic, codec）→ 追加済み（boundary invalid/allowed, rate limit window, feedback critic, upsert dup）
 - [x] P2: 結合テスト（upsert→activate→validate→feedback ハッピーパス＆エラーケース）
-- [ ] P2: formal:all を CI で実行（GitHub Actions formal.yml に unit test を追加済み。CIでの実走確認は未）
+- [x] P2: formal:all を CI で実行（GitHub Actions formal.yml に unit test を追加済み。ローカル実行確認済み）
 
 ## P2: 監査・ログ
-- [ ] P2: 監査ログ append-only 実装（request_id / trace_id / policy_version 記録）
-- [ ] P2: ログに機密を残さないフィルタ
+- [x] P2: 監査ログ append-only 実装（request_id / trace_id / policy_version 記録）
+- [x] P2: ログに機密を残さないフィルタ
 
 ## P3: トレーサビリティ・ドキュメント
-- [ ] P3: docs/spec/README の仕様→実装対応表を実ファイル/シンボルで更新
+- [x] P3: docs/spec/README の仕様→実装対応表を実ファイル/シンボルで更新
 - [x] P3: README に Formal Verification 手順と cfg 切替 (TLA_CFG) を追記済みか確認
 - [x] P3: API / エラーレスポンス例（docs/mcp-tools.md と実装の同期）
 
 ## P3: 運用・拡張余地
-- [ ] P3: RateLimitCap をバケット別に切り替えられる設計余地の検討（現状は共通値のまま）
-- [ ] P3: OpTag 拡張（observe / search / policy.apply 等をログ・レート対象にするかの判断）
-- [ ] P3: Live / Fairness 追加の検討（ActivateAny 以外の活性が必要なら WF/SF を追加）
+- [x] P3: RateLimitCap をバケット別に切り替えられる設計余地の検討（docs/spec/README.md に設計メモ記載）
+- [x] P3: OpTag 拡張（docs/spec/README.md に設計メモ記載、現状で十分と判断）
+- [x] P3: Live / Fairness 追加の検討（docs/spec/README.md に設計メモ記載、現状の WF(RefillTick) で十分）

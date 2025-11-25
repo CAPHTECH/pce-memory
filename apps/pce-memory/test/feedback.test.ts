@@ -1,30 +1,31 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { initSchema } from "../src/db/connection";
+import { initDb, initSchema, resetDb, getConnection } from "../src/db/connection";
 import { upsertClaim } from "../src/store/claims";
 import { recordFeedback } from "../src/store/feedback";
 import { updateCritic } from "../src/store/critic";
-import { getDb } from "../src/db/connection";
 
-beforeEach(() => {
+beforeEach(async () => {
+  resetDb();
   process.env.PCE_DB = ":memory:";
-  initSchema();
+  await initDb();
+  await initSchema();
 });
 
 describe("feedback critic update", () => {
-  it("updates critic score within bounds", () => {
-    const c = upsertClaim({
+  it("updates critic score within bounds", async () => {
+    const c = await upsertClaim({
       text: "foo",
       kind: "fact",
       scope: "project",
       boundary_class: "internal",
       content_hash: "hfb",
     });
-    recordFeedback({ claim_id: c.id, signal: "helpful", score: 1 });
-    const next = updateCritic(c.id, 1, 0, 5);
+    await recordFeedback({ claim_id: c.id, signal: "helpful", score: 1 });
+    const next = await updateCritic(c.id, 1, 0, 5);
     expect(next).toBeLessThanOrEqual(5);
-    const db = getDb().connect();
-    const row = db.prepare("SELECT score FROM critic WHERE claim_id=?").get(c.id) as { score: number };
-    db.close();
-    expect(row.score).toBe(next);
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll("SELECT score FROM critic WHERE claim_id = $1", [c.id]);
+    const rows = reader.getRowObjects() as { score: number }[];
+    expect(rows[0].score).toBe(next);
   });
 });

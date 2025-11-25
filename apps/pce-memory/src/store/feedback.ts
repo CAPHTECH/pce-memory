@@ -1,4 +1,4 @@
-import { getDb } from "../db/connection";
+import { getConnection } from "../db/connection";
 
 export interface FeedbackInput {
   claim_id: string;
@@ -6,18 +6,12 @@ export interface FeedbackInput {
   score?: number;
 }
 
-export function recordFeedback(input: FeedbackInput) {
-  const db = getDb().connect();
-  try {
-    const id = `fb_${crypto.randomUUID().slice(0, 8)}`;
-    db.prepare("INSERT INTO feedback (id, claim_id, signal, score) VALUES (?,?,?,?)").run(
-      id,
-      input.claim_id,
-      input.signal,
-      input.score ?? null
-    );
-    return { id };
-  } finally {
-    db.close();
-  }
+export async function recordFeedback(input: FeedbackInput): Promise<{ id: string }> {
+  const conn = await getConnection();
+  const id = `fb_${crypto.randomUUID().slice(0, 8)}`;
+  await conn.run(
+    "INSERT INTO feedback (id, claim_id, signal, score) VALUES ($1, $2, $3, $4)",
+    [id, input.claim_id, input.signal, input.score ?? null]
+  );
+  return { id };
 }

@@ -1,4 +1,4 @@
-import { getDb } from "../db/connection";
+import { getConnection } from "../db/connection";
 
 const DEFAULT_BUCKETS = ["tool", "policy", "activate"];
 
@@ -12,53 +12,45 @@ function windowSec(): number {
   return Number.isFinite(envWin) && envWin >= 0 ? envWin : 60; // seconds
 }
 
-export function initRateState() {
-  const db = getDb().connect();
-  try {
-    DEFAULT_BUCKETS.forEach((b) => {
-      db.prepare("INSERT OR IGNORE INTO rate_state (bucket, value, last_reset) VALUES (?, 0, strftime('%s','now'))").run(b);
-    });
-  } finally {
-    db.close();
-  }
-}
-
-function getRow(bucket: string): { value: number; last_reset: number } | undefined {
-  const db = getDb().connect();
-  try {
-    const row = db.prepare("SELECT value, last_reset FROM rate_state WHERE bucket = ?").get(bucket) as
-      | { value: number; last_reset: number }
-      | undefined;
-    return row;
-  } finally {
-    db.close();
-  }
-}
-
-export function getRate(bucket: string): number {
-  return getRow(bucket)?.value ?? 0;
-}
-
-export function setRate(bucket: string, value: number) {
-  const db = getDb().connect();
-  try {
-    db.prepare(
-      "INSERT INTO rate_state (bucket, value, last_reset) VALUES (?, ?, strftime('%s','now')) ON CONFLICT(bucket) DO UPDATE SET value=excluded.value, last_reset=excluded.last_reset"
-    ).run(
-      bucket,
-      value
+export async function initRateState(): Promise<void> {
+  const conn = await getConnection();
+  for (const b of DEFAULT_BUCKETS) {
+    await conn.run(
+      "INSERT OR IGNORE INTO rate_state (bucket, value, last_reset) VALUES ($1, 0, epoch(now())::INTEGER)",
+      [b]
     );
-  } finally {
-    db.close();
   }
+}
+
+async function getRow(bucket: string): Promise<{ value: number; last_reset: number } | undefined> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    "SELECT value, last_reset FROM rate_state WHERE bucket = $1",
+    [bucket]
+  );
+  const rows = reader.getRowObjects() as { value: number; last_reset: number }[];
+  return rows[0];
+}
+
+export async function getRate(bucket: string): Promise<number> {
+  const row = await getRow(bucket);
+  return row?.value ?? 0;
+}
+
+export async function setRate(bucket: string, value: number): Promise<void> {
+  const conn = await getConnection();
+  await conn.run(
+    "INSERT INTO rate_state (bucket, value, last_reset) VALUES ($1, $2, epoch(now())::INTEGER) ON CONFLICT(bucket) DO UPDATE SET value=excluded.value, last_reset=excluded.last_reset",
+    [bucket, value]
+  );
 }
 
 /**
- * 単純な固定上限のカウンタ（時間窓なし）。上限を超えたら false を返す。
+ * 単純な固定上限のカウンタ（時間窓付き）。上限を超えたら false を返す。
  * PCE_RATE_WINDOW (秒) を設定するとその時間でリセット。デフォルト60秒。
  */
-export function checkAndConsume(bucket: string): boolean {
-  const row = getRow(bucket);
+export async function checkAndConsume(bucket: string): Promise<boolean> {
+  const row = await getRow(bucket);
   const now = Math.floor(Date.now() / 1000);
   const win = windowSec();
   let current = row?.value ?? 0;
@@ -66,19 +58,15 @@ export function checkAndConsume(bucket: string): boolean {
   const resetNeeded = win > 0 && now - last >= win;
   if (resetNeeded) {
     current = 0;
-    setRate(bucket, 0); // also refresh last_reset
+    await setRate(bucket, 0); // also refresh last_reset
   }
   const limit = cap();
   if (current >= limit) return false;
-  setRate(bucket, current + 1);
+  await setRate(bucket, current + 1);
   return true;
 }
 
-export function resetRates() {
-  const db = getDb().connect();
-  try {
-    db.prepare("UPDATE rate_state SET value = 0").run();
-  } finally {
-    db.close();
-  }
+export async function resetRates(): Promise<void> {
+  const conn = await getConnection();
+  await conn.run("UPDATE rate_state SET value = 0");
 }

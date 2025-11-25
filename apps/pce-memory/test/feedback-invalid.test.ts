@@ -1,20 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { initSchema } from "../src/db/connection";
+import { initDb, initSchema, resetDb } from "../src/db/connection";
 import { recordFeedback } from "../src/store/feedback";
 import { findClaimById } from "../src/store/claims";
 
-beforeEach(() => {
+beforeEach(async () => {
+  resetDb();
   process.env.PCE_DB = ":memory:";
-  initSchema();
+  await initDb();
+  await initSchema();
 });
 
 describe("feedback validation", () => {
-  it("fails when claim does not exist", () => {
-    const exists = findClaimById("missing");
+  it("fails when claim does not exist", async () => {
+    const exists = await findClaimById("missing");
     expect(exists).toBeUndefined();
     // recordFeedback is low-level and will insert; handler checks existence.
     // So this test just documents current behavior.
-    const res = recordFeedback({ claim_id: "missing", signal: "helpful" });
+    const res = await recordFeedback({ claim_id: "missing", signal: "helpful" });
     expect(res.id).toBeDefined();
   });
 });

@@ -1,10 +1,34 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // ワークスペースパッケージのエイリアス設定
+      '@pce/boundary': resolve(__dirname, 'packages/pce-boundary/src/index.ts'),
+      '@pce/policy-schemas/src/defaults': resolve(__dirname, 'packages/pce-policy-schemas/src/defaults.ts'),
+      '@pce/policy-schemas': resolve(__dirname, 'packages/pce-policy-schemas/src/index.ts'),
+      '@pce/embeddings': resolve(__dirname, 'packages/pce-embeddings/src/index.ts'),
+      '@pce/sdk-ts': resolve(__dirname, 'packages/pce-sdk-ts/src/index.ts'),
+    },
+  },
   test: {
     // グローバル設定
     globals: true,
     environment: 'node',
+
+    // CommonJS モジュールの設定
+    deps: {
+      // native モジュールは外部化
+      external: ['@duckdb/node-api', '@duckdb/node-bindings'],
+      interopDefault: true,
+    },
+    // Node.js 環境でのモジュール解決
+    server: {
+      deps: {
+        external: ['@duckdb/node-api', '@duckdb/node-bindings'],
+      },
+    },
 
     // カバレッジ設定（LDE要件: 80%以上）
     coverage: {

@@ -1,22 +1,24 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { upsertClaim } from "../src/store/claims";
-import { initSchema } from "../src/db/connection";
+import { initDb, initSchema, resetDb } from "../src/db/connection";
 
-beforeEach(() => {
+beforeEach(async () => {
+  resetDb();
   process.env.PCE_DB = ":memory:";
-  initSchema();
+  await initDb();
+  await initSchema();
 });
 
 describe("upsertClaim", () => {
-  it("returns same id on duplicate content_hash", () => {
-    const first = upsertClaim({
+  it("returns same id on duplicate content_hash", async () => {
+    const first = await upsertClaim({
       text: "foo",
       kind: "fact",
       scope: "project",
       boundary_class: "internal",
       content_hash: "hash123",
     });
-    const second = upsertClaim({
+    const second = await upsertClaim({
       text: "foo2",
       kind: "fact",
       scope: "project",
