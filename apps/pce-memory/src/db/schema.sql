@@ -41,3 +41,13 @@ CREATE TABLE IF NOT EXISTS critic (
   claim_id TEXT PRIMARY KEY,
   score DOUBLE NOT NULL
 );
+
+-- ポリシー永続化テーブル（ADR-0002対応）
+-- "Latest wins" 戦略: created_at DESC で最新を取得
+CREATE TABLE IF NOT EXISTS policies (
+  id TEXT PRIMARY KEY,
+  version TEXT NOT NULL,
+  yaml_content TEXT NOT NULL,
+  config_json JSON NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -1,4 +1,4 @@
-import { getConnection } from "../db/connection";
+import { getConnection } from "../db/connection.js";
 import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
 
@@ -87,13 +87,18 @@ export async function recordAudit(
   await appendLog(entry);
 
   // ファイルにも記録（パスが設定されている場合）
-  appendAuditFile({
+  const record: Omit<AuditFileRecord, "ts"> = {
     request_id: entry.req ?? entry.id,
     trace_id: entry.trace ?? "",
     policy_version: entry.policy_version ?? "",
     op: entry.op,
     ok: entry.ok,
-    subject: extra?.subject,
-    payload_digest: extra?.payload_digest,
-  });
+  };
+  if (extra?.subject) {
+    record.subject = extra.subject;
+  }
+  if (extra?.payload_digest) {
+    record.payload_digest = extra.payload_digest;
+  }
+  appendAuditFile(record);
 }

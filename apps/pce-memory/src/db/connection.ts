@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 let instance: DuckDBInstance | null = null;
+let cachedConnection: DuckDBConnection | null = null;
 
 /**
  * DuckDB インスタンスを初期化（非同期）
@@ -10,7 +11,7 @@ let instance: DuckDBInstance | null = null;
  */
 export async function initDb(): Promise<DuckDBInstance> {
   if (instance) return instance;
-  const dbPath = process.env.PCE_DB ?? ":memory:";
+  const dbPath = process.env["PCE_DB"] ?? ":memory:";
   instance = await DuckDBInstance.create(dbPath);
   return instance;
 }
@@ -28,9 +29,14 @@ export function getDb(): DuckDBInstance {
 
 /**
  * コネクションを取得（非同期）
+ * 単一コネクションを再利用してリーク防止
  */
 export async function getConnection(): Promise<DuckDBConnection> {
-  return getDb().connect();
+  if (cachedConnection) {
+    return cachedConnection;
+  }
+  cachedConnection = await getDb().connect();
+  return cachedConnection;
 }
 
 /**
@@ -52,5 +58,6 @@ export async function initSchema() {
  * テスト用: DB をリセット
  */
 export function resetDb(): void {
+  cachedConnection = null;
   instance = null;
 }

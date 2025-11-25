@@ -16,7 +16,7 @@ beforeEach(async () => {
 describe("E2E happy path (upsert->activate->validate->feedback)", () => {
   it("runs end-to-end without errors", async () => {
     // upsert
-    const claim = await upsertClaim({
+    const { claim, isNew } = await upsertClaim({
       text: "foo",
       kind: "fact",
       scope: "project",
@@ -24,6 +24,7 @@ describe("E2E happy path (upsert->activate->validate->feedback)", () => {
       content_hash: "e2e1",
     });
     expect(claim.id).toBeDefined();
+    expect(isNew).toBe(true);
 
     // activate
     const claims = await listClaimsByScope(["project"], 10);

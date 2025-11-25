@@ -1,8 +1,8 @@
-import { getConnection } from "../db/connection";
+import { getConnection } from "../db/connection.js";
 
 export interface FeedbackInput {
   claim_id: string;
-  signal: "helpful" | "harmful" | "outdated";
+  signal: "helpful" | "harmful" | "outdated" | "duplicate";
   score?: number;
 }
 

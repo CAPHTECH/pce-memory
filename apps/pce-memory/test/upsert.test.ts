@@ -11,20 +11,23 @@ beforeEach(async () => {
 
 describe("upsertClaim", () => {
   it("returns same id on duplicate content_hash", async () => {
-    const first = await upsertClaim({
+    const { claim: first, isNew: isFirstNew } = await upsertClaim({
       text: "foo",
       kind: "fact",
       scope: "project",
       boundary_class: "internal",
       content_hash: "hash123",
     });
-    const second = await upsertClaim({
+    expect(isFirstNew).toBe(true);
+
+    const { claim: second, isNew: isSecondNew } = await upsertClaim({
       text: "foo2",
       kind: "fact",
       scope: "project",
       boundary_class: "internal",
       content_hash: "hash123",
     });
+    expect(isSecondNew).toBe(false); // 重複なのでfalse
     expect(second.id).toBe(first.id);
   });
 });

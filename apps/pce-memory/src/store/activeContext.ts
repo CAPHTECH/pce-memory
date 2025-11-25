@@ -1,5 +1,5 @@
-import { getConnection } from "../db/connection";
-import { Claim } from "./claims";
+import { getConnection } from "../db/connection.js";
+import type { Claim } from "./claims.js";
 
 export interface ActiveContext {
   id: string;

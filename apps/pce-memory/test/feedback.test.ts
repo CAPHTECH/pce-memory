@@ -13,7 +13,7 @@ beforeEach(async () => {
 
 describe("feedback critic update", () => {
   it("updates critic score within bounds", async () => {
-    const c = await upsertClaim({
+    const { claim: c } = await upsertClaim({
       text: "foo",
       kind: "fact",
       scope: "project",

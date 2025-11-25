@@ -1,14 +1,14 @@
-import { getConnection } from "../db/connection";
+import { getConnection } from "../db/connection.js";
 
 const DEFAULT_BUCKETS = ["tool", "policy", "activate"];
 
 function cap(): number {
-  const envCap = Number(process.env.PCE_RATE_CAP ?? "");
+  const envCap = Number(process.env["PCE_RATE_CAP"] ?? "");
   return Number.isFinite(envCap) && envCap > 0 ? envCap : 100;
 }
 
 function windowSec(): number {
-  const envWin = Number(process.env.PCE_RATE_WINDOW ?? "");
+  const envWin = Number(process.env["PCE_RATE_WINDOW"] ?? "");
   return Number.isFinite(envWin) && envWin >= 0 ? envWin : 60; // seconds
 }
 
@@ -48,22 +48,31 @@ export async function setRate(bucket: string, value: number): Promise<void> {
 /**
  * 単純な固定上限のカウンタ（時間窓付き）。上限を超えたら false を返す。
  * PCE_RATE_WINDOW (秒) を設定するとその時間でリセット。デフォルト60秒。
+ * アトミックな UPDATE ... WHERE ... RETURNING で競合状態を回避。
  */
 export async function checkAndConsume(bucket: string): Promise<boolean> {
-  const row = await getRow(bucket);
+  const conn = await getConnection();
   const now = Math.floor(Date.now() / 1000);
   const win = windowSec();
-  let current = row?.value ?? 0;
-  const last = row?.last_reset ?? now;
-  const resetNeeded = win > 0 && now - last >= win;
-  if (resetNeeded) {
-    current = 0;
-    await setRate(bucket, 0); // also refresh last_reset
-  }
   const limit = cap();
-  if (current >= limit) return false;
-  await setRate(bucket, current + 1);
-  return true;
+
+  // まず時間窓リセットが必要かチェック（アトミックにリセット）
+  if (win > 0) {
+    await conn.run(
+      "UPDATE rate_state SET value = 0, last_reset = $1 WHERE bucket = $2 AND ($1 - last_reset) >= $3",
+      [now, bucket, win]
+    );
+  }
+
+  // アトミックに条件付きインクリメント: value < limit の場合のみ更新
+  const reader = await conn.runAndReadAll(
+    "UPDATE rate_state SET value = value + 1 WHERE bucket = $1 AND value < $2 RETURNING value",
+    [bucket, limit]
+  );
+  const rows = reader.getRowObjects() as { value: number }[];
+
+  // 更新された行があれば成功、なければレート制限超過
+  return rows.length > 0;
 }
 
 export async function resetRates(): Promise<void> {

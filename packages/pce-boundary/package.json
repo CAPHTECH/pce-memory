@@ -12,14 +12,14 @@
     }
   },
   "scripts": {
-    "build": "tsdown --entry src/index.ts --format esm --dts --clean",
+    "build": "tsdown --entry src/index.ts --format esm --dts --clean --no-hash",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@pce/policy-schemas": "0.1.0",
+    "@pce/policy-schemas": "workspace:*",
     "fp-ts": "^2.16.11",
     "io-ts": "^2.2.22"
   },

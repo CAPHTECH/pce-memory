@@ -54,6 +54,7 @@ export function loadEnv(): Env {
 /**
  * 認証トークンの検証
  * 開発環境ではトークンなしでも許可
+ * タイミング攻撃対策として crypto.timingSafeEqual を使用
  */
 export function validateToken(token: string | undefined, env: Env): boolean {
   // 開発/テスト環境ではトークンなしを許可
@@ -61,9 +62,20 @@ export function validateToken(token: string | undefined, env: Env): boolean {
     return true;
   }
 
-  // トークンが設定されている場合は一致を確認
-  if (env.PCE_TOKEN) {
-    return token === env.PCE_TOKEN;
+  // トークンが設定されている場合は一致を確認（タイミングセーフ）
+  if (env.PCE_TOKEN && token) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const crypto = require("crypto") as typeof import("crypto");
+    const expected = Buffer.from(env.PCE_TOKEN, "utf8");
+    const actual = Buffer.from(token, "utf8");
+    // 長さが異なる場合も一定時間で比較（タイミング攻撃対策）
+    if (expected.length !== actual.length) {
+      // ダミー比較で一定時間を確保
+      const dummy = Buffer.alloc(expected.length);
+      crypto.timingSafeEqual(expected, dummy);
+      return false;
+    }
+    return crypto.timingSafeEqual(expected, actual);
   }
 
   return false;

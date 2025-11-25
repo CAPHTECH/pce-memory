@@ -29,7 +29,7 @@ describe("E2E error cases", () => {
   it("feedback on missing claim should be rejected (handler level)", async () => {
     // Handler would reject; low-level store currently accepts.
     // This test documents that behavior needs handler check.
-    const dummy = await upsertClaim({
+    const { claim: dummy } = await upsertClaim({
       text: "exists",
       kind: "fact",
       scope: "project",

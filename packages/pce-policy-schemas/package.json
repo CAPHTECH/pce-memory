@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown --entry src/index.ts --format esm --dts --clean",
+    "build": "tsdown --entry src/index.ts --format esm --dts --clean --no-hash",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

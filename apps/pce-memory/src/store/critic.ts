@@ -1,4 +1,4 @@
-import { getConnection } from "../db/connection";
+import { getConnection } from "../db/connection.js";
 
 export async function updateCritic(claimId: string, delta: number, min: number, max: number): Promise<number> {
   const conn = await getConnection();

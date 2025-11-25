@@ -77,11 +77,14 @@ export function sanitizeForAudit(
   payload: string,
   metadata?: Record<string, unknown>
 ): SafePayload {
-  return {
+  const result: SafePayload = {
     payload_digest: computeDigest(payload),
     payload_length: payload.length,
-    metadata: metadata ? redactSensitiveFields(metadata) : undefined,
   };
+  if (metadata) {
+    result.metadata = redactSensitiveFields(metadata);
+  }
+  return result;
 }
 
 /**
