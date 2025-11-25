@@ -41,7 +41,7 @@ ADR-0002と同様に、複数の設計選択肢をAlloyで比較検証した。
 | フェイルオーバー戦略 | 即時切替 | リトライ後切替 | エラーのみ（fallbackなし） |
 | Redact順序 | Redact→Embed | Embed→Redact | 選択可能 |
 
-### Alloy検証結果
+### Alloy検証結果（構造的性質）
 
 ```
 -- キャッシュキー戦略
@@ -58,6 +58,67 @@ RedactA_Safe                UNSAT ← 反例なし（安全）
 RedactB_Safe                SAT   ← 反例発見（機密情報漏洩）
 RedactC_Safe                SAT   ← 反例発見（EmbedFirst選択時に漏洩）
 ```
+
+### TLA+検証結果（時相的性質）
+
+#### pce_embedding.tla（採用設計の検証）
+
+```
+TLC2 Version 2.19
+Model checking completed. No error has been found.
+171641 states generated, 35108 distinct states found, 0 states left on queue.
+```
+
+| 不変条件 | 結果 | 意味 |
+|---------|------|------|
+| Inv_CacheVersionConsistency | ✅ 成立 | キャッシュ内エントリは現在のモデルバージョンのみ |
+| Inv_UniqueRequestId | ✅ 成立 | リクエストIDは一意 |
+| Inv_NoProcessingWithoutProvider | ✅ 成立 | プロバイダーなしで処理開始しない |
+
+#### TLA+で発見されたバグ
+
+**問題**: `RequestIdUsed`が`batchQueue`と`currentBatch`をチェックしていなかった
+
+```tla
+-- 修正前（バグあり）
+RequestIdUsed(rid) ==
+  \/ \E r \in pendingRequests: r.requestId = rid
+  \/ \E r \in processingRequests: r.requestId = rid
+  \/ \E r \in completedRequests: r.requestId = rid
+  \/ \E r \in failedRequests: r.requestId = rid
+
+-- 修正後（バグ修正）
+RequestIdUsed(rid) ==
+  \/ \E r \in pendingRequests: r.requestId = rid
+  \/ \E r \in processingRequests: r.requestId = rid
+  \/ \E r \in completedRequests: r.requestId = rid
+  \/ \E r \in failedRequests: r.requestId = rid
+  \/ \E i \in 1..Len(batchQueue): batchQueue[i].requestId = rid  -- 追加
+  \/ \E r \in currentBatch: r.requestId = rid                    -- 追加
+```
+
+#### embedding_failover_comparison.tla（設計比較）
+
+```
+TLC2 Version 2.19
+Error: Invariant Inv_C_CanComplete is violated.
+120 states generated, 66 distinct states found
+```
+
+**発見された反例（設計C: フェイルオーバーなし）**:
+
+```
+State 1: 初期状態（両プロバイダー利用可能）
+State 2: リクエストr1を送信
+State 3: プライマリで処理開始
+State 4: プライマリ障害発生
+→ フォールバックは利用可能だが、設計Cでは切り替えできず処理不可
+```
+
+| 設計 | Inv_A_CanComplete | Inv_C_CanComplete | 採用 |
+|-----|-------------------|-------------------|------|
+| A: 即時フェイルオーバー | ✅ 成立 | - | ✅ 採用 |
+| C: フェイルオーバーなし | - | ❌ 反例発見 | ❌ 不採用 |
 
 ### 発見された問題
 
@@ -90,6 +151,26 @@ req.sensitivity = Confidential のとき
 ```
 
 ## 決定
+
+形式検証（Alloy + TLA+）の結果に基づき、以下の設計を採用する。
+
+### 採用する設計
+
+| 設計軸 | 採用設計 | 検証方法 | 根拠 |
+|--------|---------|---------|------|
+| キャッシュキー戦略 | **A: バージョン込みキー** | Alloy | 古いバージョンのエントリが返されないことを形式的に保証 |
+| フェイルオーバー戦略 | **A: 即時フェイルオーバー** | Alloy + TLA+ | 可用性を形式的に保証（どちらかが利用可能なら成功） |
+| Redact順序 | **A: Redact-before-Embed** | Alloy | 機密情報が漏洩しないことを形式的に保証 |
+
+### 採用しない設計
+
+| 設計 | 不採用理由 | 反例 |
+|------|-----------|------|
+| キャッシュB（テキストのみ） | 古いバージョンのエントリが返される | Alloy SAT |
+| フェイルオーバーB（リトライ後） | リトライ中は可用性保証なし | Alloy SAT |
+| フェイルオーバーC（なし） | 単一障害点、処理不可 | Alloy SAT + TLA+反例 |
+| RedactB（Embed-first） | 機密情報がベクトル空間に漏洩 | Alloy SAT |
+| RedactC（選択可能） | 誤選択時に漏洩 | Alloy SAT |
 
 ### 1. 形式検証で保証する性質（Alloy）
 
