@@ -10,9 +10,10 @@ IMG="eclipse-temurin:21-jre"
 
 # 検証対象の.tlaファイルと対応する.cfgファイル
 # 形式: "tlaファイル:cfgファイル"
+# v3: pce_embedding.tlaも状態爆発対策でsmall.cfgを使用
 TLA_SPECS=(
   "pce_memory.tla:${TLA_CFG:-pce_memory.small.cfg}"
-  "pce_embedding.tla:pce_embedding.cfg"
+  "pce_embedding.tla:${TLA_EMBED_CFG:-pce_embedding.small.cfg}"
   # embedding_failover_comparison は設計Cの問題を示すため、別途実行
 )
 
