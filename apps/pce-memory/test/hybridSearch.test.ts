@@ -415,6 +415,23 @@ describe("Edge cases", () => {
       "Invalid embedding value"
     );
   });
+
+  it("should reject embedding exceeding dimension limit", async () => {
+    const { claim } = await upsertClaim(testClaims[0]);
+    // MAX_EMBEDDING_DIM = 4096を超える
+    const oversizedEmbedding = new Array(5000).fill(0.5);
+    await expect(saveClaimVector(claim.id, oversizedEmbedding, "test-model")).rejects.toThrow(
+      "exceeds maximum"
+    );
+  });
+
+  it("should reject embedding exceeding magnitude limit", async () => {
+    const { claim } = await upsertClaim(testClaims[0]);
+    // MAX_EMBEDDING_MAGNITUDE = 10.0を超える値
+    await expect(saveClaimVector(claim.id, [0.5, 15.0, 0.3], "test-model")).rejects.toThrow(
+      "exceeds magnitude limit"
+    );
+  });
 });
 
 // ========== EmbeddingService統合テスト ==========
