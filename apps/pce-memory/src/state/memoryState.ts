@@ -9,7 +9,6 @@
  */
 import * as TE from "fp-ts/TaskEither";
 import * as E from "fp-ts/Either";
-import { pipe } from "fp-ts/function";
 import type { BoundaryPolicy } from "@pce/policy-schemas";
 import { defaultPolicy } from "@pce/policy-schemas";
 import { PCEMemory, canUpsert, canActivate, canFeedback } from "../domain/stateMachine.js";

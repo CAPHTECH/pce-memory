@@ -4,11 +4,10 @@
  * "Latest wins" 戦略: created_at DESC で最新ポリシーを取得
  */
 import * as TE from "fp-ts/TaskEither";
-import * as E from "fp-ts/Either";
 import { pipe } from "fp-ts/function";
 import { getConnection } from "../db/connection.js";
 import type { DomainError } from "../domain/errors.js";
-import { domainError, dbError } from "../domain/errors.js";
+import { dbError } from "../domain/errors.js";
 import type { BoundaryPolicy } from "@pce/policy-schemas";
 
 // ========== 型定義 ==========
