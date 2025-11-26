@@ -21,6 +21,11 @@ import { getConnection } from "../db/connection.js";
 import type { Claim } from "./claims.js";
 import type { EmbeddingService } from "@pce/embeddings";
 import * as E from "fp-ts/Either";
+import {
+  calculateGFromClaim,
+  type GFactorBreakdown,
+  type ScoreBreakdown,
+} from "./rerank.js";
 
 // ========== ADR-0004 パラメータ ==========
 
@@ -113,6 +118,35 @@ interface SearchResult {
 }
 
 /**
+ * g()再ランキング用メトリクス
+ */
+interface ClaimMetrics {
+  id: string;
+  utility: number;
+  confidence: number;
+  /** 有効タイムスタンプ（updated_at or created_at） */
+  ts_eff: Date | string;
+  kind: string;
+}
+
+/**
+ * utility統計情報（z-score計算用）
+ */
+interface UtilityStats {
+  mean: number;
+  std: number;
+}
+
+/**
+ * g()適用済み検索結果
+ */
+export interface RankedSearchResult {
+  claim: Claim;
+  fusedScore: number;
+  breakdown?: ScoreBreakdown;
+}
+
+/**
  * Hybrid Search設定
  */
 export interface HybridSearchConfig {
@@ -122,6 +156,10 @@ export interface HybridSearchConfig {
   alpha?: number;
   /** 閾値（オプション、デフォルト0.15） */
   threshold?: number;
+  /** g()再ランキングを有効化（オプション、デフォルトtrue） */
+  enableRerank?: boolean;
+  /** デバッグ用: スコア内訳を含める（オプション、デフォルトfalse） */
+  includeBreakdown?: boolean;
 }
 
 // ========== グローバル設定 ==========
@@ -179,6 +217,7 @@ export async function textSearch(
   const sql = `
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+      c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
       COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -199,6 +238,11 @@ export async function textSearch(
       scope: row.scope,
       boundary_class: row.boundary_class,
       content_hash: row.content_hash,
+      utility: row.utility,
+      confidence: row.confidence,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      recency_anchor: row.recency_anchor,
     },
     score: row.text_score,
   }));
@@ -251,6 +295,7 @@ export async function vectorSearch(
   const sql = `
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+      c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
       norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score
     FROM claims c
     INNER JOIN claim_vectors cv ON cv.claim_id = c.id
@@ -270,6 +315,11 @@ export async function vectorSearch(
       scope: row.scope,
       boundary_class: row.boundary_class,
       content_hash: row.content_hash,
+      utility: row.utility,
+      confidence: row.confidence,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      recency_anchor: row.recency_anchor,
     },
     score: row.vec_score,
   }));
@@ -328,6 +378,174 @@ function mergeResults(
     // TLA+ Inv_C_ThresholdFiltering: score >= threshold
     if (fusedScore >= threshold) {
       merged.push({ claim, fusedScore });
+    }
+  }
+
+  // スコア降順ソート
+  merged.sort((a, b) => b.fusedScore - a.fusedScore);
+
+  return merged;
+}
+
+// ========== g()再ランキング用ヘルパー ==========
+
+/**
+ * utility統計情報を取得（z-score計算用）
+ * @param scopes 検索対象スコープ
+ * @returns mean, std（stdが0の場合は1.0を返す）
+ */
+async function getClaimStats(scopes: string[]): Promise<UtilityStats> {
+  if (scopes.length === 0) {
+    return { mean: 0, std: 1 };
+  }
+
+  const conn = await getConnection();
+  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+
+  const sql = `
+    SELECT
+      AVG(utility) as mean,
+      COALESCE(NULLIF(STDDEV_SAMP(utility), 0), 1.0) as std
+    FROM claims
+    WHERE scope IN (${scopePlaceholders})
+  `;
+
+  const reader = await conn.runAndReadAll(sql, scopes);
+  const rows = reader.getRowObjects() as unknown as { mean: number | null; std: number }[];
+  const row = rows[0];
+
+  if (!row || row.mean === null) {
+    return { mean: 0, std: 1 };
+  }
+
+  return { mean: row.mean, std: row.std };
+}
+
+/**
+ * Claimメトリクスを取得
+ * @param claimIds 取得対象のClaim ID配列
+ * @returns ClaimIdをキーとするメトリクスマップ
+ */
+async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimMetrics>> {
+  if (claimIds.length === 0) {
+    return new Map();
+  }
+
+  const conn = await getConnection();
+  const placeholders = claimIds.map((_, i) => `$${i + 1}`).join(",");
+
+  // recency計算にはrecency_anchorを使用（positive feedbackでのみ更新される）
+  const sql = `
+    SELECT
+      id, utility, confidence, kind,
+      COALESCE(recency_anchor, created_at) as ts_eff
+    FROM claims
+    WHERE id IN (${placeholders})
+  `;
+
+  const reader = await conn.runAndReadAll(sql, claimIds);
+  const rows = reader.getRowObjects() as unknown as ClaimMetrics[];
+
+  const metricsMap = new Map<string, ClaimMetrics>();
+  for (const row of rows) {
+    metricsMap.set(row.id, row);
+  }
+
+  return metricsMap;
+}
+
+/**
+ * g()適用版マージ関数
+ * TLA+ Inv_RangeBounds: g ∈ [0.09, 1.0]
+ *
+ * @param textResults テキスト検索結果
+ * @param vecResults ベクトル検索結果
+ * @param claimMetrics Claimメトリクスマップ
+ * @param stats utility統計情報
+ * @param alpha ベクトル重み
+ * @param threshold 閾値
+ * @param includeBreakdown スコア内訳を含めるか
+ * @returns g()適用済み検索結果
+ */
+function mergeResultsWithRerank(
+  textResults: SearchResult[],
+  vecResults: SearchResult[],
+  claimMetrics: Map<string, ClaimMetrics>,
+  stats: UtilityStats,
+  alpha: number,
+  threshold: number,
+  includeBreakdown: boolean = false
+): RankedSearchResult[] {
+  // ClaimIdでマップ化
+  const textMap = new Map<string, SearchResult>();
+  for (const r of textResults) {
+    textMap.set(r.claim.id, r);
+  }
+
+  const vecMap = new Map<string, SearchResult>();
+  for (const r of vecResults) {
+    vecMap.set(r.claim.id, r);
+  }
+
+  // 全候補のIDを収集（UNION）
+  const allIds = new Set([...textMap.keys(), ...vecMap.keys()]);
+
+  const merged: RankedSearchResult[] = [];
+
+  for (const id of allIds) {
+    const textResult = textMap.get(id);
+    const vecResult = vecMap.get(id);
+
+    const claim = textResult?.claim ?? vecResult?.claim;
+    if (!claim) continue;
+
+    // スコア取得
+    const textScore = textResult?.score ?? 0;
+    const vecScore = vecResult?.score ?? 0;
+
+    // 融合スコア S = α × vecScore + (1-α) × textScore
+    const S = alpha * vecScore + (1 - alpha) * textScore;
+
+    // メトリクス取得（存在しない場合はデフォルト値）
+    const metrics = claimMetrics.get(id);
+    let gFactor: GFactorBreakdown;
+
+    if (metrics) {
+      gFactor = calculateGFromClaim(
+        metrics.utility,
+        metrics.confidence,
+        metrics.ts_eff,
+        metrics.kind,
+        stats
+      );
+    } else {
+      // メトリクスがない場合: g = 1.0（影響なし）
+      gFactor = {
+        utility_term: 1.0,
+        confidence_term: 1.0,
+        recency_term: 1.0,
+        g: 1.0,
+      };
+    }
+
+    // 最終スコア: score_final = S × g
+    const scoreFinal = S * gFactor.g;
+
+    // 閾値フィルタ
+    if (scoreFinal >= threshold) {
+      const result: RankedSearchResult = { claim, fusedScore: scoreFinal };
+
+      if (includeBreakdown) {
+        result.breakdown = {
+          s_text: textScore,
+          s_vec: vecScore,
+          S,
+          g: gFactor,
+          score_final: scoreFinal,
+        };
+      }
+
+      merged.push(result);
     }
   }
 
@@ -397,6 +615,9 @@ export async function hybridSearch(
     // 失敗時はText-onlyフォールバック（queryEmbedding = null）
   }
 
+  const enableRerank = config?.enableRerank ?? true;
+  const includeBreakdown = config?.includeBreakdown ?? false;
+
   // Step 2: 並列検索実行
   // TLA+ Liveness_C_MergeEventuallyComplete: Promise.all()
   if (queryEmbedding) {
@@ -405,8 +626,36 @@ export async function hybridSearch(
       vectorSearch(queryEmbedding, scopes, K_VEC),
     ]);
 
-    // Step 3-5: マージ + 融合 + フィルタ + ソート
-    const merged = mergeResults(textResults, vecResults, alpha, threshold);
+    // Step 3-5: マージ + 融合 + フィルタ + ソート（g()再ランキング対応）
+    let merged: { claim: Claim; fusedScore: number }[];
+
+    if (enableRerank) {
+      // g()再ランキング有効: utility/confidence/recencyを考慮
+      const allClaimIds = [
+        ...textResults.map((r) => r.claim.id),
+        ...vecResults.map((r) => r.claim.id),
+      ];
+      const uniqueIds = [...new Set(allClaimIds)];
+
+      // 並列でstatsとmetricsを取得
+      const [stats, claimMetrics] = await Promise.all([
+        getClaimStats(scopes),
+        fetchClaimMetrics(uniqueIds),
+      ]);
+
+      merged = mergeResultsWithRerank(
+        textResults,
+        vecResults,
+        claimMetrics,
+        stats,
+        alpha,
+        threshold,
+        includeBreakdown
+      );
+    } else {
+      // g()再ランキング無効: 従来の融合スコアのみ
+      merged = mergeResults(textResults, vecResults, alpha, threshold);
+    }
 
     // Step 6: 上位k件を返却
     return merged.slice(0, normalizedLimit).map((r) => r.claim);
@@ -435,6 +684,7 @@ async function fallbackToTextOnly(scopes: string[], limit: number): Promise<Clai
 
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+           c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
            COALESCE(cr.score, 0) as score
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id

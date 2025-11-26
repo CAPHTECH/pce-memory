@@ -10,6 +10,13 @@ export interface Claim {
   scope: string;
   boundary_class: string;
   content_hash: string;
+  // g()再ランキング用フィールド（ADR-0004準拠）
+  utility: number;
+  confidence: number;
+  created_at: Date | string;
+  updated_at: Date | string;
+  // recency計算の基準時刻（positive feedbackでのみ更新）
+  recency_anchor: Date | string;
 }
 
 /**
@@ -26,12 +33,18 @@ export interface UpsertResult {
  * 既存のcontent_hashがある場合は既存レコードを返す（isNew: false）
  * 新規の場合は挿入して返す（isNew: true）
  */
-export async function upsertClaim(c: Omit<Claim, "id">): Promise<UpsertResult> {
+/** g()再ランキング用フィールドを含むClaim入力型 */
+export type ClaimInput = Omit<Claim, "id" | "utility" | "confidence" | "created_at" | "updated_at" | "recency_anchor">;
+
+/** 全カラムのSELECT句 */
+const CLAIM_COLUMNS = "id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor";
+
+export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   const conn = await getConnection();
   try {
     // 既存レコードをチェック
     const reader = await conn.runAndReadAll(
-      "SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE content_hash = $1",
+      `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
       [c.content_hash]
     );
     const existing = reader.getRowObjects() as unknown as Claim[];
@@ -39,17 +52,23 @@ export async function upsertClaim(c: Omit<Claim, "id">): Promise<UpsertResult> {
       return { claim: existing[0], isNew: false };
     }
 
-    // 新規レコード挿入
+    // 新規レコード挿入（utility/confidence/timestampsはDEFAULT値を使用）
     const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
     await conn.run(
       "INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash) VALUES ($1, $2, $3, $4, $5, $6)",
       [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash]
     );
-    return { claim: { id, ...c }, isNew: true };
+    // 挿入後のレコードを取得（DEFAULT値を含む）
+    const insertedReader = await conn.runAndReadAll(
+      `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
+      [id]
+    );
+    const inserted = insertedReader.getRowObjects() as unknown as Claim[];
+    return { claim: inserted[0]!, isNew: true };
   } catch (e: unknown) {
     // UNIQUE 制約違反などは既存レコードを返す（idempotent upsert）
     const reader = await conn.runAndReadAll(
-      "SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE content_hash = $1",
+      `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
       [c.content_hash]
     );
     const existing = reader.getRowObjects() as unknown as Claim[];
@@ -67,13 +86,17 @@ export async function listClaimsByScope(scopes: string[], limit: number, q?: str
   // DuckDBはプレースホルダーのIN句に配列をそのまま渡せないため、動的にSQL構築
   const placeholders = scopes.map((_, i) => `$${i + 1}`).join(",");
   const sql = hasQuery
-    ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, coalesce(cr.score, 0) as score
+    ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+              c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+              coalesce(cr.score, 0) as score
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
        WHERE c.scope IN (${placeholders}) AND c.text LIKE $${scopes.length + 1}
        ORDER BY score DESC
        LIMIT $${scopes.length + 2}`
-    : `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, coalesce(cr.score, 0) as score
+    : `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+              c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+              coalesce(cr.score, 0) as score
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
        WHERE c.scope IN (${placeholders})
@@ -88,7 +111,7 @@ export async function listClaimsByScope(scopes: string[], limit: number, q?: str
 export async function findClaimById(id: string): Promise<Claim | undefined> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE id = $1",
+    `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
     [id]
   );
   const rows = reader.getRowObjects() as unknown as Claim[];
@@ -118,7 +141,7 @@ export async function countClaims(): Promise<number> {
  * @returns UpsertResult（isNew: 新規かどうか）
  */
 export async function upsertClaimWithEmbedding(
-  c: Omit<Claim, "id">,
+  c: ClaimInput,
   embeddingService: EmbeddingService
 ): Promise<UpsertResult> {
   // 1. 既存upsertClaim呼び出し
