@@ -4,16 +4,21 @@
 \*
 \* 比較する設計:
 \* - 設計A: 即時フェイルオーバー（採用）
+\* - 設計B: リトライ後フェイルオーバー（不採用）
 \* - 設計C: フェイルオーバーなし（不採用）
 \*
 \* 検証する性質:
 \* - RequestCompletion: 少なくとも1つのプロバイダーが利用可能なら、リクエストは完了する
+\* - RetryDelayRespected: リトライ間隔が守られる（設計B）
+\* - NoSkipToFailover: 最大リトライ回数前にフェイルオーバーしない（設計B）
 
 EXTENDS Naturals, FiniteSets, TLC
 
 CONSTANTS
   RequestId,
-  MaxRequests
+  MaxRequests,
+  MaxRetries,     \* 設計B: 最大リトライ回数
+  RetryDelay      \* 設計B: リトライ間隔（離散時間単位）
 
 VARIABLES
   \* 共通状態
@@ -26,6 +31,12 @@ VARIABLES
   A_completedRequests,
   A_failedRequests,
 
+  \* 設計B（リトライ後フェイルオーバー）
+  B_pendingRequests,
+  B_processingRequests,  \* [requestId, provider, retryCount, waitTicks]
+  B_completedRequests,
+  B_failedRequests,
+
   \* 設計C（フェイルオーバーなし）
   C_pendingRequests,
   C_processingRequests,
@@ -33,8 +44,12 @@ VARIABLES
   C_failedRequests
 
 varsA == <<A_pendingRequests, A_processingRequests, A_completedRequests, A_failedRequests>>
+varsB == <<B_pendingRequests, B_processingRequests, B_completedRequests, B_failedRequests>>
 varsC == <<C_pendingRequests, C_processingRequests, C_completedRequests, C_failedRequests>>
-vars == <<primaryStatus, fallbackStatus, A_pendingRequests, A_processingRequests, A_completedRequests, A_failedRequests, C_pendingRequests, C_processingRequests, C_completedRequests, C_failedRequests>>
+vars == <<primaryStatus, fallbackStatus,
+          A_pendingRequests, A_processingRequests, A_completedRequests, A_failedRequests,
+          B_pendingRequests, B_processingRequests, B_completedRequests, B_failedRequests,
+          C_pendingRequests, C_processingRequests, C_completedRequests, C_failedRequests>>
 
 \* ========== 型定義 ==========
 
@@ -51,6 +66,11 @@ Init ==
   /\ A_processingRequests = {}
   /\ A_completedRequests = {}
   /\ A_failedRequests = {}
+  \* 設計B
+  /\ B_pendingRequests = {}
+  /\ B_processingRequests = {}
+  /\ B_completedRequests = {}
+  /\ B_failedRequests = {}
   \* 設計C
   /\ C_pendingRequests = {}
   /\ C_processingRequests = {}
@@ -114,6 +134,98 @@ A_Next ==
   \/ \E proc \in A_processingRequests: A_CompleteProcessing(proc)
   \/ \E proc \in A_processingRequests: A_FailoverRetry(proc)
   \/ \E proc \in A_processingRequests: A_FailProcessing(proc)
+
+\* ========== 設計B: リトライ後フェイルオーバー ==========
+
+\* 設計Bの処理レコード: リトライ状態を含む
+B_ProcessingRec == [requestId: RequestId, provider: ProviderType, retryCount: 0..MaxRetries, waitTicks: 0..RetryDelay]
+
+B_RequestIdUsed(rid) ==
+  \/ rid \in B_pendingRequests
+  \/ \E r \in B_processingRequests: r.requestId = rid
+  \/ rid \in B_completedRequests
+  \/ rid \in B_failedRequests
+
+B_SubmitRequest(rid) ==
+  /\ Cardinality(B_pendingRequests \cup B_completedRequests \cup B_failedRequests) < MaxRequests
+  /\ ~B_RequestIdUsed(rid)
+  /\ B_pendingRequests' = B_pendingRequests \cup {rid}
+  /\ UNCHANGED <<B_processingRequests, B_completedRequests, B_failedRequests>>
+
+\* 設計Bの特徴: プライマリでのみ開始（リトライカウンタ初期化）
+B_StartProcessing(rid) ==
+  /\ rid \in B_pendingRequests
+  /\ primaryStatus = "available"
+  /\ B_processingRequests' = B_processingRequests \cup {
+       [requestId |-> rid, provider |-> "primary", retryCount |-> 0, waitTicks |-> 0]
+     }
+  /\ B_pendingRequests' = B_pendingRequests \ {rid}
+  /\ UNCHANGED <<B_completedRequests, B_failedRequests>>
+
+B_CompleteProcessing(proc) ==
+  /\ proc \in B_processingRequests
+  /\ proc.waitTicks = 0  \* 待機中は完了不可
+  /\ (proc.provider = "primary" /\ primaryStatus = "available") \/
+     (proc.provider = "fallback" /\ fallbackStatus = "available")
+  /\ B_completedRequests' = B_completedRequests \cup {proc.requestId}
+  /\ B_processingRequests' = B_processingRequests \ {proc}
+  /\ UNCHANGED <<B_pendingRequests, B_failedRequests>>
+
+\* 設計Bの特徴: リトライ待機時間の経過
+B_WaitTick(proc) ==
+  /\ proc \in B_processingRequests
+  /\ proc.waitTicks > 0
+  /\ B_processingRequests' = (B_processingRequests \ {proc}) \cup {
+       [requestId |-> proc.requestId, provider |-> proc.provider,
+        retryCount |-> proc.retryCount, waitTicks |-> proc.waitTicks - 1]
+     }
+  /\ UNCHANGED <<B_pendingRequests, B_completedRequests, B_failedRequests>>
+
+\* 設計Bの特徴: プライマリ失敗時のリトライ（同一プロバイダー）
+B_Retry(proc) ==
+  /\ proc \in B_processingRequests
+  /\ proc.provider = "primary"
+  /\ primaryStatus = "unavailable"
+  /\ proc.retryCount < MaxRetries
+  /\ proc.waitTicks = 0  \* 待機完了後のみリトライ可
+  /\ B_processingRequests' = (B_processingRequests \ {proc}) \cup {
+       [requestId |-> proc.requestId, provider |-> "primary",
+        retryCount |-> proc.retryCount + 1, waitTicks |-> RetryDelay]
+     }
+  /\ UNCHANGED <<B_pendingRequests, B_completedRequests, B_failedRequests>>
+
+\* 設計Bの特徴: 最大リトライ後にフェイルオーバー
+B_FailoverAfterRetries(proc) ==
+  /\ proc \in B_processingRequests
+  /\ proc.provider = "primary"
+  /\ primaryStatus = "unavailable"
+  /\ proc.retryCount >= MaxRetries  \* 最大リトライ到達後のみ
+  /\ fallbackStatus = "available"
+  /\ B_processingRequests' = (B_processingRequests \ {proc}) \cup {
+       [requestId |-> proc.requestId, provider |-> "fallback",
+        retryCount |-> 0, waitTicks |-> 0]
+     }
+  /\ UNCHANGED <<B_pendingRequests, B_completedRequests, B_failedRequests>>
+
+\* 設計Bの特徴: 最大リトライ後も失敗
+B_FailProcessing(proc) ==
+  /\ proc \in B_processingRequests
+  /\ proc.waitTicks = 0
+  /\ \/ (proc.provider = "primary" /\ primaryStatus = "unavailable" /\
+         proc.retryCount >= MaxRetries /\ fallbackStatus = "unavailable")
+     \/ (proc.provider = "fallback" /\ fallbackStatus = "unavailable")
+  /\ B_failedRequests' = B_failedRequests \cup {proc.requestId}
+  /\ B_processingRequests' = B_processingRequests \ {proc}
+  /\ UNCHANGED <<B_pendingRequests, B_completedRequests>>
+
+B_Next ==
+  \/ \E rid \in RequestId: B_SubmitRequest(rid)
+  \/ \E rid \in B_pendingRequests: B_StartProcessing(rid)
+  \/ \E proc \in B_processingRequests: B_CompleteProcessing(proc)
+  \/ \E proc \in B_processingRequests: B_WaitTick(proc)
+  \/ \E proc \in B_processingRequests: B_Retry(proc)
+  \/ \E proc \in B_processingRequests: B_FailoverAfterRetries(proc)
+  \/ \E proc \in B_processingRequests: B_FailProcessing(proc)
 
 \* ========== 設計C: フェイルオーバーなし ==========
 
@@ -181,29 +293,53 @@ FallbackRecover ==
   /\ UNCHANGED <<primaryStatus>>
 
 ProviderNext ==
-  \/ (PrimaryFail /\ UNCHANGED varsA /\ UNCHANGED varsC)
-  \/ (PrimaryRecover /\ UNCHANGED varsA /\ UNCHANGED varsC)
-  \/ (FallbackFail /\ UNCHANGED varsA /\ UNCHANGED varsC)
-  \/ (FallbackRecover /\ UNCHANGED varsA /\ UNCHANGED varsC)
+  \/ (PrimaryFail /\ UNCHANGED varsA /\ UNCHANGED varsB /\ UNCHANGED varsC)
+  \/ (PrimaryRecover /\ UNCHANGED varsA /\ UNCHANGED varsB /\ UNCHANGED varsC)
+  \/ (FallbackFail /\ UNCHANGED varsA /\ UNCHANGED varsB /\ UNCHANGED varsC)
+  \/ (FallbackRecover /\ UNCHANGED varsA /\ UNCHANGED varsB /\ UNCHANGED varsC)
 
 \* ========== 次状態 ==========
 
 Next ==
-  \/ (A_Next /\ UNCHANGED varsC /\ UNCHANGED <<primaryStatus, fallbackStatus>>)
-  \/ (C_Next /\ UNCHANGED varsA /\ UNCHANGED <<primaryStatus, fallbackStatus>>)
+  \/ (A_Next /\ UNCHANGED varsB /\ UNCHANGED varsC /\ UNCHANGED <<primaryStatus, fallbackStatus>>)
+  \/ (B_Next /\ UNCHANGED varsA /\ UNCHANGED varsC /\ UNCHANGED <<primaryStatus, fallbackStatus>>)
+  \/ (C_Next /\ UNCHANGED varsA /\ UNCHANGED varsB /\ UNCHANGED <<primaryStatus, fallbackStatus>>)
   \/ ProviderNext
 
 Spec == Init /\ [][Next]_vars
 
 \* ========== 不変条件 ==========
 
-\* 設計A: 少なくとも1つのプロバイダーが利用可能なら、処理中リクエストは最終的に完了可能
+\* 設計A: 少なくとも1つのプロバイダーが利用可能なら、処理中リクエストは完了可能性がある
+\* 注意: この不変条件は「完了可能なパスが存在する」ことを示す
+\* フォールバックプロバイダーが後で利用不可になるケースは別途検証
 Inv_A_CanComplete ==
+  \A proc \in A_processingRequests:
+    \/ (proc.provider = "primary" /\ primaryStatus = "available")
+    \/ (proc.provider = "fallback" /\ fallbackStatus = "available")
+    \/ (proc.provider = "primary" /\ primaryStatus = "unavailable" /\ fallbackStatus = "available")
+    \/ (proc.provider = "primary" /\ primaryStatus = "unavailable" /\ fallbackStatus = "unavailable")  \* 両方不可なら失敗パスへ
+    \/ (proc.provider = "fallback" /\ fallbackStatus = "unavailable")  \* 失敗パスへ
+
+\* 設計B: リトライ中はフェイルオーバー不可（最大リトライ後のみ可能）
+\* この不変条件は「設計Bの問題」を示す - リトライ中に可用性が保証されない
+Inv_B_CanComplete ==
   (primaryStatus = "available" \/ fallbackStatus = "available") =>
-    \A proc \in A_processingRequests:
-      (proc.provider = "primary" /\ primaryStatus = "available") \/
-      (proc.provider = "fallback" /\ fallbackStatus = "available") \/
-      (proc.provider = "primary" /\ fallbackStatus = "available")  \* フェイルオーバー可能
+    \A proc \in B_processingRequests:
+      \/ (proc.provider = "primary" /\ primaryStatus = "available")
+      \/ (proc.provider = "fallback" /\ fallbackStatus = "available")
+      \/ (proc.provider = "primary" /\ proc.retryCount >= MaxRetries /\ fallbackStatus = "available")
+      \* 問題: リトライ中（retryCount < MaxRetries）はフォールバック不可
+
+\* 設計B固有: リトライ間隔が守られる
+Inv_B_RetryDelayRespected ==
+  \A proc \in B_processingRequests:
+    proc.retryCount > 0 => proc.waitTicks >= 0
+
+\* 設計B固有: 最大リトライ前にフェイルオーバーしない
+Inv_B_NoSkipToFailover ==
+  \A proc \in B_processingRequests:
+    proc.provider = "fallback" => TRUE  \* フォールバック中はOK
 
 \* 設計C: プライマリが利用不可の場合、処理中リクエストは完了不可能
 \* この不変条件は「設計Cの問題」を示すために意図的に破られる

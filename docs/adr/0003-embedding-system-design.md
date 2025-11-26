@@ -75,26 +75,37 @@ Model checking completed. No error has been found.
 | Inv_UniqueRequestId | ✅ 成立 | リクエストIDは一意 |
 | Inv_NoProcessingWithoutProvider | ✅ 成立 | プロバイダーなしで処理開始しない |
 
-#### TLA+で発見されたバグ
+#### TLA+で発見されたバグと修正（v2）
 
-**問題**: `RequestIdUsed`が`batchQueue`と`currentBatch`をチェックしていなかった
+**問題1**: `RequestIdUsed`が`batchQueue`と`currentBatch`をチェックしていなかった
+**問題2**: `ProcessingRec`にmodelVersionがなく、バージョン更新中の不整合を検出できなかった
+**問題3**: `Inv_UniqueRequestId`がコンテナ間の重複をチェックしていなかった
 
 ```tla
--- 修正前（バグあり）
-RequestIdUsed(rid) ==
-  \/ \E r \in pendingRequests: r.requestId = rid
-  \/ \E r \in processingRequests: r.requestId = rid
-  \/ \E r \in completedRequests: r.requestId = rid
-  \/ \E r \in failedRequests: r.requestId = rid
+-- v2修正1: ProcessingRecにmodelVersionを追加
+ProcessingRec == [text: Text, requestId: RequestId,
+                 provider: {"primary", "fallback"}, modelVersion: ModelVersion]
 
--- 修正後（バグ修正）
-RequestIdUsed(rid) ==
-  \/ \E r \in pendingRequests: r.requestId = rid
-  \/ \E r \in processingRequests: r.requestId = rid
-  \/ \E r \in completedRequests: r.requestId = rid
-  \/ \E r \in failedRequests: r.requestId = rid
-  \/ \E i \in 1..Len(batchQueue): batchQueue[i].requestId = rid  -- 追加
-  \/ \E r \in currentBatch: r.requestId = rid                    -- 追加
+-- v2修正2: CompleteProcessingでバージョンチェック
+CompleteProcessing(proc, vec) ==
+  /\ proc \in processingRequests
+  /\ proc.modelVersion = currentModelVersion  -- バージョン一致必須
+  /\ ...
+
+-- v2修正3: バージョン不一致時の専用アクション
+CompleteProcessingStale(proc) ==
+  /\ proc.modelVersion # currentModelVersion
+  /\ failedRequests' = failedRequests \cup {
+       [text |-> proc.text, requestId |-> proc.requestId,
+        error |-> "STALE_MODEL_VERSION"]
+     }
+
+-- v2修正4: Inv_UniqueRequestIdを全コンテナ間で相互排他
+Inv_UniqueRequestId ==
+  /\ \A r1, r2 \in pendingRequests: r1 # r2 => r1.requestId # r2.requestId
+  /\ \A r1 \in pendingRequests, r2 \in processingRequests: r1.requestId # r2.requestId
+  /\ \A r1 \in pendingRequests, r2 \in completedRequests: r1.requestId # r2.requestId
+  /\ ... (全コンテナ間の組み合わせ)
 ```
 
 #### embedding_failover_comparison.tla（設計比較）
@@ -282,6 +293,52 @@ Liveness_BatchCompletion ==
 - `BoundaryClass.redact` のタグを持つフィールドは埋め込み前に除去
 - ベクトル空間への機密情報漏洩を防止
 
+## 仕様 → 実装対応表
+
+### TLA+ 変数/アクション → TypeScript対応
+
+| TLA+ 要素 | 種類 | TypeScript 対応 | ファイル |
+|-----------|------|-----------------|----------|
+| `primaryProvider` | 変数 | `LocalEmbeddingProvider` インスタンス | `src/embedding/providers/local.ts` |
+| `fallbackProvider` | 変数 | `RemoteEmbeddingProvider` インスタンス | `src/embedding/providers/remote.ts` |
+| `cache` | 変数 | `EmbeddingCache.entries` | `src/embedding/cache.ts` |
+| `currentModelVersion` | 変数 | `EmbeddingCache.currentModelVersion` | `src/embedding/cache.ts` |
+| `pendingRequests` | 変数 | 関数呼び出しキュー（暗黙的） | N/A |
+| `processingRequests` | 変数 | Promise実行中（暗黙的） | N/A |
+| `completedRequests` | 変数 | TaskEither成功結果 | N/A |
+| `failedRequests` | 変数 | TaskEither失敗結果 | N/A |
+| `SubmitRequest` | アクション | `embeddingService.embed(text)` | `src/embedding/service.ts` |
+| `ProcessCacheHit` | アクション | `cache.get(hash)` 成功時 | `src/embedding/service.ts` |
+| `StartProcessing` | アクション | `provider.embed(text)` 呼び出し | `src/embedding/service.ts` |
+| `CompleteProcessing` | アクション | Promise解決 + `cache.set()` | `src/embedding/service.ts` |
+| `CompleteProcessingStale` | アクション | バージョン不一致時のエラー返却 | `src/embedding/service.ts` |
+| `FailoverRetry` | アクション | primary失敗時の`fallbackProvider.embed()` | `src/embedding/service.ts` |
+| `UpdateModelVersion` | アクション | `cache.invalidateAll()` | `src/embedding/cache.ts` |
+
+### Alloy シグネチャ → TypeScript型対応
+
+| Alloy 要素 | TypeScript 対応 | 備考 |
+|-----------|-----------------|------|
+| `sig Text` | `string` | 埋め込み対象テキスト |
+| `sig ModelVersion` | `string` | セマンティックバージョン |
+| `sig Vector` | `number[]` | 埋め込みベクトル（384次元） |
+| `sig ContentHash` | `string` | SHA-256ハッシュ |
+| `sig SensitivityLevel` | `'public' \| 'internal' \| 'confidential'` | BoundaryPolicy参照 |
+| `sig EmbeddingProvider` | `interface EmbeddingProvider` | 下記参照 |
+| `sig CacheState` | `interface EmbeddingCache` | 二状態モデル対応 |
+| `sig EmbeddingRequest` | `EmbedParams` | 関数パラメータ |
+| `sig Embedding` | `CacheEntry` | キャッシュエントリ |
+
+### 不変条件 → 実装での保証方法
+
+| 形式仕様の不変条件 | 実装での保証方法 |
+|------------------|-----------------|
+| `Inv_CacheVersionConsistency` | `cache.set()`でmodelVersionを必須パラメータ化 |
+| `Inv_UniqueRequestId` | UUIDv4生成で衝突回避 |
+| `Inv_NoProcessingWithoutProvider` | `AvailableProvider`チェックを先行ガード |
+| `WellFormedCacheState` | TypeScript型システムで構造強制 |
+| `RedactBeforeEmbed` | `embeddingService.embed()`の前処理で強制redact |
+
 ## 設計詳細
 
 ### EmbeddingProvider インターフェース
@@ -389,13 +446,56 @@ async function handleUpsert(params: UpsertParams): Promise<UpsertResult> {
 | ローカル処理によるプライバシー | モデル更新時の再デプロイ必要 |
 | フォールバックによる可用性 | 実装複雑性の増加 |
 
+### 既知の制限事項：並行リクエストとキャッシュ整合性
+
+#### 制限の概要
+
+現在の実装では、**単一プロセス内の並行リクエスト**において、キャッシュ書き込み時の完全なアトミック性は保証されない。これはNode.jsの非同期インターリービングに起因する。
+
+#### 発生条件
+
+```
+時刻T1: リクエストA がembedding生成開始（modelVersion = v1）
+時刻T2: updateModelVersion(v2) が呼ばれ、キャッシュクリア
+時刻T3: リクエストA が完了、キャッシュ書き込み試行
+```
+
+この場合、`cacheSetIfVersionMatches`でバージョンチェックを行うが、チェックと書き込みの間に再度バージョン変更が入る可能性がある（極めて稀）。
+
+#### 影響度分析
+
+| 観点 | 評価 | 理由 |
+|------|------|------|
+| 発生頻度 | 極低 | モデル更新は稀（数ヶ月に1回程度） |
+| データ整合性 | 影響なし | 古いバージョンのキャッシュは次回getで無視される |
+| パフォーマンス | 軽微 | 余分なキャッシュエントリが一時的に存在するのみ |
+| セキュリティ | 影響なし | データ破損やリーク経路なし |
+
+#### 現在の緩和策
+
+1. **バージョン込みキー戦略**: キャッシュキーに`textHash:modelVersion`を使用し、古いエントリは自然にマッチしない
+2. **書き込み前バージョンチェック**: `cacheSetIfVersionMatches`で書き込み直前にバージョン確認
+3. **バッチ処理の逐次実行**: `A.traverse(TE.ApplicativeSeq)`で単一バッチ内のレース条件を回避
+
+#### 将来の改善オプション（現時点では不要）
+
+本格的な並行性制御が必要になった場合の選択肢:
+
+| 選択肢 | 実装コスト | 効果 |
+|--------|----------|------|
+| AsyncMutex導入 | 中 | 完全な排他制御 |
+| CAS (Compare-And-Set) | 中 | 楽観的ロック |
+| シングルリクエスト化 | 低 | 並行実行を禁止 |
+
+現時点では、発生頻度と影響度を考慮し、追加実装は行わない。
+
 ### 未検証の性質（将来の検証候補）
 
 | 性質 | 理由 |
 |------|------|
 | 埋め込み品質（recall/precision） | ベンチマーク依存 |
 | レイテンシ保証 | 実行環境依存 |
-| 並行処理の正確性 | より詳細なTLA+モデルが必要 |
+| 並行処理のアトミック性 | 上記「既知の制限事項」参照 |
 
 ## 参考資料
 

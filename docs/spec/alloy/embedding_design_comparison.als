@@ -94,15 +94,42 @@ assert CacheB_NoStaleEmbedding {
 
 /**
  * 設計C: キャッシュなし
+ * 全てのリクエストは直接プロバイダーに送られる
  */
-sig CacheC {
-  -- エントリなし
+sig CacheC_Request {
+  text: one Text,
+  targetVersion: one ModelVersion  -- リクエスト時点で期待するバージョン
 }
 
--- 設計Cは常に安全（キャッシュがないため）
+sig CacheC_Response {
+  request: one CacheC_Request,
+  resultVersion: one ModelVersion,  -- 実際に処理されたバージョン
+  vector: one Vector
+}
+
+one sig CacheC_System {
+  currentVersion: one ModelVersion,
+  requests: set CacheC_Request,
+  responses: set CacheC_Response
+}
+
+-- キャッシュCの処理: 常に現在のバージョンで処理
+pred CacheC_Process[sys: CacheC_System, req: CacheC_Request, resp: CacheC_Response] {
+  resp.request = req
+  resp.resultVersion = sys.currentVersion  -- キャッシュがないため常に現在バージョン
+}
+
+-- 設計Cの安全性: レスポンスは常に現在のバージョン（キャッシュがないためstaleなし）
+-- 注意: これは「キャッシュなし」の利点を検証する意味のあるアサーション
 assert CacheC_NoStaleEmbedding {
-  -- 常に成立（キャッシュがないため古いエントリが返されることはない）
-  True = True
+  all sys: CacheC_System, resp: sys.responses |
+    resp.resultVersion = sys.currentVersion
+}
+
+-- 設計Cのトレードオフ: 毎回プロバイダー呼び出しが必要（性能低下）
+pred CacheC_AlwaysCallsProvider {
+  all sys: CacheC_System, req: sys.requests |
+    some resp: sys.responses | resp.request = req
 }
 
 -- ============================================================
@@ -306,6 +333,7 @@ pred CompareRedactOrder {
 -- キャッシュ戦略
 check CacheA_NoStaleEmbedding for 5    -- 期待: UNSAT（安全）
 check CacheB_NoStaleEmbedding for 5    -- 期待: SAT（反例あり）
+check CacheC_NoStaleEmbedding for 5 but 3 CacheC_Request, 3 CacheC_Response  -- 期待: UNSAT（安全だが毎回呼び出し）
 
 -- フェイルオーバー戦略
 check FailoverA_RequestCompletion for 4  -- 期待: UNSAT（安全）

@@ -51,3 +51,13 @@ CREATE TABLE IF NOT EXISTS policies (
   config_json JSON NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 埋め込みキャッシュテーブル（ADR-0003対応）
+-- TLA+ Inv_CacheVersionConsistency: キャッシュキー = text_hash + model_version
+CREATE TABLE IF NOT EXISTS embedding_cache (
+  text_hash TEXT NOT NULL,
+  model_version TEXT NOT NULL,
+  embedding DOUBLE[] NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (text_hash, model_version)
+);
