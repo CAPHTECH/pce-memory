@@ -127,14 +127,14 @@ CREATE MACRO hybrid_score(text_score, vec_score, alpha) AS
 | TLA+変数/アクション | 実装ファイル | 関数/メソッド | 備考 |
 |-------------------|-------------|--------------|------|
 | `claimScope` | `src/store/claims.ts:7` | `Claim.scope` | DBスキーマの`scope`カラム |
-| `claimTextRelevant` | `src/store/claims.ts:67` | `listClaimsByScope()` | ILIKE検索で判定 |
-| `claimVecRelevant` | （未実装） | `hybridSearch.vectorSearch()` | cos_sim >= threshold |
-| `requestedScopes` | `src/store/claims.ts:60` | `scopes: string[]`引数 | 呼び出し元から受領 |
-| `C_TextSearch` | `src/store/claims.ts:66-72` | `listClaimsByScope()`のILIKE部 | 既存実装 |
-| `C_VecSearch` | （未実装） | `hybridSearch.vectorSearch()` | 埋め込み検索 |
-| `C_Merge` | （未実装） | `hybridSearch.merge()` | FULL OUTER JOIN |
-| `FusedScore()` | `src/db/schema.sql` | `hybrid_score`マクロ | α重み付け融合 |
-| `AboveThreshold()` | （未実装） | WHERE句 | score >= 0.15 |
+| `claimTextRelevant` | `src/store/hybridSearch.ts` | `textSearch()` | ILIKE検索で判定 |
+| `claimVecRelevant` | `src/store/hybridSearch.ts` | `vectorSearch()` | cos_sim >= threshold |
+| `requestedScopes` | `src/store/hybridSearch.ts` | `scopes: string[]`引数 | 呼び出し元から受領 |
+| `C_TextSearch` | `src/store/hybridSearch.ts` | `textSearch()` | ✅ 実装済み |
+| `C_VecSearch` | `src/store/hybridSearch.ts` | `vectorSearch()` | ✅ 実装済み |
+| `C_Merge` | `src/store/hybridSearch.ts` | `hybridSearch()` | ✅ FULL OUTER JOIN |
+| `FusedScore()` | `src/db/schema.sql` | `hybrid_score`マクロ | ✅ 実装済み |
+| `AboveThreshold()` | `src/store/hybridSearch.ts` | WHERE句 | ✅ score >= threshold |
 
 ### TLA+不変条件 → 実装検証方法
 
@@ -155,15 +155,16 @@ CREATE MACRO hybrid_score(text_score, vec_score, alpha) AS
 
 ## 残課題・リスク
 
-### 未実装項目
+### 実装状況（2024-11-26更新）
 
-| 項目 | 優先度 | 依存関係 |
-|------|--------|----------|
-| `hybridSearch.ts`モジュール | P0 | なし |
-| `claim_vectors`テーブル | P0 | スキーマ変更 |
-| `hybrid_score`マクロ | P0 | DuckDB |
-| `vectorSearch()`関数 | P0 | pce-embeddings |
-| Active Context `r()`関数 | P1 | hybridSearch |
+| 項目 | 優先度 | 状態 | 備考 |
+|------|--------|------|------|
+| `hybridSearch.ts`モジュール | P0 | ✅ 完了 | 37テスト通過 |
+| `claim_vectors`テーブル | P0 | ✅ 完了 | schema.sql追加 |
+| `hybrid_score`マクロ | P0 | ✅ 完了 | schema.sql追加 |
+| `vectorSearch()`関数 | P0 | ✅ 完了 | hybridSearch.ts |
+| Active Context `r()`関数 | P1 | ✅ 完了 | index.ts:184 handleActivate統合 |
+| 再ランク `g()` 関数 | P2 | ⏳ 未実装 | activation-ranking.md仕様（将来拡張） |
 
 ### 技術的リスク
 

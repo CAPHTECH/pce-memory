@@ -24,8 +24,11 @@ jobs:
       - name: Run TLA+
         run: pnpm formal:tla
         env:
-          TLA_CFG: docs/spec/tlaplus/pce_memory.small.cfg
+          TLA_CFG: pce_memory.small.cfg
+          TLA_EMBED_CFG: pce_embedding.small.cfg
       - name: Run Alloy
         run: pnpm formal:alloy
+      - name: Check ADR-Spec sync
+        run: pnpm formal:sync-check
       - name: Run unit tests
         run: pnpm test -- --runInBand
