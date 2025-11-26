@@ -155,7 +155,7 @@ CREATE MACRO hybrid_score(text_score, vec_score, alpha) AS
 
 ## 残課題・リスク
 
-### 実装状況（2024-11-26更新）
+### 実装状況（2025-11-26更新）
 
 | 項目 | 優先度 | 状態 | 備考 |
 |------|--------|------|------|
@@ -164,7 +164,7 @@ CREATE MACRO hybrid_score(text_score, vec_score, alpha) AS
 | `hybrid_score`マクロ | P0 | ✅ 完了 | schema.sql追加 |
 | `vectorSearch()`関数 | P0 | ✅ 完了 | hybridSearch.ts |
 | Active Context `r()`関数 | P1 | ✅ 完了 | index.ts:184 handleActivate統合 |
-| 再ランク `g()` 関数 | P2 | ⏳ 未実装 | activation-ranking.md仕様（将来拡張） |
+| 再ランク `g()` 関数 | P2 | ✅ 完了 | rerank.ts + SQLマクロ（sigmoid, recency_decay, g_rerank） |
 
 ### 技術的リスク
 
