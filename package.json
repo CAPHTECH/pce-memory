@@ -23,6 +23,7 @@
     "formal:tla": "bash scripts/formal/run_tla.sh",
     "formal:alloy": "bash scripts/formal/run_alloy.sh",
     "formal:all": "pnpm formal:tla && pnpm formal:alloy",
+    "formal:sync-check": "bash scripts/check_adr_spec_sync.sh",
     "clean": "pnpm -r run clean && rm -rf node_modules"
   },
   "devDependencies": {
