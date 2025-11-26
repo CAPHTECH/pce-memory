@@ -1,4 +1,7 @@
 import { getConnection } from "../db/connection.js";
+import type { EmbeddingService } from "@pce/embeddings";
+import * as E from "fp-ts/Either";
+import { saveClaimVector } from "./hybridSearch.js";
 
 export interface Claim {
   id: string;
@@ -101,4 +104,47 @@ export async function countClaims(): Promise<number> {
   const reader = await conn.runAndReadAll("SELECT COUNT(*) as cnt FROM claims");
   const rows = reader.getRowObjects() as unknown as { cnt: number | bigint }[];
   return rows[0] ? Number(rows[0].cnt) : 0;
+}
+
+/**
+ * Claimを登録し、埋め込みベクトルも生成・保存（ADR-0004対応）
+ *
+ * TLA+ 対応:
+ * - 新規Claimの場合のみ埋め込みを生成
+ * - 埋め込み生成失敗時もClaim登録は成功（ベストエフォート）
+ *
+ * @param c Claim（idなし）
+ * @param embeddingService 埋め込みサービス
+ * @returns UpsertResult（isNew: 新規かどうか）
+ */
+export async function upsertClaimWithEmbedding(
+  c: Omit<Claim, "id">,
+  embeddingService: EmbeddingService
+): Promise<UpsertResult> {
+  // 1. 既存upsertClaim呼び出し
+  const result = await upsertClaim(c);
+
+  // 2. 新規の場合のみ埋め込み生成・保存
+  if (result.isNew) {
+    const embedResult = await embeddingService.embed({
+      text: c.text,
+      sensitivity: "internal",
+    })();
+
+    // 埋め込み生成成功時のみ保存（失敗時はClaim登録だけ成功）
+    if (E.isRight(embedResult)) {
+      try {
+        await saveClaimVector(
+          result.claim.id,
+          embedResult.right.embedding,
+          embedResult.right.modelVersion
+        );
+      } catch {
+        // ベクトル保存失敗は無視（ベストエフォート）
+        // Claim登録は成功しているので、検索時はText-onlyで動作
+      }
+    }
+  }
+
+  return result;
 }

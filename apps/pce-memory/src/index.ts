@@ -14,9 +14,16 @@ import {
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { boundaryValidate } from "@pce/boundary";
+import {
+  initLocalProvider,
+  localProvider,
+  createInMemoryCache,
+  createLocalOnlyService,
+} from "@pce/embeddings";
 import { initDb, initSchema } from "./db/connection.js";
-import { upsertClaim, listClaimsByScope, findClaimById } from "./store/claims.js";
+import { upsertClaim, findClaimById } from "./store/claims.js";
 import type { Claim } from "./store/claims.js";
+import { hybridSearch, setEmbeddingService } from "./store/hybridSearch.js";
 import { saveActiveContext } from "./store/activeContext.js";
 import { recordFeedback } from "./store/feedback.js";
 import { appendLog, setAuditLogPath } from "./store/logs.js";
@@ -173,7 +180,8 @@ async function handleActivate(args: Record<string, unknown>) {
     if (allow.some((a: unknown) => typeof a !== "string")) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "allow must be string[]", reqId), trace_id: traceId }) }], isError: true };
     }
-    const claims: Claim[] = await listClaimsByScope(scope, top_k ?? 12, q);
+    // ADR-0004: Hybrid Search（テキスト+ベクトル融合検索）
+    const claims: Claim[] = await hybridSearch(scope, top_k ?? 12, q);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({ id: acId, claims });
 
@@ -394,6 +402,18 @@ async function main() {
   await initDb();
   await initSchema();
   await initRateState();
+
+  // EmbeddingService初期化（ADR-0004 Hybrid Search用）
+  try {
+    await initLocalProvider();
+    const embeddingCache = createInMemoryCache({ initialModelVersion: localProvider.modelVersion });
+    const embeddingService = createLocalOnlyService(localProvider, embeddingCache);
+    setEmbeddingService(embeddingService);
+    console.error(`[${SERVER_NAME}] EmbeddingService initialized (model: ${localProvider.modelVersion})`);
+  } catch (e: unknown) {
+    // 埋め込み初期化失敗時はText-only検索で動作（ベストエフォート）
+    console.error(`[${SERVER_NAME}] EmbeddingService initialization failed (fallback to text-only search):`, e);
+  }
 
   // システムLayer登録（ADR-0001 V2 Effect設計）
   // TLA+ RegisterLayerに対応: 依存グラフを構築
