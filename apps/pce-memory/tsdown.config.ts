@@ -9,7 +9,8 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   clean: true,
-  // fp-tsをバンドルに含める（ESM互換性問題を回避）
-  // fp-ts/Eitherなどのサブパスインポートも含める
-  noExternal: [/^fp-ts/],
+  // バンドルに含めるパッケージ
+  // - fp-ts: ESM互換性問題を回避
+  // - @pce/*: workspace依存をバンドル化（npm公開時に単一パッケージ化）
+  noExternal: [/^fp-ts/, /^@pce\//],
 });
