@@ -1,6 +1,5 @@
 import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { SCHEMA_SQL } from "./schema.js";
 
 let instance: DuckDBInstance | null = null;
 let cachedConnection: DuckDBConnection | null = null;
@@ -43,10 +42,8 @@ export async function getConnection(): Promise<DuckDBConnection> {
  * スキーマを初期化（非同期）
  */
 export async function initSchema() {
-  const sql = readFileSync(join(__dirname, "schema.sql"), "utf-8");
   const conn = await getConnection();
-  const statements = sql
-    .split(";")
+  const statements = SCHEMA_SQL.split(";")
     .map((s) => s.trim())
     .filter(Boolean);
   for (const stmt of statements) {

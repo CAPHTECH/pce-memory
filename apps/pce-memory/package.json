@@ -6,11 +6,13 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "pce-memory": "./dist/index.js"
+    "pce-memory": "./dist/client/proxy.js",
+    "pce-daemon": "./dist/daemon/daemon.js",
+    "pce-memory-stdio": "./dist/index.js"
   },
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",
-    "build": "tsdown --entry src/index.ts --format esm --dts --clean",
+    "build": "tsdown --entry src/index.ts --entry src/daemon/daemon.ts --entry src/client/proxy.ts --format esm --dts --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

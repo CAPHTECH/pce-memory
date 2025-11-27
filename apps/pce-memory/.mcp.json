@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "pce-memory": {
+      "command": "pce-memory",
+      "args": [
+        "--db",
+        "~/.pce/pce-memory.db"
+      ]
+    }
+  }
+}

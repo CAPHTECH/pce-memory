@@ -1,49 +1,30 @@
 /**
- * PCE Memory MCP Server (stdio)
- * 本番用の最小実装: DuckDB ストア + ポリシー適用 + 境界チェック + upsert/activate/feedback
+ * MCP Tool Handlers（コア実装）
  *
- * ADR-0002に基づく状態機械APIパターンを採用:
- * - 実行時状態検証により不正な操作順序を防止
- * - Uninitialized → PolicyApplied → HasClaims → Ready の遷移を強制
- * - PCEMemoryクラスを直接使用（StateManager廃止）
+ * デーモンモード/stdioモード両方から利用可能なハンドラ実装。
+ * index.tsから抽出し、再利用可能にした。
  */
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+
 import { boundaryValidate } from "@pce/boundary";
-import {
-  initLocalProvider,
-  localProvider,
-  createInMemoryCache,
-  createLocalOnlyService,
-} from "@pce/embeddings";
-import { initDb, initSchema } from "./db/connection.js";
-import { upsertClaim, findClaimById } from "./store/claims.js";
-import type { Provenance } from "./store/claims.js";
-import { hybridSearchPaginated, setEmbeddingService } from "./store/hybridSearch.js";
-import { upsertEntity, linkClaimEntity } from "./store/entities.js";
-import type { EntityInput } from "./store/entities.js";
-import { upsertRelation } from "./store/relations.js";
-import type { RelationInput } from "./store/relations.js";
-import { getEvidenceForClaims } from "./store/evidence.js";
-import type { Evidence } from "./store/evidence.js";
-import { saveActiveContext } from "./store/activeContext.js";
-import { recordFeedback } from "./store/feedback.js";
-import { appendLog, setAuditLogPath } from "./store/logs.js";
-import { initRateState, checkAndConsume } from "./store/rate.js";
-import { updateCritic } from "./store/critic.js";
-import { loadEnv } from "./config/env.js";
-import { sanitizeErrorMessage } from "./audit/filter.js";
-import { stateError } from "./domain/stateMachine.js";
-import type { ErrorCode } from "./domain/errors.js";
+import { upsertClaim, findClaimById } from "../store/claims.js";
+import type { Provenance } from "../store/claims.js";
+import { hybridSearchPaginated } from "../store/hybridSearch.js";
+import { upsertEntity, linkClaimEntity } from "../store/entities.js";
+import type { EntityInput } from "../store/entities.js";
+import { upsertRelation } from "../store/relations.js";
+import type { RelationInput } from "../store/relations.js";
+import { getEvidenceForClaims } from "../store/evidence.js";
+import type { Evidence } from "../store/evidence.js";
+import { saveActiveContext } from "../store/activeContext.js";
+import { recordFeedback } from "../store/feedback.js";
+import { appendLog } from "../store/logs.js";
+import { checkAndConsume } from "../store/rate.js";
+import { updateCritic } from "../store/critic.js";
+import { stateError } from "../domain/stateMachine.js";
+import type { ErrorCode } from "../domain/errors.js";
 import * as E from "fp-ts/Either";
 
-// memoryState モジュールから状態管理関数をインポート
 import {
-  initMemoryState,
   applyPolicyOp,
   getPolicy,
   getPolicyVersion,
@@ -54,21 +35,17 @@ import {
   canDoFeedback,
   transitionToHasClaims,
   transitionToReady,
-} from "./state/memoryState.js";
+} from "../state/memoryState.js";
 
-// layerScopeState モジュールからLayer/Scope管理関数をインポート
 import {
-  registerSystemLayer,
   enterRequestScope,
   exitRequestScope,
   isInActiveScope,
   addResourceToCurrentScope,
   getLayerScopeSummary,
-} from "./state/layerScopeState.js";
+} from "../state/layerScopeState.js";
 
-// サーバー情報
-const SERVER_NAME = "@pce/memory";
-const SERVER_VERSION = "0.1.0";
+// ========== Utility Functions ==========
 
 function validateString(field: string, val: unknown, max: number) {
   if (typeof val !== "string" || val.length === 0 || val.length > max) {
@@ -80,11 +57,135 @@ function err(code: ErrorCode, message: string, request_id: string) {
   return { error: { code, message }, request_id };
 }
 
+// ========== Upsert Helper Functions ==========
+
 /**
- * ツールハンドラの実装（内部用）
- * memoryStateモジュールを使用してエラーハンドリングと永続化を統合
+ * Upsertの入力バリデーション
+ * 状態検証、レート制限、フィールド検証を実行
  */
-async function handlePolicyApply(args: Record<string, unknown>) {
+interface UpsertValidationResult {
+  isValid: boolean;
+  errorResponse?: { content: Array<{ type: string; text: string }>; isError: boolean };
+}
+
+async function validateUpsertInput(
+  args: {
+    text: string | undefined;
+    kind: string | undefined;
+    scope: string | undefined;
+    boundary_class: string | undefined;
+    content_hash: string | undefined;
+  },
+  scopeId: string,
+  reqId: string,
+  traceId: string
+): Promise<UpsertValidationResult> {
+  const { text, kind, scope, boundary_class, content_hash } = args;
+
+  // 状態検証
+  if (!canDoUpsert()) {
+    const error = stateError("PolicyApplied or HasClaims", getStateType());
+    return {
+      isValid: false,
+      errorResponse: { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true }
+    };
+  }
+
+  if (!isInActiveScope(scopeId)) {
+    return {
+      isValid: false,
+      errorResponse: { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", "scope not active", reqId), trace_id: traceId }) }], isError: true }
+    };
+  }
+
+  if (!(await checkAndConsume("tool"))) {
+    return {
+      isValid: false,
+      errorResponse: { content: [{ type: "text", text: JSON.stringify({ ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId }) }], isError: true }
+    };
+  }
+
+  if (!text || !kind || !scope || !boundary_class || !content_hash) {
+    return {
+      isValid: false,
+      errorResponse: { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "missing fields", reqId), trace_id: traceId }) }], isError: true }
+    };
+  }
+
+  try {
+    validateString("text", text, 5000);
+    validateString("kind", kind, 128);
+    validateString("boundary_class", boundary_class, 128);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      isValid: false,
+      errorResponse: { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", msg, reqId), trace_id: traceId }) }], isError: true }
+    };
+  }
+
+  const policy = getPolicy();
+  if (!policy.boundary_classes[boundary_class]) {
+    return {
+      isValid: false,
+      errorResponse: { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "unknown boundary_class", reqId), trace_id: traceId }) }], isError: true }
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Graph Memory（Entity/Relation）の処理
+ * 新規Claimに対してのみentities/relationsを登録
+ */
+interface GraphMemoryResult {
+  entityCount: number;
+  entityFailed: number;
+  relationCount: number;
+  relationFailed: number;
+}
+
+async function processGraphMemory(
+  claimId: string,
+  isNew: boolean,
+  entities: EntityInput[] | undefined,
+  relations: RelationInput[] | undefined
+): Promise<GraphMemoryResult> {
+  let entityCount = 0;
+  let entityFailed = 0;
+  let relationCount = 0;
+  let relationFailed = 0;
+
+  if (isNew && entities && Array.isArray(entities)) {
+    for (const entity of entities) {
+      try {
+        await upsertEntity(entity);
+        await linkClaimEntity(claimId, entity.id);
+        entityCount++;
+      } catch {
+        entityFailed++;
+      }
+    }
+  }
+
+  if (isNew && relations && Array.isArray(relations)) {
+    for (const relation of relations) {
+      try {
+        await upsertRelation(relation);
+        relationCount++;
+      } catch {
+        relationFailed++;
+      }
+    }
+  }
+
+  return { entityCount, entityFailed, relationCount, relationFailed };
+}
+
+// ========== Handler Implementations ==========
+
+export async function handlePolicyApply(args: Record<string, unknown>) {
   const yaml = args?.["yaml"] as string | undefined;
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
@@ -100,7 +201,7 @@ async function handlePolicyApply(args: Record<string, unknown>) {
   return { content: [{ type: "text", text: JSON.stringify({ ...result.right, request_id: reqId, trace_id: traceId }) }] };
 }
 
-async function handleUpsert(args: Record<string, unknown>) {
+export async function handleUpsert(args: Record<string, unknown>) {
   const { text, kind, scope, boundary_class, content_hash, provenance, entities, relations } = args as {
     text?: string;
     kind?: string;
@@ -122,86 +223,45 @@ async function handleUpsert(args: Record<string, unknown>) {
   const scopeId = scopeResult.right;
 
   try {
-    // 状態検証: PolicyApplied または HasClaims からのみ呼び出し可能
-    if (!canDoUpsert()) {
-      const error = stateError("PolicyApplied or HasClaims", getStateType());
-      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
+    // バリデーション（ヘルパー関数に委譲）
+    const validation = await validateUpsertInput(
+      { text, kind, scope, boundary_class, content_hash },
+      scopeId,
+      reqId,
+      traceId
+    );
+    if (!validation.isValid) {
+      return validation.errorResponse!;
     }
 
-    // TLA+ sid ∈ activeScopes: スコープがアクティブか検証
-    if (!isInActiveScope(scopeId)) {
-      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", "scope not active", reqId), trace_id: traceId }) }], isError: true };
-    }
-
-    if (!(await checkAndConsume("tool"))) {
-      return { content: [{ type: "text", text: JSON.stringify({ ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId }) }], isError: true };
-    }
-    if (!text || !kind || !scope || !boundary_class || !content_hash) {
-      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "missing fields", reqId), trace_id: traceId }) }], isError: true };
-    }
-    validateString("text", text, 5000);
-    validateString("kind", kind, 128);
-    validateString("boundary_class", boundary_class, 128);
-    const policy = getPolicy();
-    if (!policy.boundary_classes[boundary_class]) {
-      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "unknown boundary_class", reqId), trace_id: traceId }) }], isError: true };
-    }
-    // exactOptionalPropertyTypes対応: undefinedを除外してオブジェクト構築
+    // Claim登録
     const claimInput = {
-      text,
-      kind,
-      scope,
-      boundary_class,
-      content_hash,
+      text: text!,
+      kind: kind!,
+      scope: scope!,
+      boundary_class: boundary_class!,
+      content_hash: content_hash!,
       ...(provenance !== undefined ? { provenance } : {}),
     };
     const { claim, isNew } = await upsertClaim(claimInput);
 
-    // Graph Memory: entities/relations登録（新規Claimの場合のみ）
-    // 失敗数をカウントしてレスポンスに含める
-    let entityCount = 0;
-    let entityFailed = 0;
-    let relationCount = 0;
-    let relationFailed = 0;
+    // Graph Memory処理（ヘルパー関数に委譲）
+    const graphResult = await processGraphMemory(claim.id, isNew, entities, relations);
 
-    if (isNew && entities && Array.isArray(entities)) {
-      for (const entity of entities) {
-        try {
-          await upsertEntity(entity);
-          await linkClaimEntity(claim.id, entity.id);
-          entityCount++;
-        } catch {
-          // Entity登録失敗は無視（ベストエフォート）だがカウント
-          entityFailed++;
-        }
-      }
-    }
-
-    if (isNew && relations && Array.isArray(relations)) {
-      for (const relation of relations) {
-        try {
-          await upsertRelation(relation);
-          relationCount++;
-        } catch {
-          // Relation登録失敗は無視（ベストエフォート）だがカウント
-          relationFailed++;
-        }
-      }
-    }
-
-    // TLA+ scopeResources: 作成したClaimをスコープのリソースとして登録
+    // スコープへのリソース登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
     if (E.isLeft(addResult)) {
-      // リソース登録失敗はログのみ（Claimは既に作成済み）
-      console.error(`[${SERVER_NAME}] Failed to add resource to scope: ${addResult.left.message}`);
+      console.error(`[Handler] Failed to add resource to scope: ${addResult.left.message}`);
     }
 
-    // 状態遷移: PolicyApplied | HasClaims → HasClaims
-    // 新規挿入の場合のみclaimCountを増加
+    // 状態遷移
     transitionToHasClaims(isNew);
 
+    // 監査ログ記録
     await appendLog({ id: `log_${reqId}`, op: "upsert", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
-    // Graph Memory結果を含めたレスポンス
+
+    // レスポンス構築
+    const { entityCount, entityFailed, relationCount, relationFailed } = graphResult;
     const graphMemoryResult = (entityCount > 0 || entityFailed > 0 || relationCount > 0 || relationFailed > 0)
       ? {
           graph_memory: {
@@ -210,18 +270,31 @@ async function handleUpsert(args: Record<string, unknown>) {
           }
         }
       : {};
-    return { content: [{ type: "text", text: JSON.stringify({ id: claim.id, is_new: isNew, ...graphMemoryResult, policy_version: getPolicyVersion(), state: getStateType(), request_id: reqId, trace_id: traceId }) }] };
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          id: claim.id,
+          is_new: isNew,
+          ...graphMemoryResult,
+          policy_version: getPolicyVersion(),
+          state: getStateType(),
+          request_id: reqId,
+          trace_id: traceId
+        })
+      }]
+    };
   } catch (e: unknown) {
     await appendLog({ id: `log_${reqId}`, op: "upsert", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
     const msg = e instanceof Error ? e.message : String(e);
     return { content: [{ type: "text", text: JSON.stringify({ ...err("UPSERT_FAILED", msg, reqId), trace_id: traceId }) }], isError: true };
   } finally {
-    // TLA+ ExitScope: リクエストスコープを終了（自動リソース解放）
     exitRequestScope(scopeId);
   }
 }
 
-async function handleActivate(args: Record<string, unknown>) {
+export async function handleActivate(args: Record<string, unknown>) {
   const { scope, allow, top_k, q, cursor, include_meta } = args as {
     scope?: unknown;
     allow?: unknown;
@@ -233,7 +306,6 @@ async function handleActivate(args: Record<string, unknown>) {
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
   try {
-    // 状態検証: HasClaims または Ready からのみ呼び出し可能
     if (!canDoActivate()) {
       const error = stateError("HasClaims or Ready", getStateType());
       return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
@@ -253,31 +325,24 @@ async function handleActivate(args: Record<string, unknown>) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "allow must be string[]", reqId), trace_id: traceId }) }], isError: true };
     }
 
-    // ADR-0004: Hybrid Search（テキスト+ベクトル融合検索）with cursor pagination
-    // exactOptionalPropertyTypes対応: undefinedを除外
     const searchConfig = cursor !== undefined ? { cursor } : {};
     const searchResult = await hybridSearchPaginated(scope, top_k ?? 12, q, searchConfig);
-    // 検索結果からClaimを抽出（activeContext用）
     const claims = searchResult.results.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({ id: acId, claims });
 
-    // Evidence取得（include_meta=true の場合）
     let evidenceMap: Map<string, Evidence[]> | undefined;
     if (include_meta && claims.length > 0) {
       const claimIds = claims.map((c) => c.id);
       evidenceMap = await getEvidenceForClaims(claimIds);
     }
 
-    // scored_item形式でレスポンス構築
-    // hybridSearchPaginatedから実際のfusedScore（g()適用済み）を使用
     const scoredItems = searchResult.results.map((r) => ({
       claim: r.claim,
       score: r.score,
       evidences: evidenceMap?.get(r.claim.id) ?? [],
     }));
 
-    // 状態遷移: HasClaims | Ready → Ready
     transitionToReady(acId);
 
     await appendLog({ id: `log_${reqId}`, op: "activate", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
@@ -304,7 +369,7 @@ async function handleActivate(args: Record<string, unknown>) {
   }
 }
 
-async function handleBoundaryValidate(args: Record<string, unknown>) {
+export async function handleBoundaryValidate(args: Record<string, unknown>) {
   const { payload, allow, scope } = args as { payload?: string; allow?: string[]; scope?: string };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
@@ -320,12 +385,11 @@ async function handleBoundaryValidate(args: Record<string, unknown>) {
   }
 }
 
-async function handleFeedback(args: Record<string, unknown>) {
+export async function handleFeedback(args: Record<string, unknown>) {
   const { claim_id, signal, score } = args as { claim_id?: string; signal?: string; score?: number };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
   try {
-    // 状態検証: Ready からのみ呼び出し可能
     if (!canDoFeedback()) {
       const error = stateError("Ready", getStateType());
       return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
@@ -349,11 +413,9 @@ async function handleFeedback(args: Record<string, unknown>) {
       feedbackInput.score = score;
     }
     const res = await recordFeedback(feedbackInput);
-    // critic update: helpful +1, harmful -1, outdated -0.5, duplicate -0.5
     const delta = signal === "helpful" ? 1 : signal === "harmful" ? -1 : -0.5;
     await updateCritic(claim_id, delta, 0, 5);
 
-    // Ready状態は維持（feedback後もReady）
     await appendLog({ id: `log_${reqId}`, op: "feedback", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
     return { content: [{ type: "text", text: JSON.stringify({ ...res, policy_version: getPolicyVersion(), state: getStateType(), request_id: reqId, trace_id: traceId }) }] };
   } catch (e: unknown) {
@@ -363,19 +425,12 @@ async function handleFeedback(args: Record<string, unknown>) {
   }
 }
 
-/**
- * 現在の状態機械の状態を取得
- * 本番環境ではruntime_stateの詳細を露出しない（デバッグ用フラグで制御）
- */
-async function handleGetState(args: Record<string, unknown>) {
+export async function handleGetState(args: Record<string, unknown>) {
   const includeDetails = args?.["debug"] === true;
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
 
-  // 基本サマリ
   const summary = getStateSummary(includeDetails);
-
-  // デバッグモードではLayer/Scopeサマリも含める
   const layerScopeSummary = includeDetails ? getLayerScopeSummary() : undefined;
 
   return {
@@ -391,36 +446,41 @@ async function handleGetState(args: Record<string, unknown>) {
   };
 }
 
-/**
- * MCP ツールハンドラの登録（CallToolRequestSchema を使用）
- */
-async function registerTools(server: Server) {
-  // CallToolRequestSchema を使用してツール呼び出しをディスパッチ
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-    const toolArgs = (args ?? {}) as Record<string, unknown>;
+// ========== Tool Dispatcher ==========
 
-    switch (name) {
-      case "pce.memory.policy.apply":
-        return handlePolicyApply(toolArgs);
-      case "pce.memory.upsert":
-        return handleUpsert(toolArgs);
-      case "pce.memory.activate":
-        return handleActivate(toolArgs);
-      case "pce.memory.boundary.validate":
-        return handleBoundaryValidate(toolArgs);
-      case "pce.memory.feedback":
-        return handleFeedback(toolArgs);
-      case "pce.memory.state":
-        return handleGetState(toolArgs);
-      default:
-        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "UNKNOWN_TOOL", message: `Unknown tool: ${name}` } }) }], isError: true };
-    }
-  });
+export type ToolResult = {
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+};
+
+/**
+ * ツール名に基づいてハンドラをディスパッチ
+ */
+export async function dispatchTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  switch (name) {
+    case "pce.memory.policy.apply":
+      return handlePolicyApply(args);
+    case "pce.memory.upsert":
+      return handleUpsert(args);
+    case "pce.memory.activate":
+      return handleActivate(args);
+    case "pce.memory.boundary.validate":
+      return handleBoundaryValidate(args);
+    case "pce.memory.feedback":
+      return handleFeedback(args);
+    case "pce.memory.state":
+      return handleGetState(args);
+    default:
+      return {
+        content: [{ type: "text", text: JSON.stringify({ error: { code: "UNKNOWN_TOOL", message: `Unknown tool: ${name}` } }) }],
+        isError: true
+      };
+  }
 }
 
-// ツール定義（ListTools用）
-const TOOL_DEFINITIONS = [
+// ========== Tool Definitions ==========
+
+export const TOOL_DEFINITIONS = [
   {
     name: "pce.memory.policy.apply",
     description: "ポリシーの適用（不変量・用途タグ・redactルール）",
@@ -548,106 +608,3 @@ const TOOL_DEFINITIONS = [
     },
   },
 ];
-
-export async function main() {
-  // 環境変数読み込み
-  const env = loadEnv();
-
-  // 監査ログファイルパスを設定
-  setAuditLogPath(env.AUDIT_LOG_PATH);
-
-  // DB初期化（非同期）
-  await initDb();
-  await initSchema();
-  await initRateState();
-
-  // EmbeddingService初期化（ADR-0004 Hybrid Search用）
-  try {
-    await initLocalProvider();
-    const embeddingCache = createInMemoryCache({ initialModelVersion: localProvider.modelVersion });
-    const embeddingService = createLocalOnlyService(localProvider, embeddingCache);
-    setEmbeddingService(embeddingService);
-    console.error(`[${SERVER_NAME}] EmbeddingService initialized (model: ${localProvider.modelVersion})`);
-  } catch (e: unknown) {
-    // 埋め込み初期化失敗時はText-only検索で動作（ベストエフォート）
-    console.error(`[${SERVER_NAME}] EmbeddingService initialization failed (fallback to text-only search):`, e);
-  }
-
-  // システムLayer登録（ADR-0001 V2 Effect設計）
-  // TLA+ RegisterLayerに対応: 依存グラフを構築
-  const dbLayerResult = registerSystemLayer(
-    "db",
-    new Set(["db_access"] as const),
-    new Set()
-  );
-  if (E.isLeft(dbLayerResult)) {
-    console.error(`[${SERVER_NAME}] Failed to register db layer: ${dbLayerResult.left.message}`);
-  }
-
-  const policyLayerResult = registerSystemLayer(
-    "policy",
-    new Set(["policy_check"] as const),
-    new Set(["db"]) // policyはdbに依存
-  );
-  if (E.isLeft(policyLayerResult)) {
-    console.error(`[${SERVER_NAME}] Failed to register policy layer: ${policyLayerResult.left.message}`);
-  }
-
-  const schemaLayerResult = registerSystemLayer(
-    "schema",
-    new Set(["schema_validate"] as const),
-    new Set(["db"]) // schemaはdbに依存
-  );
-  if (E.isLeft(schemaLayerResult)) {
-    console.error(`[${SERVER_NAME}] Failed to register schema layer: ${schemaLayerResult.left.message}`);
-  }
-
-  console.error(`[${SERVER_NAME}] System layers registered: ${getLayerScopeSummary().layers.join(", ")}`);
-
-  // 状態復元: memoryStateモジュールの初期化
-  // DBからポリシーとclaim数を読み込み、適切な状態に復元
-  const initResult = await initMemoryState()();
-  if (E.isLeft(initResult)) {
-    console.error(`[${SERVER_NAME}] Failed to initialize state: ${initResult.left.message}`);
-    // 初期化失敗時はUninitializedのまま起動（policy.applyで初期化可能）
-  } else {
-    console.error(`[${SERVER_NAME}] Restored state: ${initResult.right.state} (policy: ${initResult.right.policyVersion})`);
-  }
-
-  // サーバー作成（名前とバージョンを指定）
-  const server = new Server(
-    { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } }
-  );
-
-  // ListToolsハンドラ登録
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: TOOL_DEFINITIONS };
-  });
-
-  // ツールハンドラ登録
-  await registerTools(server);
-
-  // トランスポート接続
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  // Graceful shutdown ハンドラ
-  const shutdown = async (signal: string) => {
-    console.error(`[${SERVER_NAME}] Received ${signal}, shutting down...`);
-    try {
-      await server.close();
-    } catch (e) {
-      console.error(`[${SERVER_NAME}] Error during shutdown:`, sanitizeErrorMessage(e));
-    }
-    process.exit(0);
-  };
-
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-}
-
-main().catch((err) => {
-  console.error(`[${SERVER_NAME}] Fatal error:`, sanitizeErrorMessage(err));
-  process.exit(1);
-});

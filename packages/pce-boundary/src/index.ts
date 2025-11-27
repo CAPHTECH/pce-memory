@@ -1,4 +1,4 @@
-import { BoundaryPolicy } from "@pce/policy-schemas";
+import type { BoundaryPolicy } from "@pce/policy-schemas";
 
 export interface BoundaryValidateInput {
   payload: string;
