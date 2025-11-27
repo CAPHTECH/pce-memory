@@ -66,6 +66,9 @@ import {
   getLayerScopeSummary,
 } from "./state/layerScopeState.js";
 
+// Graph Memory handlers from core/handlers
+import { handleUpsertEntity, handleUpsertRelation } from "./core/handlers.js";
+
 // サーバー情報
 const SERVER_NAME = "pce-memory";
 const SERVER_VERSION = "0.1.0";
@@ -405,6 +408,10 @@ async function registerTools(server: Server) {
         return handlePolicyApply(toolArgs);
       case "pce.memory.upsert":
         return handleUpsert(toolArgs);
+      case "pce.memory.upsert.entity":
+        return handleUpsertEntity(toolArgs);
+      case "pce.memory.upsert.relation":
+        return handleUpsertRelation(toolArgs);
       case "pce.memory.activate":
         return handleActivate(toolArgs);
       case "pce.memory.boundary.validate":
@@ -545,6 +552,38 @@ const TOOL_DEFINITIONS = [
       properties: {
         debug: { type: "boolean", description: "デバッグ用: runtime_stateの詳細を含める（デフォルト: false）" },
       },
+    },
+  },
+  // ========== Graph Memory Tools ==========
+  {
+    name: "pce.memory.upsert.entity",
+    description: "グラフメモリにEntityを登録（Actor/Artifact/Event/Concept）",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Entity ID" },
+        type: { type: "string", enum: ["Actor", "Artifact", "Event", "Concept"], description: "Entityタイプ" },
+        name: { type: "string", description: "Entity名" },
+        canonical_key: { type: "string", description: "正規キー（オプション、重複検索用）" },
+        attrs: { type: "object", description: "追加属性（オプション）" },
+      },
+      required: ["id", "type", "name"],
+    },
+  },
+  {
+    name: "pce.memory.upsert.relation",
+    description: "グラフメモリにEntity間のRelationを登録",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Relation ID" },
+        src_id: { type: "string", description: "ソースEntity ID" },
+        dst_id: { type: "string", description: "ターゲットEntity ID" },
+        type: { type: "string", description: "関係タイプ（例: KNOWS, USES, DEPENDS_ON）" },
+        props: { type: "object", description: "関係の追加プロパティ（オプション）" },
+        evidence_claim_id: { type: "string", description: "この関係のエビデンスとなるClaim ID（オプション）" },
+      },
+      required: ["id", "src_id", "dst_id", "type"],
     },
   },
 ];

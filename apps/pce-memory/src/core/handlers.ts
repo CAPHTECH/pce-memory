@@ -430,6 +430,138 @@ export async function handleFeedback(args: Record<string, unknown>) {
   }
 }
 
+// ========== Graph Memory Handlers ==========
+
+export async function handleUpsertEntity(args: Record<string, unknown>) {
+  const { id, type, name, canonical_key, attrs } = args as {
+    id?: string;
+    type?: string;
+    name?: string;
+    canonical_key?: string;
+    attrs?: Record<string, unknown>;
+  };
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以降で利用可能）
+    if (!canDoUpsert()) {
+      const error = stateError("PolicyApplied or HasClaims or Ready", getStateType());
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume("tool"))) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // バリデーション
+    if (!id || !type || !name) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "id, type, name are required", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    const validTypes = ["Actor", "Artifact", "Event", "Concept"];
+    if (!validTypes.includes(type)) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", `type must be one of: ${validTypes.join(", ")}`, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // Entity登録
+    const entity = await upsertEntity({
+      id,
+      type: type as "Actor" | "Artifact" | "Event" | "Concept",
+      name,
+      canonical_key,
+      attrs,
+    });
+
+    await appendLog({ id: `log_${reqId}`, op: "upsert_entity", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          id: entity.id,
+          type: entity.type,
+          name: entity.name,
+          canonical_key: entity.canonical_key,
+          policy_version: getPolicyVersion(),
+          state: getStateType(),
+          request_id: reqId,
+          trace_id: traceId
+        })
+      }]
+    };
+  } catch (e: unknown) {
+    await appendLog({ id: `log_${reqId}`, op: "upsert_entity", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+    const msg = e instanceof Error ? e.message : String(e);
+    return { content: [{ type: "text", text: JSON.stringify({ ...err("UPSERT_ENTITY_FAILED", msg, reqId), trace_id: traceId }) }], isError: true };
+  }
+}
+
+export async function handleUpsertRelation(args: Record<string, unknown>) {
+  const { id, src_id, dst_id, type, props, evidence_claim_id } = args as {
+    id?: string;
+    src_id?: string;
+    dst_id?: string;
+    type?: string;
+    props?: Record<string, unknown>;
+    evidence_claim_id?: string;
+  };
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以降で利用可能）
+    if (!canDoUpsert()) {
+      const error = stateError("PolicyApplied or HasClaims or Ready", getStateType());
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume("tool"))) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // バリデーション
+    if (!id || !src_id || !dst_id || !type) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "id, src_id, dst_id, type are required", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // Relation登録
+    const relation = await upsertRelation({
+      id,
+      src_id,
+      dst_id,
+      type,
+      props,
+      evidence_claim_id,
+    });
+
+    await appendLog({ id: `log_${reqId}`, op: "upsert_relation", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          id: relation.id,
+          src_id: relation.src_id,
+          dst_id: relation.dst_id,
+          type: relation.type,
+          evidence_claim_id: relation.evidence_claim_id,
+          policy_version: getPolicyVersion(),
+          state: getStateType(),
+          request_id: reqId,
+          trace_id: traceId
+        })
+      }]
+    };
+  } catch (e: unknown) {
+    await appendLog({ id: `log_${reqId}`, op: "upsert_relation", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+    const msg = e instanceof Error ? e.message : String(e);
+    return { content: [{ type: "text", text: JSON.stringify({ ...err("UPSERT_RELATION_FAILED", msg, reqId), trace_id: traceId }) }], isError: true };
+  }
+}
+
 export async function handleGetState(args: Record<string, unknown>) {
   const includeDetails = args?.["debug"] === true;
   const reqId = crypto.randomUUID();
@@ -467,6 +599,10 @@ export async function dispatchTool(name: string, args: Record<string, unknown>):
       return handlePolicyApply(args);
     case "pce.memory.upsert":
       return handleUpsert(args);
+    case "pce.memory.upsert.entity":
+      return handleUpsertEntity(args);
+    case "pce.memory.upsert.relation":
+      return handleUpsertRelation(args);
     case "pce.memory.activate":
       return handleActivate(args);
     case "pce.memory.boundary.validate":
@@ -610,6 +746,38 @@ export const TOOL_DEFINITIONS = [
       properties: {
         debug: { type: "boolean", description: "デバッグ用: runtime_stateの詳細を含める（デフォルト: false）" },
       },
+    },
+  },
+  // ========== Graph Memory Tools ==========
+  {
+    name: "pce.memory.upsert.entity",
+    description: "グラフメモリにEntityを登録（Actor/Artifact/Event/Concept）",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Entity ID" },
+        type: { type: "string", enum: ["Actor", "Artifact", "Event", "Concept"], description: "Entityタイプ" },
+        name: { type: "string", description: "Entity名" },
+        canonical_key: { type: "string", description: "正規キー（オプション、重複検索用）" },
+        attrs: { type: "object", description: "追加属性（オプション）" },
+      },
+      required: ["id", "type", "name"],
+    },
+  },
+  {
+    name: "pce.memory.upsert.relation",
+    description: "グラフメモリにEntity間のRelationを登録",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Relation ID" },
+        src_id: { type: "string", description: "ソースEntity ID" },
+        dst_id: { type: "string", description: "ターゲットEntity ID" },
+        type: { type: "string", description: "関係タイプ（例: KNOWS, USES, DEPENDS_ON）" },
+        props: { type: "object", description: "関係の追加プロパティ（オプション）" },
+        evidence_claim_id: { type: "string", description: "この関係のエビデンスとなるClaim ID（オプション）" },
+      },
+      required: ["id", "src_id", "dst_id", "type"],
     },
   },
 ];
