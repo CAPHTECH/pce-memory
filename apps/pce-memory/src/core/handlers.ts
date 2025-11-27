@@ -6,9 +6,9 @@
  */
 
 import { boundaryValidate } from "@pce/boundary";
-import { upsertClaim, findClaimById } from "../store/claims.js";
+import { upsertClaim, upsertClaimWithEmbedding, findClaimById } from "../store/claims.js";
 import type { Provenance } from "../store/claims.js";
-import { hybridSearchPaginated } from "../store/hybridSearch.js";
+import { hybridSearchPaginated, getEmbeddingService } from "../store/hybridSearch.js";
 import { upsertEntity, linkClaimEntity } from "../store/entities.js";
 import type { EntityInput } from "../store/entities.js";
 import { upsertRelation } from "../store/relations.js";
@@ -44,6 +44,7 @@ import {
   addResourceToCurrentScope,
   getLayerScopeSummary,
 } from "../state/layerScopeState.js";
+import { safeJsonStringify } from "../utils/serialization.js";
 
 // ========== Utility Functions ==========
 
@@ -234,7 +235,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
       return validation.errorResponse!;
     }
 
-    // Claim登録
+    // Claim登録（EmbeddingServiceがあれば埋め込みも生成）
     const claimInput = {
       text: text!,
       kind: kind!,
@@ -243,7 +244,10 @@ export async function handleUpsert(args: Record<string, unknown>) {
       content_hash: content_hash!,
       ...(provenance !== undefined ? { provenance } : {}),
     };
-    const { claim, isNew } = await upsertClaim(claimInput);
+    const embeddingService = getEmbeddingService();
+    const { claim, isNew } = embeddingService
+      ? await upsertClaimWithEmbedding(claimInput, embeddingService)
+      : await upsertClaim(claimInput);
 
     // Graph Memory処理（ヘルパー関数に委譲）
     const graphResult = await processGraphMemory(claim.id, isNew, entities, relations);
@@ -346,10 +350,11 @@ export async function handleActivate(args: Record<string, unknown>) {
     transitionToReady(acId);
 
     await appendLog({ id: `log_${reqId}`, op: "activate", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+    // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
     return {
       content: [{
         type: "text",
-        text: JSON.stringify({
+        text: safeJsonStringify({
           active_context_id: acId,
           claims: scoredItems,
           claims_count: claims.length,
