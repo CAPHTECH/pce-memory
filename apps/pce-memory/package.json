@@ -1,6 +1,6 @@
 {
   "name": "pce-memory",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "description": "PCE Memory - MCP server for Process-Context Engine",
@@ -44,10 +44,6 @@
   "dependencies": {
     "@duckdb/node-api": "1.4.1-r.5",
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "@pce/boundary": "workspace:*",
-    "@pce/embeddings": "workspace:*",
-    "@pce/policy-schemas": "workspace:*",
-    "fp-ts": "^2.16.11",
     "io-ts": "^2.2.22",
     "zod": "^3.24.1"
   },
