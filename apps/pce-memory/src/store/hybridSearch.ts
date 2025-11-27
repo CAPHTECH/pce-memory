@@ -26,6 +26,7 @@ import {
   type GFactorBreakdown,
   type ScoreBreakdown,
 } from "./rerank.js";
+import { normalizeRowsTimestamps } from "../utils/serialization.js";
 
 // ========== ADR-0004 パラメータ ==========
 
@@ -248,13 +249,14 @@ export async function textSearch(
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
-      AND c.text LIKE $${scopes.length + 1} ESCAPE '\\'
+      AND c.text ILIKE $${scopes.length + 1} ESCAPE '\\'
     ORDER BY text_score DESC
     LIMIT $${scopes.length + 2}
   `;
 
   const reader = await conn.runAndReadAll(sql, [...scopes, queryParam, normalizedLimit]);
-  const rows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
+  const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
+  const rows = normalizeRowsTimestamps(rawRows);
 
   return rows.map((row) => ({
     claim: {
@@ -331,7 +333,8 @@ export async function vectorSearch(
   `;
 
   const reader = await conn.runAndReadAll(sql, [...scopes, normalizedLimit]);
-  const rows = reader.getRowObjects() as unknown as (Claim & { vec_score: number })[];
+  const rawRows = reader.getRowObjects() as unknown as (Claim & { vec_score: number })[];
+  const rows = normalizeRowsTimestamps(rawRows);
 
   return rows.map((row) => ({
     claim: {
@@ -470,7 +473,8 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
   `;
 
   const reader = await conn.runAndReadAll(sql, claimIds);
-  const rows = reader.getRowObjects() as unknown as ClaimMetrics[];
+  const rawRows = reader.getRowObjects() as unknown as ClaimMetrics[];
+  const rows = normalizeRowsTimestamps(rawRows);
 
   const metricsMap = new Map<string, ClaimMetrics>();
   for (const row of rows) {
@@ -879,7 +883,8 @@ async function fallbackToTextOnly(scopes: string[], limit: number): Promise<Clai
   `;
 
   const reader = await conn.runAndReadAll(sql, [...scopes, limit]);
-  return reader.getRowObjects() as unknown as Claim[];
+  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  return normalizeRowsTimestamps(rawRows);
 }
 
 // ========== claim_vectors操作 ==========

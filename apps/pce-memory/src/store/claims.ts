@@ -2,6 +2,7 @@ import { getConnection } from "../db/connection.js";
 import type { EmbeddingService } from "@pce/embeddings";
 import * as E from "fp-ts/Either";
 import { saveClaimVector } from "./hybridSearch.js";
+import { normalizeRowsTimestamps } from "../utils/serialization.js";
 
 /**
  * Provenance: 由来情報（mcp-tools.md §1.y準拠）
@@ -68,7 +69,8 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
       [c.content_hash]
     );
-    const existing = reader.getRowObjects() as unknown as Claim[];
+    const rawExisting = reader.getRowObjects() as unknown as Claim[];
+    const existing = normalizeRowsTimestamps(rawExisting);
     if (existing.length > 0 && existing[0]) {
       return { claim: existing[0], isNew: false };
     }
@@ -85,7 +87,8 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
       [id]
     );
-    const inserted = insertedReader.getRowObjects() as unknown as Claim[];
+    const rawInserted = insertedReader.getRowObjects() as unknown as Claim[];
+    const inserted = normalizeRowsTimestamps(rawInserted);
     return { claim: inserted[0]!, isNew: true };
   } catch (e: unknown) {
     // UNIQUE 制約違反などは既存レコードを返す（idempotent upsert）
@@ -93,7 +96,8 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
       [c.content_hash]
     );
-    const existing = reader.getRowObjects() as unknown as Claim[];
+    const rawExisting = reader.getRowObjects() as unknown as Claim[];
+    const existing = normalizeRowsTimestamps(rawExisting);
     if (existing.length > 0 && existing[0]) {
       return { claim: existing[0], isNew: false };
     }
@@ -113,7 +117,7 @@ export async function listClaimsByScope(scopes: string[], limit: number, q?: str
               coalesce(cr.score, 0) as score
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
-       WHERE c.scope IN (${placeholders}) AND c.text LIKE $${scopes.length + 1}
+       WHERE c.scope IN (${placeholders}) AND c.text ILIKE $${scopes.length + 1}
        ORDER BY score DESC
        LIMIT $${scopes.length + 2}`
     : `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
@@ -127,7 +131,8 @@ export async function listClaimsByScope(scopes: string[], limit: number, q?: str
 
   const args = hasQuery ? [...scopes, `%${q}%`, limit] : [...scopes, limit];
   const reader = await conn.runAndReadAll(sql, args);
-  return reader.getRowObjects() as unknown as Claim[];
+  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  return normalizeRowsTimestamps(rawRows);
 }
 
 export async function findClaimById(id: string): Promise<Claim | undefined> {
@@ -136,7 +141,8 @@ export async function findClaimById(id: string): Promise<Claim | undefined> {
     `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
     [id]
   );
-  const rows = reader.getRowObjects() as unknown as Claim[];
+  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  const rows = normalizeRowsTimestamps(rawRows);
   return rows[0];
 }
 

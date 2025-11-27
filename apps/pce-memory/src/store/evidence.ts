@@ -3,6 +3,7 @@
  * Claimの根拠情報
  */
 import { getConnection } from "../db/connection.js";
+import { normalizeRowsTimestamps } from "../utils/serialization.js";
 
 /**
  * Evidence型（definitions.evidence準拠）
@@ -39,7 +40,9 @@ export async function insertEvidence(e: EvidenceInput): Promise<Evidence> {
     "SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE id = $1",
     [e.id]
   );
-  return (reader.getRowObjects() as unknown as Evidence[])[0]!;
+  const rawRows = reader.getRowObjects() as unknown as Evidence[];
+  const rows = normalizeRowsTimestamps(rawRows);
+  return rows[0]!;
 }
 
 /**
@@ -51,7 +54,8 @@ export async function getEvidenceForClaim(claimId: string): Promise<Evidence[]> 
     "SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE claim_id = $1 ORDER BY recorded_at DESC",
     [claimId]
   );
-  return reader.getRowObjects() as unknown as Evidence[];
+  const rawRows = reader.getRowObjects() as unknown as Evidence[];
+  return normalizeRowsTimestamps(rawRows);
 }
 
 /**
@@ -73,7 +77,8 @@ export async function getEvidenceForClaims(claimIds: string[]): Promise<Map<stri
     claimIds
   );
 
-  const rows = reader.getRowObjects() as unknown as Evidence[];
+  const rawRows = reader.getRowObjects() as unknown as Evidence[];
+  const rows = normalizeRowsTimestamps(rawRows);
   const result = new Map<string, Evidence[]>();
 
   for (const row of rows) {
@@ -94,5 +99,6 @@ export async function findEvidenceBySourceType(sourceType: string, limit: number
     "SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE source_type = $1 LIMIT $2",
     [sourceType, limit]
   );
-  return reader.getRowObjects() as unknown as Evidence[];
+  const rawRows = reader.getRowObjects() as unknown as Evidence[];
+  return normalizeRowsTimestamps(rawRows);
 }
