@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-11-28
+
+### Added
+
+- **Graph Memory MCP Tools** (MVP2 Priority 1)
+  - `pce_memory_upsert_entity` - Register Entity (Actor/Artifact/Event/Concept)
+  - `pce_memory_upsert_relation` - Register Relation between Entities
+- New test suite for Graph handlers (9 tests)
+
 ## [0.1.3] - 2025-11-28
 
 ### Fixed
