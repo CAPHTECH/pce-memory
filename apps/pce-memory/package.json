@@ -3,8 +3,30 @@
   "version": "0.1.0",
   "type": "module",
   "description": "PCE Memory - MCP server for Process-Context Engine",
+  "license": "MIT",
+  "author": "CAPHTECH",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CAPHTECH/pce-memory.git",
+    "directory": "apps/pce-memory"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "ai",
+    "memory",
+    "context",
+    "embeddings",
+    "duckdb"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "bin": {
     "pce-memory": "./dist/client/proxy.js",
     "pce-daemon": "./dist/daemon/daemon.js",

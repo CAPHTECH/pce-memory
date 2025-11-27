@@ -4,58 +4,164 @@ PCE Memory - MCP Server for Process-Context Engine
 
 ## Overview
 
-PCE Memoryは、Process-Context Engine (PCE)の公式MCPサーバー実装です。
-エージェントやLLMアプリケーションに対して、文脈記憶・検索・統合機能を提供します。
+PCE Memory is the official MCP server implementation of Process-Context Engine (PCE).
+It provides context memory, retrieval, and integration capabilities for agents and LLM applications.
 
 ## Features
 
-- **MCP Protocol Support**: Model Context Protocol (MCP) v1.0.4対応
-- **Dual-Phase Memory**: LCP (長期) + AC (短期) の二相メモリー
-- **Boundary-First Security**: スコープベースの境界管理とRedact-before-send
-- **Hybrid Search**: FTS + VSS ハイブリッド検索
-- **DuckDB Storage**: 組み込みDuckDBによる高速なローカルストレージ
+- **MCP Protocol Support**: Model Context Protocol (MCP) v1.0.4 compliant
+- **Pace Layering**: Three-tier scope management (session / project / principle)
+- **Boundary-First Security**: Scope-based boundary management with Redact-before-send
+- **Hybrid Search**: Full-text search + Vector similarity search
+- **DuckDB Storage**: Fast local storage with embedded DuckDB
+- **Local Embeddings**: Local embedding generation via transformers.js
 
-## Installation
+## Quick Start
 
-```bash
-pnpm install
-pnpm build
-```
-
-## Usage
+### npx (Recommended)
 
 ```bash
-# MCP server として起動 (stdio transport)
-pce-memory
-
-# 開発モード (watch mode)
-pnpm dev
+npx @pce/memory --db ~/.pce/memory.db
 ```
 
-## Architecture
+### Claude Code / Cline Configuration
+
+Place `.mcp.json` in your project root or `~/.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "pce-memory": {
+      "command": "npx",
+      "args": ["@pce/memory", "--db", "~/.pce/memory.db"]
+    }
+  }
+}
+```
+
+### Global Installation
+
+```bash
+npm install -g @pce/memory
+pce-memory --db ~/.pce/memory.db
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `pce-memory` | MCP client (auto-starts daemon) |
+| `pce-daemon` | Standalone daemon process |
+| `pce-memory-stdio` | Direct stdio mode (no daemon) |
+
+## MCP Tools
+
+### pce_memory_policy_apply
+
+Apply policy (initialization)
+
+```typescript
+{
+  yaml?: string  // Policy YAML (uses default if omitted)
+}
+```
+
+### pce_memory_upsert
+
+Register a claim (knowledge fragment)
+
+```typescript
+{
+  text: string,           // Claim content
+  kind: "fact" | "preference" | "task" | "policy_hint",
+  scope: "session" | "project" | "principle",
+  boundary_class: "public" | "internal" | "pii" | "secret",
+  content_hash: string,   // Format: sha256:...
+  provenance: {           // Origin info (required)
+    at: string,           // ISO 8601 timestamp
+    actor?: string,
+    url?: string,
+    note?: string
+  }
+}
+```
+
+### pce_memory_activate
+
+Build active context (AC)
+
+```typescript
+{
+  scope: string[],        // Target scopes
+  allow: string[],        // Allowed boundary classes
+  q?: string,             // Search query
+  top_k?: number          // Number of results (default: 10)
+}
+```
+
+### pce_memory_boundary_validate
+
+Pre-generation boundary check
+
+```typescript
+{
+  payload: string,        // Text to validate
+  scope?: string,
+  allow?: string[]
+}
+```
+
+### pce_memory_feedback
+
+Update critic (adopt/reject/stale/duplicate)
+
+```typescript
+{
+  claim_id: string,
+  signal: "helpful" | "harmful" | "outdated" | "duplicate",
+  score?: number          // -1.0 to 1.0
+}
+```
+
+### pce_memory_state
+
+Get current state
+
+```typescript
+// Returns: { state: "Uninitialized" | "PolicyApplied" | "HasClaims" | "Ready" }
+```
+
+## State Machine
 
 ```
-src/
-├── index.ts          # MCPサーバーエントリーポイント
-├── server/           # MCP server implementation
-├── core/             # Core modules (Extractor, Integrator, Retriever, Critic)
-├── db/               # DuckDB adapter
-└── tools/            # MCP tool handlers
+Uninitialized
+     │
+     │ policy_apply
+     ▼
+PolicyApplied
+     │
+     │ upsert
+     ▼
+ HasClaims
+     │
+     │ activate
+     ▼
+   Ready ◄──┐
+     │      │
+     └──────┘ (activate/upsert/feedback)
 ```
 
-## Related Packages
+## Pace Layering (Scope)
 
-- `@pce/boundary` - Boundary validation and redaction
-- `@pce/embeddings` - Embedding provider abstraction
-- `@pce/policy-schemas` - Policy schemas and validation
-- `@pce/sdk-ts` - TypeScript client SDK
+| Scope | Change Rate | Use Case |
+|-------|-------------|----------|
+| `session` | Fast | Session-specific temporary information |
+| `project` | Medium | Project-specific patterns and decisions |
+| `principle` | Slow | Universal principles and best practices |
 
-## Documentation
+## Requirements
 
-- [PCE Vision](../../docs/pce-memory-vision.md)
-- [Core Types](../../docs/core-types.md)
-- [MCP Tools](../../docs/mcp-tools.md)
-- [Boundary Policy](../../docs/boundary-policy.md)
+- Node.js >= 22.18.0
 
 ## License
 
