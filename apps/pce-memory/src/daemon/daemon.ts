@@ -107,6 +107,30 @@ async function handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcRes
     };
   }
 
+  // MCP initialize（MCPプロトコル必須）
+  if (method === "initialize") {
+    return {
+      jsonrpc: "2.0",
+      id: id ?? null,
+      result: {
+        protocolVersion: "2024-11-05",
+        capabilities: {
+          tools: {},
+        },
+        serverInfo: {
+          name: SERVER_NAME,
+          version: SERVER_VERSION,
+        },
+      },
+    };
+  }
+
+  // MCP notifications/initialized（初期化完了通知、レスポンス不要）
+  if (method === "notifications/initialized") {
+    // 通知なのでレスポンスは不要
+    return null;
+  }
+
   // MCP tools/list（ツール一覧）
   if (method === "tools/list") {
     return {
