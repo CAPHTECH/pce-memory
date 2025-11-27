@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "pce-memory": {
-      "command": "pce-memory",
+      "command": "npx",
       "args": [
+        "pce-memory@latest",
         "--db",
         "~/.pce/pce-memory.db"
       ]
