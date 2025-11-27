@@ -22,8 +22,14 @@ import {
 } from "@pce/embeddings";
 import { initDb, initSchema } from "./db/connection.js";
 import { upsertClaim, findClaimById } from "./store/claims.js";
-import type { Claim } from "./store/claims.js";
-import { hybridSearch, setEmbeddingService } from "./store/hybridSearch.js";
+import type { Provenance } from "./store/claims.js";
+import { hybridSearchPaginated, setEmbeddingService } from "./store/hybridSearch.js";
+import { upsertEntity, linkClaimEntity } from "./store/entities.js";
+import type { EntityInput } from "./store/entities.js";
+import { upsertRelation } from "./store/relations.js";
+import type { RelationInput } from "./store/relations.js";
+import { getEvidenceForClaims } from "./store/evidence.js";
+import type { Evidence } from "./store/evidence.js";
 import { saveActiveContext } from "./store/activeContext.js";
 import { recordFeedback } from "./store/feedback.js";
 import { appendLog, setAuditLogPath } from "./store/logs.js";
@@ -95,7 +101,16 @@ async function handlePolicyApply(args: Record<string, unknown>) {
 }
 
 async function handleUpsert(args: Record<string, unknown>) {
-  const { text, kind, scope, boundary_class, content_hash } = args as Record<string, string>;
+  const { text, kind, scope, boundary_class, content_hash, provenance, entities, relations } = args as {
+    text?: string;
+    kind?: string;
+    scope?: string;
+    boundary_class?: string;
+    content_hash?: string;
+    provenance?: Provenance;
+    entities?: EntityInput[];
+    relations?: RelationInput[];
+  };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
 
@@ -131,7 +146,48 @@ async function handleUpsert(args: Record<string, unknown>) {
     if (!policy.boundary_classes[boundary_class]) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "unknown boundary_class", reqId), trace_id: traceId }) }], isError: true };
     }
-    const { claim, isNew } = await upsertClaim({ text, kind, scope, boundary_class, content_hash });
+    // exactOptionalPropertyTypes対応: undefinedを除外してオブジェクト構築
+    const claimInput = {
+      text,
+      kind,
+      scope,
+      boundary_class,
+      content_hash,
+      ...(provenance !== undefined ? { provenance } : {}),
+    };
+    const { claim, isNew } = await upsertClaim(claimInput);
+
+    // Graph Memory: entities/relations登録（新規Claimの場合のみ）
+    // 失敗数をカウントしてレスポンスに含める
+    let entityCount = 0;
+    let entityFailed = 0;
+    let relationCount = 0;
+    let relationFailed = 0;
+
+    if (isNew && entities && Array.isArray(entities)) {
+      for (const entity of entities) {
+        try {
+          await upsertEntity(entity);
+          await linkClaimEntity(claim.id, entity.id);
+          entityCount++;
+        } catch {
+          // Entity登録失敗は無視（ベストエフォート）だがカウント
+          entityFailed++;
+        }
+      }
+    }
+
+    if (isNew && relations && Array.isArray(relations)) {
+      for (const relation of relations) {
+        try {
+          await upsertRelation(relation);
+          relationCount++;
+        } catch {
+          // Relation登録失敗は無視（ベストエフォート）だがカウント
+          relationFailed++;
+        }
+      }
+    }
 
     // TLA+ scopeResources: 作成したClaimをスコープのリソースとして登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
@@ -145,7 +201,16 @@ async function handleUpsert(args: Record<string, unknown>) {
     transitionToHasClaims(isNew);
 
     await appendLog({ id: `log_${reqId}`, op: "upsert", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
-    return { content: [{ type: "text", text: JSON.stringify({ id: claim.id, is_new: isNew, policy_version: getPolicyVersion(), state: getStateType(), request_id: reqId, trace_id: traceId }) }] };
+    // Graph Memory結果を含めたレスポンス
+    const graphMemoryResult = (entityCount > 0 || entityFailed > 0 || relationCount > 0 || relationFailed > 0)
+      ? {
+          graph_memory: {
+            entities: { success: entityCount, failed: entityFailed },
+            relations: { success: relationCount, failed: relationFailed },
+          }
+        }
+      : {};
+    return { content: [{ type: "text", text: JSON.stringify({ id: claim.id, is_new: isNew, ...graphMemoryResult, policy_version: getPolicyVersion(), state: getStateType(), request_id: reqId, trace_id: traceId }) }] };
   } catch (e: unknown) {
     await appendLog({ id: `log_${reqId}`, op: "upsert", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
     const msg = e instanceof Error ? e.message : String(e);
@@ -157,7 +222,14 @@ async function handleUpsert(args: Record<string, unknown>) {
 }
 
 async function handleActivate(args: Record<string, unknown>) {
-  const { scope, allow, top_k, q } = args as { scope?: unknown; allow?: unknown; top_k?: number; q?: string };
+  const { scope, allow, top_k, q, cursor, include_meta } = args as {
+    scope?: unknown;
+    allow?: unknown;
+    top_k?: number;
+    q?: string;
+    cursor?: string;
+    include_meta?: boolean;
+  };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
   try {
@@ -180,16 +252,51 @@ async function handleActivate(args: Record<string, unknown>) {
     if (allow.some((a: unknown) => typeof a !== "string")) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "allow must be string[]", reqId), trace_id: traceId }) }], isError: true };
     }
-    // ADR-0004: Hybrid Search（テキスト+ベクトル融合検索）
-    const claims: Claim[] = await hybridSearch(scope, top_k ?? 12, q);
+
+    // ADR-0004: Hybrid Search（テキスト+ベクトル融合検索）with cursor pagination
+    // exactOptionalPropertyTypes対応: undefinedを除外
+    const searchConfig = cursor !== undefined ? { cursor } : {};
+    const searchResult = await hybridSearchPaginated(scope, top_k ?? 12, q, searchConfig);
+    // 検索結果からClaimを抽出（activeContext用）
+    const claims = searchResult.results.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({ id: acId, claims });
+
+    // Evidence取得（include_meta=true の場合）
+    let evidenceMap: Map<string, Evidence[]> | undefined;
+    if (include_meta && claims.length > 0) {
+      const claimIds = claims.map((c) => c.id);
+      evidenceMap = await getEvidenceForClaims(claimIds);
+    }
+
+    // scored_item形式でレスポンス構築
+    // hybridSearchPaginatedから実際のfusedScore（g()適用済み）を使用
+    const scoredItems = searchResult.results.map((r) => ({
+      claim: r.claim,
+      score: r.score,
+      evidences: evidenceMap?.get(r.claim.id) ?? [],
+    }));
 
     // 状態遷移: HasClaims | Ready → Ready
     transitionToReady(acId);
 
     await appendLog({ id: `log_${reqId}`, op: "activate", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
-    return { content: [{ type: "text", text: JSON.stringify({ active_context_id: acId, claims, policy_version: getPolicyVersion(), state: getStateType(), request_id: reqId, trace_id: traceId }) }] };
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          active_context_id: acId,
+          claims: scoredItems,
+          claims_count: claims.length,
+          next_cursor: searchResult.next_cursor,
+          has_more: searchResult.has_more,
+          policy_version: getPolicyVersion(),
+          state: getStateType(),
+          request_id: reqId,
+          trace_id: traceId
+        })
+      }]
+    };
   } catch (e: unknown) {
     await appendLog({ id: `log_${reqId}`, op: "activate", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
     const msg = e instanceof Error ? e.message : String(e);
@@ -335,6 +442,55 @@ const TOOL_DEFINITIONS = [
         scope: { type: "string", enum: ["session", "project", "principle"] },
         boundary_class: { type: "string", enum: ["public", "internal", "pii", "secret"] },
         content_hash: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+        provenance: {
+          type: "object",
+          properties: {
+            at: { type: "string", format: "date-time" },
+            actor: { type: "string" },
+            git: {
+              type: "object",
+              properties: {
+                commit: { type: "string" },
+                repo: { type: "string" },
+                url: { type: "string" },
+                files: { type: "array", items: { type: "string" } },
+              },
+            },
+            url: { type: "string" },
+            note: { type: "string" },
+            signed: { type: "boolean" },
+          },
+          required: ["at"],
+        },
+        entities: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              type: { type: "string", enum: ["Actor", "Artifact", "Event", "Concept"] },
+              name: { type: "string" },
+              canonical_key: { type: "string" },
+              attrs: { type: "object" },
+            },
+            required: ["id", "type", "name"],
+          },
+        },
+        relations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              src_id: { type: "string" },
+              dst_id: { type: "string" },
+              type: { type: "string" },
+              props: { type: "object" },
+              evidence_claim_id: { type: "string" },
+            },
+            required: ["id", "src_id", "dst_id", "type"],
+          },
+        },
       },
       required: ["text", "kind", "scope", "boundary_class", "content_hash"],
     },
@@ -349,6 +505,8 @@ const TOOL_DEFINITIONS = [
         allow: { type: "array", items: { type: "string" } },
         top_k: { type: "integer", minimum: 1, maximum: 50 },
         q: { type: "string", description: "検索クエリ文字列（部分一致）" },
+        cursor: { type: "string", description: "ページネーション用カーソル" },
+        include_meta: { type: "boolean", description: "メタ情報（evidence等）を含める", default: false },
       },
       required: ["scope", "allow"],
     },

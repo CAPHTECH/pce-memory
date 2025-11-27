@@ -3,6 +3,23 @@ import type { EmbeddingService } from "@pce/embeddings";
 import * as E from "fp-ts/Either";
 import { saveClaimVector } from "./hybridSearch.js";
 
+/**
+ * Provenance: 由来情報（mcp-tools.md §1.y準拠）
+ */
+export interface Provenance {
+  at: string; // ISO8601 datetime (required)
+  actor?: string;
+  git?: {
+    commit?: string;
+    repo?: string;
+    url?: string;
+    files?: string[];
+  };
+  url?: string;
+  note?: string;
+  signed?: boolean;
+}
+
 export interface Claim {
   id: string;
   text: string;
@@ -17,6 +34,8 @@ export interface Claim {
   updated_at: Date | string;
   // recency計算の基準時刻（positive feedbackでのみ更新）
   recency_anchor: Date | string;
+  // 由来情報（mcp-tools.md §1.y準拠）
+  provenance?: Provenance;
 }
 
 /**
@@ -34,10 +53,12 @@ export interface UpsertResult {
  * 新規の場合は挿入して返す（isNew: true）
  */
 /** g()再ランキング用フィールドを含むClaim入力型 */
-export type ClaimInput = Omit<Claim, "id" | "utility" | "confidence" | "created_at" | "updated_at" | "recency_anchor">;
+export type ClaimInput = Omit<Claim, "id" | "utility" | "confidence" | "created_at" | "updated_at" | "recency_anchor"> & {
+  provenance?: Provenance;
+};
 
 /** 全カラムのSELECT句 */
-const CLAIM_COLUMNS = "id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor";
+const CLAIM_COLUMNS = "id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance";
 
 export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   const conn = await getConnection();
@@ -54,9 +75,10 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
 
     // 新規レコード挿入（utility/confidence/timestampsはDEFAULT値を使用）
     const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
+    const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
     await conn.run(
-      "INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash) VALUES ($1, $2, $3, $4, $5, $6)",
-      [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash]
+      "INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, provenanceJson]
     );
     // 挿入後のレコードを取得（DEFAULT値を含む）
     const insertedReader = await conn.runAndReadAll(

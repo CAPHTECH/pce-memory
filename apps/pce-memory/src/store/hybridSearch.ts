@@ -160,6 +160,32 @@ export interface HybridSearchConfig {
   enableRerank?: boolean;
   /** デバッグ用: スコア内訳を含める（オプション、デフォルトfalse） */
   includeBreakdown?: boolean;
+  /** カーソル（ページネーション用、claim_idを使用） */
+  cursor?: string;
+}
+
+/**
+ * スコア付きClaim（検索結果用）
+ */
+export interface ScoredClaim {
+  claim: Claim;
+  /** 融合スコア（g()適用後） */
+  score: number;
+}
+
+/**
+ * ページネーション付き検索結果
+ * exactOptionalPropertyTypes対応: next_cursorはundefinedも許容
+ */
+export interface PaginatedSearchResult {
+  /** スコア付きClaim配列 */
+  results: ScoredClaim[];
+  /** 次ページのカーソル（最後のclaim_id、ない場合はundefined）*/
+  next_cursor: string | undefined;
+  /** さらに結果があるか */
+  has_more: boolean;
+  /** 総件数（概算、limitまでの取得数） */
+  total_in_page: number;
 }
 
 // ========== グローバル設定 ==========
@@ -667,6 +693,165 @@ export async function hybridSearch(
     .filter((r) => r.score >= threshold)
     .slice(0, normalizedLimit)
     .map((r) => r.claim);
+}
+
+/**
+ * スコア付きハイブリッド検索
+ * hybridSearchと同じロジックだが、fusedScoreも返す
+ *
+ * @param scopes 検索対象スコープ配列
+ * @param limit 結果上限
+ * @param query 検索クエリ（オプション）
+ * @param config 設定（オプション）
+ * @returns ScoredClaim配列（claim + score）
+ */
+export async function hybridSearchWithScores(
+  scopes: string[],
+  limit: number,
+  query?: string,
+  config?: Partial<HybridSearchConfig>
+): Promise<ScoredClaim[]> {
+  // 空scopesの早期リターン
+  if (scopes.length === 0) {
+    return [];
+  }
+
+  const normalizedLimit = normalizeLimit(limit);
+  const alpha = config?.alpha ?? ALPHA;
+  const threshold = config?.threshold ?? THRESHOLD;
+  const embeddingService = config?.embeddingService ?? globalEmbeddingService;
+
+  // クエリがない場合はcriticスコアで取得（既存動作）
+  if (!query || query.trim().length === 0) {
+    const claims = await fallbackToTextOnly(scopes, normalizedLimit);
+    // フォールバック時はcriticスコアを使用（0.5をデフォルト）
+    return claims.map((claim, index) => ({
+      claim,
+      score: Math.max(0.1, 1.0 - index * 0.05), // 順位ベースの近似スコア
+    }));
+  }
+
+  // Step 1: クエリ埋め込み生成
+  let queryEmbedding: readonly number[] | null = null;
+
+  if (embeddingService) {
+    const embedResult = await embeddingService.embed({
+      text: query,
+      sensitivity: "internal",
+    })();
+
+    if (E.isRight(embedResult)) {
+      queryEmbedding = embedResult.right.embedding;
+    }
+  }
+
+  const enableRerank = config?.enableRerank ?? true;
+  const includeBreakdown = config?.includeBreakdown ?? false;
+
+  // Step 2: 並列検索実行
+  if (queryEmbedding) {
+    const [textResults, vecResults] = await Promise.all([
+      textSearch(query, scopes, K_TEXT),
+      vectorSearch(queryEmbedding, scopes, K_VEC),
+    ]);
+
+    // Step 3-5: マージ + 融合 + フィルタ + ソート
+    let merged: { claim: Claim; fusedScore: number }[];
+
+    if (enableRerank) {
+      const allClaimIds = [
+        ...textResults.map((r) => r.claim.id),
+        ...vecResults.map((r) => r.claim.id),
+      ];
+      const uniqueIds = [...new Set(allClaimIds)];
+
+      const [stats, claimMetrics] = await Promise.all([
+        getClaimStats(scopes),
+        fetchClaimMetrics(uniqueIds),
+      ]);
+
+      merged = mergeResultsWithRerank(
+        textResults,
+        vecResults,
+        claimMetrics,
+        stats,
+        alpha,
+        threshold,
+        includeBreakdown
+      );
+    } else {
+      merged = mergeResults(textResults, vecResults, alpha, threshold);
+    }
+
+    // Step 6: 上位k件を返却（スコア付き）
+    return merged.slice(0, normalizedLimit).map((r) => ({
+      claim: r.claim,
+      score: r.fusedScore,
+    }));
+  }
+
+  // Text-onlyフォールバック
+  const textResults = await textSearch(query, scopes, normalizedLimit);
+  return textResults
+    .filter((r) => r.score >= threshold)
+    .slice(0, normalizedLimit)
+    .map((r) => ({
+      claim: r.claim,
+      score: r.score,
+    }));
+}
+
+/**
+ * ページネーション付きハイブリッド検索
+ * mcp-tools.md §2.1, §2.2 cursor/next_cursor/has_more対応
+ * 実際のfusedScoreを返す改善版
+ *
+ * @param scopes 検索対象スコープ配列
+ * @param limit 結果上限
+ * @param query 検索クエリ（オプション）
+ * @param config 設定（cursor含む）
+ * @returns ページネーション付き結果（スコア付き）
+ */
+export async function hybridSearchPaginated(
+  scopes: string[],
+  limit: number,
+  query?: string,
+  config?: Partial<HybridSearchConfig>
+): Promise<PaginatedSearchResult> {
+  const cursor = config?.cursor;
+
+  // カーソル指定時はlimit+1件取得してhas_moreを判定
+  const fetchLimit = limit + 1;
+
+  // スコア付き検索を呼び出し（limit+1件取得）
+  const allResults = await hybridSearchWithScores(scopes, fetchLimit, query, {
+    ...config,
+    // cursorは内部で処理しないので除外
+  });
+
+  // カーソル以降のデータをフィルタ
+  let filteredResults = allResults;
+  if (cursor) {
+    const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor);
+    if (cursorIndex >= 0) {
+      // カーソルの次から取得
+      filteredResults = allResults.slice(cursorIndex + 1);
+    }
+  }
+
+  // has_more判定とlimit適用
+  const has_more = filteredResults.length > limit;
+  const results = filteredResults.slice(0, limit);
+
+  // 次カーソル（最後のclaim_id）
+  const next_cursor = has_more && results.length > 0 ? results[results.length - 1]!.claim.id : undefined;
+
+  return {
+    results,
+    next_cursor,
+    has_more,
+    total_in_page: results.length,
+  };
 }
 
 /**

@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS claims (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   -- recency計算の基準時刻（positive feedbackでのみ更新）
-  recency_anchor TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  recency_anchor TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- 由来情報（mcp-tools.md §1.y Provenance準拠）
+  provenance JSON
 );
 
 -- ランキング用インデックス（g()計算最適化）
@@ -132,3 +134,58 @@ CREATE MACRO IF NOT EXISTS g_rerank(utility_z, confidence, ts, kind) AS (
   * (0.5 + 0.5 * LEAST(1.0, GREATEST(0.0, confidence)))
   * (0.3 + 0.7 * LEAST(1.0, GREATEST(0.0, recency_decay(ts, kind))))
 );
+
+-- ========== Graph Memory（mcp-tools.md §2.3準拠） ==========
+
+-- エンティティテーブル
+-- definitions.entity: {id, type, name, canonical_key?, attrs?}
+CREATE TABLE IF NOT EXISTS entities (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('Actor', 'Artifact', 'Event', 'Concept')),
+  name TEXT NOT NULL,
+  canonical_key TEXT,
+  attrs JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+CREATE INDEX IF NOT EXISTS idx_entities_canonical_key ON entities(canonical_key);
+
+-- Claim-Entity関連テーブル
+CREATE TABLE IF NOT EXISTS claim_entities (
+  claim_id TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  PRIMARY KEY (claim_id, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_entities_claim ON claim_entities(claim_id);
+CREATE INDEX IF NOT EXISTS idx_claim_entities_entity ON claim_entities(entity_id);
+
+-- リレーションテーブル
+-- definitions.relation: {id, src_id, dst_id, type, props?, evidence_claim_id?}
+CREATE TABLE IF NOT EXISTS relations (
+  id TEXT PRIMARY KEY,
+  src_id TEXT NOT NULL,
+  dst_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  props JSON,
+  evidence_claim_id TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_relations_src ON relations(src_id);
+CREATE INDEX IF NOT EXISTS idx_relations_dst ON relations(dst_id);
+CREATE INDEX IF NOT EXISTS idx_relations_type ON relations(type);
+CREATE INDEX IF NOT EXISTS idx_relations_evidence ON relations(evidence_claim_id);
+
+-- ========== Evidence（mcp-tools.md definitions.evidence準拠） ==========
+
+-- エビデンステーブル
+-- definitions.evidence: {id, source_type, source_id, snippet, at}
+-- Note: "at"はDuckDB予約語のため"recorded_at"を使用
+CREATE TABLE IF NOT EXISTS evidence (
+  id TEXT PRIMARY KEY,
+  claim_id TEXT NOT NULL,
+  source_type TEXT,
+  source_id TEXT,
+  snippet TEXT,
+  recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_evidence_claim ON evidence(claim_id);
