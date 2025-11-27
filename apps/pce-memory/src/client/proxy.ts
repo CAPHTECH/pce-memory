@@ -9,12 +9,26 @@
  */
 
 import * as net from "net";
+import * as os from "os";
 import * as path from "path";
 import * as readline from "readline";
 import { parseArgs } from "util";
 
 import { getSocketPath } from "../shared/socket.js";
 import { startDaemon, isDaemonRunning, stopDaemon } from "./start-daemon.js";
+
+/**
+ * パス内の ~ をホームディレクトリに展開
+ */
+function expandTilde(filePath: string): string {
+  if (filePath.startsWith("~/")) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+  if (filePath === "~") {
+    return os.homedir();
+  }
+  return filePath;
+}
 
 const SERVER_NAME = "@pce/memory";
 const SERVER_VERSION = "0.1.0";
@@ -51,9 +65,10 @@ Options:
   }
 
   const databasePath = values.db || process.env["PCE_DB"] || ":memory:";
-  const resolvedDbPath = databasePath === ":memory:" ? databasePath : path.resolve(databasePath);
+  const expandedDbPath = expandTilde(databasePath);
+  const resolvedDbPath = expandedDbPath === ":memory:" ? expandedDbPath : path.resolve(expandedDbPath);
   const socketPath = values["socket-path"]
-    ? path.resolve(values["socket-path"])
+    ? path.resolve(expandTilde(values["socket-path"]))
     : resolvedDbPath === ":memory:"
       ? undefined
       : getSocketPath(resolvedDbPath);
