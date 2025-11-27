@@ -58,3 +58,6 @@ temp/
 
 docs/spec/tlaplus/states/
 states/
+
+# Stale tilde directory (from unexpanded ~ in paths)
+~/
