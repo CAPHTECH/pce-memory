@@ -31,7 +31,8 @@ export type Ready = { readonly _tag: "Ready" };
 export type PCEState = Uninitialized | PolicyApplied | HasClaims | Ready;
 
 // 状態遷移の制約型（Phantom Typeパターンでメソッドの`this`型制約に使用）
-type CanUpsert = PolicyApplied | HasClaims;
+// Ready状態からもupsert可能（Ready → HasClaims）: 追加claim登録をサポート
+type CanUpsert = PolicyApplied | HasClaims | Ready;
 
 // ========== Runtime State（実行時の状態データ）==========
 
@@ -277,9 +278,9 @@ export const isHasClaims = (state: RuntimeState): state is { type: "HasClaims"; 
 export const isReady = (state: RuntimeState): state is { type: "Ready"; policyVersion: string; activeContextId: string } =>
   state.type === "Ready";
 
-/** upsert可能な状態かチェック */
+/** upsert可能な状態かチェック（Ready状態からも追加upsert可能） */
 export const canUpsert = (state: RuntimeState): boolean =>
-  state.type === "PolicyApplied" || state.type === "HasClaims";
+  state.type === "PolicyApplied" || state.type === "HasClaims" || state.type === "Ready";
 
 /** activate可能な状態かチェック */
 export const canActivate = (state: RuntimeState): boolean =>

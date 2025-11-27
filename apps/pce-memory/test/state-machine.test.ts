@@ -65,9 +65,9 @@ describe("状態機械ユーティリティ関数", () => {
       expect(canUpsert(state)).toBe(false);
     });
 
-    it("canUpsert: Ready状態でfalse", () => {
+    it("canUpsert: Ready状態でtrue（追加upsert可能）", () => {
       const state: RuntimeState = { type: "Ready", policyVersion: "1.0", activeContextId: "ac_123" };
-      expect(canUpsert(state)).toBe(false);
+      expect(canUpsert(state)).toBe(true);
     });
 
     it("canActivate: HasClaims状態でtrue", () => {
@@ -182,7 +182,7 @@ describe("状態遷移のE2Eシナリオ", () => {
     // 4. Ready
     state = { type: "Ready", policyVersion: "1.0", activeContextId: "ac_test" };
     expect(isReady(state)).toBe(true);
-    expect(canUpsert(state)).toBe(false); // Readyからはupsert不可
+    expect(canUpsert(state)).toBe(true); // Ready状態からも追加upsert可能
     expect(canFeedback(state)).toBe(true);
   });
 
