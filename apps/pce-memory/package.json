@@ -1,6 +1,7 @@
 {
-  "name": "@pce/memory",
+  "name": "pce-memory",
   "version": "0.1.0",
+  "private": false,
   "type": "module",
   "description": "PCE Memory - MCP server for Process-Context Engine",
   "license": "MIT",

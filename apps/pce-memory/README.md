@@ -1,4 +1,4 @@
-# @pce/memory
+# pce-memory
 
 PCE Memory - MCP Server for Process-Context Engine
 
@@ -21,7 +21,7 @@ It provides context memory, retrieval, and integration capabilities for agents a
 ### npx (Recommended)
 
 ```bash
-npx @pce/memory --db ~/.pce/memory.db
+npx pce-memory --db ~/.pce/memory.db
 ```
 
 ### Claude Code / Cline Configuration
@@ -33,7 +33,7 @@ Place `.mcp.json` in your project root or `~/.mcp.json`:
   "mcpServers": {
     "pce-memory": {
       "command": "npx",
-      "args": ["@pce/memory", "--db", "~/.pce/memory.db"]
+      "args": ["pce-memory", "--db", "~/.pce/memory.db"]
     }
   }
 }
@@ -42,7 +42,7 @@ Place `.mcp.json` in your project root or `~/.mcp.json`:
 ### Global Installation
 
 ```bash
-npm install -g @pce/memory
+npm install -g pce-memory
 pce-memory --db ~/.pce/memory.db
 ```
 
