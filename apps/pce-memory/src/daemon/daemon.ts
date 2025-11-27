@@ -32,7 +32,7 @@ import type { JsonRpcRequest, JsonRpcResponse } from "./socket.js";
 import { getSocketPath } from "../shared/socket.js";
 import { dispatchTool, TOOL_DEFINITIONS } from "../core/handlers.js";
 
-const SERVER_NAME = "@pce/memory-daemon";
+const SERVER_NAME = "pce-memory-daemon";
 const SERVER_VERSION = "0.1.0";
 
 /**

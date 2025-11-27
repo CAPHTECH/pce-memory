@@ -67,7 +67,7 @@ import {
 } from "./state/layerScopeState.js";
 
 // サーバー情報
-const SERVER_NAME = "@pce/memory";
+const SERVER_NAME = "pce-memory";
 const SERVER_VERSION = "0.1.0";
 
 function validateString(field: string, val: unknown, max: number) {

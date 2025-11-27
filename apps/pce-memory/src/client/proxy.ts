@@ -30,7 +30,7 @@ function expandTilde(filePath: string): string {
   return filePath;
 }
 
-const SERVER_NAME = "@pce/memory";
+const SERVER_NAME = "pce-memory";
 const SERVER_VERSION = "0.1.0";
 
 /**
