@@ -31,6 +31,9 @@ jobs:
       - name: Run ESLint
         run: pnpm lint
 
+      - name: Build packages (for type check)
+        run: pnpm build
+
       - name: Run type check
         run: pnpm typecheck
 
