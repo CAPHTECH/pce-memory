@@ -1,4 +1,4 @@
-import { PolicyDocument, BoundaryPolicy, ValidationResult } from "./types";
+import type { PolicyDocument, BoundaryPolicy, ValidationResult } from "./types.js";
 
 function isString(x: unknown): x is string {
   return typeof x === "string";

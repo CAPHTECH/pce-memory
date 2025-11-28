@@ -1,6 +1,6 @@
 import { parse } from "yaml";
-import { PolicyDocument, ValidationResult } from "./types";
-import { validatePolicy } from "./schemas";
+import type { PolicyDocument, ValidationResult } from "./types.js";
+import { validatePolicy } from "./schemas.js";
 
 export function parsePolicy(yamlContent: string): ValidationResult<PolicyDocument> {
   try {

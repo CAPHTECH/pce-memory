@@ -1,4 +1,4 @@
-import { PolicyDocument } from "./types";
+import type { PolicyDocument } from "./types.js";
 
 export const defaultPolicy: PolicyDocument = {
   version: "0.1",
