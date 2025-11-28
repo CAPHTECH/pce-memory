@@ -159,3 +159,7 @@ const entity = await upsertEntity({
 | Static Analysis | 0 errors |
 | Coverage | ≥ 80% |
 | Cyclomatic Complexity | ≤ 10 |
+
+---
+
+@AGENTS.md
