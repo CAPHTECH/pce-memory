@@ -14,6 +14,10 @@ import { recordFeedback, FEEDBACK_DELTAS } from '../src/store/feedback.js';
 import { hybridSearch, setEmbeddingService, textSearch } from '../src/store/hybridSearch.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as TE from 'fp-ts/TaskEither';
+import { randomUUID } from 'crypto';
+import { unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 // 正規化されたベクトルを生成
 const createNormalizedVector = (seed: number): number[] => {
@@ -35,16 +39,41 @@ const createTestEmbeddingService = (): EmbeddingService => ({
   invalidateCache: () => TE.right(undefined),
 });
 
+// 一意のテストDBパス（テスト間の完全な分離を確保）
+let testDbPath: string;
+
 describe('g() SQL Macros Integration', () => {
   beforeEach(async () => {
     await resetDbAsync();
-    process.env.PCE_DB = ':memory:';
+    // 一意のファイルベースDBを使用（CI環境での:memory:の問題を回避）
+    testDbPath = join(tmpdir(), `pce-grerank-${randomUUID()}.duckdb`);
+    process.env.PCE_DB = testDbPath;
     await initDb();
     await initSchema();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await resetDbAsync();
+    // テスト用DBファイルを削除
+    if (testDbPath && existsSync(testDbPath)) {
+      try {
+        unlinkSync(testDbPath);
+      } catch {
+        // 削除エラーは無視
+      }
+    }
+    // WALファイルも削除
+    const walPath = `${testDbPath}.wal`;
+    if (existsSync(walPath)) {
+      try {
+        unlinkSync(walPath);
+      } catch {
+        // 削除エラーは無視
+      }
+    }
+    // CI環境でのDuckDBリソースクリーンアップのための小さな遅延
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   describe('DuckDB Macros', () => {
