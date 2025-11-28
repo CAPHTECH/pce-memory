@@ -75,7 +75,7 @@ export function recencyDecay(ts: Date | string, halfLifeDays: number): number {
   const clampedAge = Math.max(0, ageDays);
 
   // ln(2) ≈ 0.693147
-  return Math.exp(-0.693147 * clampedAge / halfLifeDays);
+  return Math.exp((-0.693147 * clampedAge) / halfLifeDays);
 }
 
 /**
@@ -98,7 +98,7 @@ export function getHalfLife(kind: string): number {
 export function calculateG(
   utilityZ: number,
   confidence: number,
-  recency: number,
+  recency: number
 ): GFactorBreakdown {
   // utility項: 0.6 + 0.4σ(z) ∈ [0.6, 1.0]
   const utility_term = 0.6 + 0.4 * sigmoid(utilityZ);
@@ -132,7 +132,7 @@ export function calculateGFromClaim(
   confidence: number,
   ts: Date | string,
   kind: string,
-  stats: { mean: number; std: number },
+  stats: { mean: number; std: number }
 ): GFactorBreakdown {
   // utility z-score: (utility - mean) / std
   // ゼロ除算防御: std=0の場合はε(0.001)を使用してz≈0に近づける
@@ -161,7 +161,7 @@ export function calculateScoreBreakdown(
   textScore: number,
   vecScore: number,
   alpha: number,
-  gFactor: GFactorBreakdown,
+  gFactor: GFactorBreakdown
 ): ScoreBreakdown {
   const S = alpha * vecScore + (1 - alpha) * textScore;
   return {

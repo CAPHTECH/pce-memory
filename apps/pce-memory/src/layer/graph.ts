@@ -3,12 +3,12 @@
  * V2 Effect設計（修正済み）: 自己依存禁止 + 循環検出
  * TLA+ RegisterLayerに対応
  */
-import * as E from "fp-ts/Either";
-import type { DomainError } from "../domain/errors.js";
-import { layerSelfDependencyError, layerCycleError, domainError } from "../domain/errors.js";
+import * as E from 'fp-ts/Either';
+import type { DomainError } from '../domain/errors.js';
+import { layerSelfDependencyError, layerCycleError, domainError } from '../domain/errors.js';
 
 // Capability型
-export type Capability = "db_access" | "schema_validate" | "policy_check" | "config_read";
+export type Capability = 'db_access' | 'schema_validate' | 'policy_check' | 'config_read';
 
 // Layer定義
 export interface LayerDef {
@@ -46,7 +46,7 @@ export const registerLayer = (
   for (const dep of requires) {
     if (!graph.layers.has(dep)) {
       return E.left(
-        domainError("LAYER_MISSING_DEPENDENCY", `layer "${name}" requires unknown layer "${dep}"`)
+        domainError('LAYER_MISSING_DEPENDENCY', `layer "${name}" requires unknown layer "${dep}"`)
       );
     }
   }

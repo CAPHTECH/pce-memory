@@ -1,7 +1,7 @@
 # MCP Quickstart — pce-memory を 5 分で動かす
 
 > **ゴール**：IDE/コードエージェント（Cursor / Codex / Claude Code 等）から **MCP** 経由で pce-memory を呼び、  
-> `activate → boundary.validate → upsert → feedback` の **E2E** を一度まわす。  
+> `activate → boundary.validate → upsert → feedback` の **E2E** を一度まわす。
 >
 > **デフォルト**：常駐サーバ不要の **stdio** トランスポート（必要時に子プロセス起動）。HTTP/WS は付録を参照。
 
@@ -47,12 +47,12 @@ pnpm i && pnpm dev   # または npm/yarn
 ```yaml
 # policy/base.yaml（最小）
 version: 0.1
-scopes: { session: {ttl: "7d"}, project: {ttl: "120d"}, principle: {ttl: "inf"} }
+scopes: { session: { ttl: '7d' }, project: { ttl: '120d' }, principle: { ttl: 'inf' } }
 boundary_classes:
-  public:   { allow: ["*"] }
-  internal: { allow: ["answer:task","tool:*"] }
-  pii:      { allow: ["tool:contact-lookup"], redact: ["email","phone"], escalation: "human_review" }
-  secret:   { allow: [], escalation: "deny" }
+  public: { allow: ['*'] }
+  internal: { allow: ['answer:task', 'tool:*'] }
+  pii: { allow: ['tool:contact-lookup'], redact: ['email', 'phone'], escalation: 'human_review' }
+  secret: { allow: [], escalation: 'deny' }
 ```
 
 > ポリシーの詳細は `boundary-policy.md` を参照。
@@ -113,7 +113,9 @@ boundary_classes:
 **Payload**：
 
 ```json
-{"yaml":"version: 0.1\nscopes:\n  session: { ttl: '7d' }\n  project: { ttl: '120d' }\n  principle: { ttl: 'inf' }\nboundary_classes:\n  public:   { allow: ['*'] }\n  internal: { allow: ['answer:task','tool:*'] }\n  pii:      { allow: ['tool:contact-lookup'], redact: ['email','phone'], escalation: 'human_review' }\n  secret:   { allow: [], escalation: 'deny' }\n"}
+{
+  "yaml": "version: 0.1\nscopes:\n  session: { ttl: '7d' }\n  project: { ttl: '120d' }\n  principle: { ttl: 'inf' }\nboundary_classes:\n  public:   { allow: ['*'] }\n  internal: { allow: ['answer:task','tool:*'] }\n  pii:      { allow: ['tool:contact-lookup'], redact: ['email','phone'], escalation: 'human_review' }\n  secret:   { allow: [], escalation: 'deny' }\n"
+}
 ```
 
 期待：`data.version` が返る（Response Envelope 参照）。
@@ -124,7 +126,14 @@ boundary_classes:
 **Payload 例**：
 
 ```json
-{"text":"解約APIは POST /subscriptions/{id}/cancel（非同期・冪等）","kind":"fact","scope":"project","boundary_class":"internal","provenance":{"git":{"commit":"abc123","repo":"org/repo"}},"content_hash":"sha256:1d..."}
+{
+  "text": "解約APIは POST /subscriptions/{id}/cancel（非同期・冪等）",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "provenance": { "git": { "commit": "abc123", "repo": "org/repo" } },
+  "content_hash": "sha256:1d..."
+}
 ```
 
 ### 3.3 activate（AC を構成し、前提をまとめて取得）
@@ -133,7 +142,7 @@ boundary_classes:
 **Payload**：
 
 ```json
-{"q":"解約/返金 仕様","scope":["project"],"allow":["answer:task"],"top_k":12}
+{ "q": "解約/返金 仕様", "scope": ["project"], "allow": ["answer:task"], "top_k": 12 }
 ```
 
 期待：`data.active_context_id` と `claims[]` が返る。
@@ -144,7 +153,7 @@ boundary_classes:
 **Payload**：
 
 ```json
-{"payload":"連絡は ryo@example.com へ","allow":["answer:task"],"scope":"project"}
+{ "payload": "連絡は ryo@example.com へ", "allow": ["answer:task"], "scope": "project" }
 ```
 
 期待：`data.allowed=true` と `data.redacted` が返る。
@@ -155,7 +164,7 @@ boundary_classes:
 **Payload**：
 
 ```json
-{"claim_id":"clm_7k","signal":"helpful","score":1.0}
+{ "claim_id": "clm_7k", "signal": "helpful", "score": 1.0 }
 ```
 
 ---
@@ -172,12 +181,12 @@ boundary_classes:
 
 ## 5. よくあるエラーと対処
 
-| 症状 | 典型エラー | 対処 |
-|---|---|---|
-| AC が取得できない | `POLICY_MISSING` (424) | `policy.apply` を先に実行 |
-| 想起が拒否される | `BOUNDARY_DENIED` (403) | `scope/allow` を見直す・`boundary.validate` で redaction |
-| upsert が重複 | `DUPLICATE` (409) | 同じ `content_hash`。ID を再利用するか `text` を正規化 |
-| レート制限 | `RATE_LIMIT` (429) | `Retry-After` 秒後に指数バックオフ＋ジッタ再試行 |
+| 症状              | 典型エラー              | 対処                                                     |
+| ----------------- | ----------------------- | -------------------------------------------------------- |
+| AC が取得できない | `POLICY_MISSING` (424)  | `policy.apply` を先に実行                                |
+| 想起が拒否される  | `BOUNDARY_DENIED` (403) | `scope/allow` を見直す・`boundary.validate` で redaction |
+| upsert が重複     | `DUPLICATE` (409)       | 同じ `content_hash`。ID を再利用するか `text` を正規化   |
+| レート制限        | `RATE_LIMIT` (429)      | `Retry-After` 秒後に指数バックオフ＋ジッタ再試行         |
 
 ---
 
@@ -195,12 +204,12 @@ boundary_classes:
   "name": "pce-memory",
   "version": "0.1.0",
   "tools": [
-    {"name":"pce.memory.activate"},
-    {"name":"pce.memory.search"},
-    {"name":"pce.memory.upsert"},
-    {"name":"pce.memory.feedback"},
-    {"name":"pce.memory.boundary.validate"},
-    {"name":"pce.memory.policy.apply"}
+    { "name": "pce.memory.activate" },
+    { "name": "pce.memory.search" },
+    { "name": "pce.memory.upsert" },
+    { "name": "pce.memory.feedback" },
+    { "name": "pce.memory.boundary.validate" },
+    { "name": "pce.memory.policy.apply" }
   ]
 }
 ```

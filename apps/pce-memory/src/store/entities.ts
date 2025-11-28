@@ -2,14 +2,14 @@
  * Entity Store（mcp-tools.md definitions.entity準拠）
  * Graph Memory: Actor, Artifact, Event, Concept
  */
-import { getConnection } from "../db/connection.js";
+import { getConnection } from '../db/connection.js';
 
 /**
  * Entity型（definitions.entity準拠）
  */
 export interface Entity {
   id: string;
-  type: "Actor" | "Artifact" | "Event" | "Concept";
+  type: 'Actor' | 'Artifact' | 'Event' | 'Concept';
   name: string;
   canonical_key?: string;
   attrs?: Record<string, unknown>;
@@ -19,7 +19,7 @@ export interface Entity {
 /**
  * Entity入力型
  */
-export type EntityInput = Omit<Entity, "created_at">;
+export type EntityInput = Omit<Entity, 'created_at'>;
 
 /**
  * Entityを登録（idempotent upsert）
@@ -29,7 +29,7 @@ export async function upsertEntity(e: EntityInput): Promise<Entity> {
 
   // 既存チェック
   const existing = await conn.runAndReadAll(
-    "SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1",
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1',
     [e.id]
   );
   const rows = existing.getRowObjects() as unknown as Entity[];
@@ -40,12 +40,12 @@ export async function upsertEntity(e: EntityInput): Promise<Entity> {
   // 新規挿入
   const attrsJson = e.attrs ? JSON.stringify(e.attrs) : null;
   await conn.run(
-    "INSERT INTO entities (id, type, name, canonical_key, attrs) VALUES ($1, $2, $3, $4, $5)",
+    'INSERT INTO entities (id, type, name, canonical_key, attrs) VALUES ($1, $2, $3, $4, $5)',
     [e.id, e.type, e.name, e.canonical_key ?? null, attrsJson]
   );
 
   const inserted = await conn.runAndReadAll(
-    "SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1",
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1',
     [e.id]
   );
   return (inserted.getRowObjects() as unknown as Entity[])[0]!;
@@ -57,7 +57,7 @@ export async function upsertEntity(e: EntityInput): Promise<Entity> {
 export async function linkClaimEntity(claimId: string, entityId: string): Promise<void> {
   const conn = await getConnection();
   await conn.run(
-    "INSERT INTO claim_entities (claim_id, entity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    'INSERT INTO claim_entities (claim_id, entity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
     [claimId, entityId]
   );
 }
@@ -80,10 +80,13 @@ export async function getEntitiesForClaim(claimId: string): Promise<Entity[]> {
 /**
  * Entityを検索（type指定）
  */
-export async function findEntitiesByType(type: Entity["type"], limit: number = 100): Promise<Entity[]> {
+export async function findEntitiesByType(
+  type: Entity['type'],
+  limit: number = 100
+): Promise<Entity[]> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE type = $1 LIMIT $2",
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE type = $1 LIMIT $2',
     [type, limit]
   );
   return reader.getRowObjects() as unknown as Entity[];
@@ -95,7 +98,7 @@ export async function findEntitiesByType(type: Entity["type"], limit: number = 1
 export async function findEntityByCanonicalKey(canonicalKey: string): Promise<Entity | undefined> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE canonical_key = $1",
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE canonical_key = $1',
     [canonicalKey]
   );
   const rows = reader.getRowObjects() as unknown as Entity[];
@@ -108,7 +111,7 @@ export async function findEntityByCanonicalKey(canonicalKey: string): Promise<En
 export async function findEntityById(id: string): Promise<Entity | undefined> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1",
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1',
     [id]
   );
   const rows = reader.getRowObjects() as unknown as Entity[];
@@ -120,7 +123,7 @@ export async function findEntityById(id: string): Promise<Entity | undefined> {
  */
 export interface EntityQueryFilters {
   id?: string;
-  type?: Entity["type"];
+  type?: Entity['type'];
   canonical_key?: string;
   claim_id?: string;
   limit?: number;
@@ -172,7 +175,7 @@ export async function queryEntities(filters: EntityQueryFilters): Promise<Entity
   }
 
   if (conditions.length > 0) {
-    sql += ` WHERE ${conditions.join(" AND ")}`;
+    sql += ` WHERE ${conditions.join(' AND ')}`;
   }
 
   sql += ` ORDER BY e.created_at DESC LIMIT $${paramIndex}`;

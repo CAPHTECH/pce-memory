@@ -41,14 +41,14 @@ const policy = defaultBoundaryPolicy();
 ## Policy Structure
 
 ```yaml
-version: "0.1.0"
+version: '0.1.0'
 boundary:
   default_scope: project
   allowed_classes: [public, internal]
   invariants:
     - name: no_destructive_changes
       applies_to: [principle]
-      rule: "forbid DELETE/DROP/TRUNCATE in principle scope"
+      rule: 'forbid DELETE/DROP/TRUNCATE in principle scope'
 retrieval:
   hybrid:
     alpha: 0.65

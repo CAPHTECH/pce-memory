@@ -5,40 +5,36 @@
 
 // エラーコード（Tagged Union）
 export type ErrorCode =
-  | "POLICY_INVALID"
-  | "UPSERT_FAILED"
-  | "UPSERT_ENTITY_FAILED"   // Graph Memory: Entity登録失敗
-  | "UPSERT_RELATION_FAILED" // Graph Memory: Relation登録失敗
-  | "QUERY_ENTITY_FAILED"    // Graph Memory: Entity検索失敗
-  | "QUERY_RELATION_FAILED"  // Graph Memory: Relation検索失敗
-  | "ACTIVATE_FAILED"
-  | "BOUNDARY_ERROR"
-  | "FEEDBACK_FAILED"
-  | "VALIDATION_ERROR"
-  | "RATE_LIMIT"
-  | "STATE_ERROR"           // 状態機械の不正遷移
-  | "LAYER_CYCLE_DETECTED"
-  | "LAYER_SELF_DEPENDENCY"
-  | "LAYER_MISSING_DEPENDENCY"
-  | "SCOPE_NOT_ACTIVE"
-  | "CLAIM_NOT_FOUND"
-  | "DB_ERROR";
+  | 'POLICY_INVALID'
+  | 'UPSERT_FAILED'
+  | 'UPSERT_ENTITY_FAILED' // Graph Memory: Entity登録失敗
+  | 'UPSERT_RELATION_FAILED' // Graph Memory: Relation登録失敗
+  | 'QUERY_ENTITY_FAILED' // Graph Memory: Entity検索失敗
+  | 'QUERY_RELATION_FAILED' // Graph Memory: Relation検索失敗
+  | 'ACTIVATE_FAILED'
+  | 'BOUNDARY_ERROR'
+  | 'FEEDBACK_FAILED'
+  | 'VALIDATION_ERROR'
+  | 'RATE_LIMIT'
+  | 'STATE_ERROR' // 状態機械の不正遷移
+  | 'LAYER_CYCLE_DETECTED'
+  | 'LAYER_SELF_DEPENDENCY'
+  | 'LAYER_MISSING_DEPENDENCY'
+  | 'SCOPE_NOT_ACTIVE'
+  | 'CLAIM_NOT_FOUND'
+  | 'DB_ERROR';
 
 // ドメインエラー型
 export interface DomainError {
-  readonly _tag: "DomainError";
+  readonly _tag: 'DomainError';
   readonly code: ErrorCode;
   readonly message: string;
   readonly cause?: unknown;
 }
 
 // エラー生成関数
-export const domainError = (
-  code: ErrorCode,
-  message: string,
-  cause?: unknown
-): DomainError => ({
-  _tag: "DomainError",
+export const domainError = (code: ErrorCode, message: string, cause?: unknown): DomainError => ({
+  _tag: 'DomainError',
   code,
   message,
   cause,
@@ -46,22 +42,21 @@ export const domainError = (
 
 // よく使うエラー生成のショートカット
 export const validationError = (message: string): DomainError =>
-  domainError("VALIDATION_ERROR", message);
+  domainError('VALIDATION_ERROR', message);
 
-export const rateLimitError = (): DomainError =>
-  domainError("RATE_LIMIT", "rate limit exceeded");
+export const rateLimitError = (): DomainError => domainError('RATE_LIMIT', 'rate limit exceeded');
 
 export const claimNotFoundError = (id: string): DomainError =>
-  domainError("CLAIM_NOT_FOUND", `claim not found: ${id}`);
+  domainError('CLAIM_NOT_FOUND', `claim not found: ${id}`);
 
 export const dbError = (cause: unknown): DomainError =>
-  domainError("DB_ERROR", "database operation failed", cause);
+  domainError('DB_ERROR', 'database operation failed', cause);
 
 export const layerSelfDependencyError = (name: string): DomainError =>
-  domainError("LAYER_SELF_DEPENDENCY", `layer "${name}" cannot depend on itself`);
+  domainError('LAYER_SELF_DEPENDENCY', `layer "${name}" cannot depend on itself`);
 
 export const layerCycleError = (from: string, to: string): DomainError =>
-  domainError("LAYER_CYCLE_DETECTED", `cycle detected: ${from} -> ${to}`);
+  domainError('LAYER_CYCLE_DETECTED', `cycle detected: ${from} -> ${to}`);
 
 export const scopeNotActiveError = (scopeId: string): DomainError =>
-  domainError("SCOPE_NOT_ACTIVE", `scope not active: ${scopeId}`);
+  domainError('SCOPE_NOT_ACTIVE', `scope not active: ${scopeId}`);

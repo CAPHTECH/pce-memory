@@ -3,12 +3,12 @@
  * ADR-0002対応: ポリシーをDBに永続化し、サーバー再起動時に復元可能にする
  * "Latest wins" 戦略: created_at DESC で最新ポリシーを取得
  */
-import * as TE from "fp-ts/TaskEither";
-import { pipe } from "fp-ts/function";
-import { getConnection } from "../db/connection.js";
-import type { DomainError } from "../domain/errors.js";
-import { dbError } from "../domain/errors.js";
-import type { BoundaryPolicy } from "@pce/policy-schemas";
+import * as TE from 'fp-ts/TaskEither';
+import { pipe } from 'fp-ts/function';
+import { getConnection } from '../db/connection.js';
+import type { DomainError } from '../domain/errors.js';
+import { dbError } from '../domain/errors.js';
+import type { BoundaryPolicy } from '@pce/policy-schemas';
 
 // ========== 型定義 ==========
 

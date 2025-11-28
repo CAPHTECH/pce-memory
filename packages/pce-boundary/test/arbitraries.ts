@@ -147,7 +147,9 @@ export const ClaimArb = fc.record({
  */
 export const BoundaryArb = fc.record({
   scope: ScopeArb,
-  boundary_classes: fc.array(BoundaryClassArb, { minLength: 1, maxLength: 4 }).map((arr) => new Set(arr)),
+  boundary_classes: fc
+    .array(BoundaryClassArb, { minLength: 1, maxLength: 4 })
+    .map((arr) => new Set(arr)),
 });
 
 /**

@@ -2,8 +2,8 @@
  * Evidence Store（mcp-tools.md definitions.evidence準拠）
  * Claimの根拠情報
  */
-import { getConnection } from "../db/connection.js";
-import { normalizeRowsTimestamps } from "../utils/serialization.js";
+import { getConnection } from '../db/connection.js';
+import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
 /**
  * Evidence型（definitions.evidence準拠）
@@ -20,7 +20,7 @@ export interface Evidence {
 /**
  * Evidence入力型
  */
-export type EvidenceInput = Omit<Evidence, "at"> & {
+export type EvidenceInput = Omit<Evidence, 'at'> & {
   at?: string;
 };
 
@@ -32,12 +32,12 @@ export async function insertEvidence(e: EvidenceInput): Promise<Evidence> {
   const conn = await getConnection();
 
   await conn.run(
-    "INSERT INTO evidence (id, claim_id, source_type, source_id, snippet, recorded_at) VALUES ($1, $2, $3, $4, $5, COALESCE($6::TIMESTAMP, CURRENT_TIMESTAMP))",
+    'INSERT INTO evidence (id, claim_id, source_type, source_id, snippet, recorded_at) VALUES ($1, $2, $3, $4, $5, COALESCE($6::TIMESTAMP, CURRENT_TIMESTAMP))',
     [e.id, e.claim_id, e.source_type ?? null, e.source_id ?? null, e.snippet ?? null, e.at ?? null]
   );
 
   const reader = await conn.runAndReadAll(
-    "SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE id = $1",
+    'SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE id = $1',
     [e.id]
   );
   const rawRows = reader.getRowObjects() as unknown as Evidence[];
@@ -51,7 +51,7 @@ export async function insertEvidence(e: EvidenceInput): Promise<Evidence> {
 export async function getEvidenceForClaim(claimId: string): Promise<Evidence[]> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE claim_id = $1 ORDER BY recorded_at DESC",
+    'SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE claim_id = $1 ORDER BY recorded_at DESC',
     [claimId]
   );
   const rawRows = reader.getRowObjects() as unknown as Evidence[];
@@ -67,7 +67,7 @@ export async function getEvidenceForClaims(claimIds: string[]): Promise<Map<stri
   }
 
   const conn = await getConnection();
-  const placeholders = claimIds.map((_, i) => `$${i + 1}`).join(",");
+  const placeholders = claimIds.map((_, i) => `$${i + 1}`).join(',');
 
   const reader = await conn.runAndReadAll(
     `SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at
@@ -93,10 +93,13 @@ export async function getEvidenceForClaims(claimIds: string[]): Promise<Map<stri
 /**
  * source_typeで検索
  */
-export async function findEvidenceBySourceType(sourceType: string, limit: number = 100): Promise<Evidence[]> {
+export async function findEvidenceBySourceType(
+  sourceType: string,
+  limit: number = 100
+): Promise<Evidence[]> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE source_type = $1 LIMIT $2",
+    'SELECT id, claim_id, source_type, source_id, snippet, recorded_at AS at FROM evidence WHERE source_type = $1 LIMIT $2',
     [sourceType, limit]
   );
   const rawRows = reader.getRowObjects() as unknown as Evidence[];

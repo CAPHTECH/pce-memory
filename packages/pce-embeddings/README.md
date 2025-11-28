@@ -37,9 +37,11 @@ const result = await provider.embed(['Hello, world!'])();
 ## Supported Models
 
 ### Local (ONNX)
+
 - BAAI/bge-small-en-v1.5 (384 dims, recommended)
 
 ### Remote
+
 - OpenAI: text-embedding-3-small, text-embedding-3-large
 - Anthropic: (TBD)
 

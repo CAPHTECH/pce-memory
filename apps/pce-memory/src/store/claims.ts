@@ -1,8 +1,8 @@
-import { getConnection } from "../db/connection.js";
-import type { EmbeddingService } from "@pce/embeddings";
-import * as E from "fp-ts/Either";
-import { saveClaimVector } from "./hybridSearch.js";
-import { normalizeRowsTimestamps } from "../utils/serialization.js";
+import { getConnection } from '../db/connection.js';
+import type { EmbeddingService } from '@pce/embeddings';
+import * as E from 'fp-ts/Either';
+import { saveClaimVector } from './hybridSearch.js';
+import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
 /**
  * Provenance: 由来情報（mcp-tools.md §1.y準拠）
@@ -54,12 +54,16 @@ export interface UpsertResult {
  * 新規の場合は挿入して返す（isNew: true）
  */
 /** g()再ランキング用フィールドを含むClaim入力型 */
-export type ClaimInput = Omit<Claim, "id" | "utility" | "confidence" | "created_at" | "updated_at" | "recency_anchor"> & {
+export type ClaimInput = Omit<
+  Claim,
+  'id' | 'utility' | 'confidence' | 'created_at' | 'updated_at' | 'recency_anchor'
+> & {
   provenance?: Provenance;
 };
 
 /** 全カラムのSELECT句 */
-const CLAIM_COLUMNS = "id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance";
+const CLAIM_COLUMNS =
+  'id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance';
 
 export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   const conn = await getConnection();
@@ -79,7 +83,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
     const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
     const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
     await conn.run(
-      "INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+      'INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, provenanceJson]
     );
     // 挿入後のレコードを取得（DEFAULT値を含む）
@@ -105,12 +109,16 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   }
 }
 
-export async function listClaimsByScope(scopes: string[], limit: number, q?: string): Promise<Claim[]> {
+export async function listClaimsByScope(
+  scopes: string[],
+  limit: number,
+  q?: string
+): Promise<Claim[]> {
   const conn = await getConnection();
   const hasQuery = q && q.trim().length > 0;
 
   // DuckDBはプレースホルダーのIN句に配列をそのまま渡せないため、動的にSQL構築
-  const placeholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+  const placeholders = scopes.map((_, i) => `$${i + 1}`).join(',');
   const sql = hasQuery
     ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
               c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
@@ -137,10 +145,9 @@ export async function listClaimsByScope(scopes: string[], limit: number, q?: str
 
 export async function findClaimById(id: string): Promise<Claim | undefined> {
   const conn = await getConnection();
-  const reader = await conn.runAndReadAll(
-    `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
-    [id]
-  );
+  const reader = await conn.runAndReadAll(`SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`, [
+    id,
+  ]);
   const rawRows = reader.getRowObjects() as unknown as Claim[];
   const rows = normalizeRowsTimestamps(rawRows);
   return rows[0];
@@ -152,7 +159,7 @@ export async function findClaimById(id: string): Promise<Claim | undefined> {
  */
 export async function countClaims(): Promise<number> {
   const conn = await getConnection();
-  const reader = await conn.runAndReadAll("SELECT COUNT(*) as cnt FROM claims");
+  const reader = await conn.runAndReadAll('SELECT COUNT(*) as cnt FROM claims');
   const rows = reader.getRowObjects() as unknown as { cnt: number | bigint }[];
   return rows[0] ? Number(rows[0].cnt) : 0;
 }
@@ -179,7 +186,7 @@ export async function upsertClaimWithEmbedding(
   if (result.isNew) {
     const embedResult = await embeddingService.embed({
       text: c.text,
-      sensitivity: "internal",
+      sensitivity: 'internal',
     })();
 
     // 埋め込み生成成功時のみ保存（失敗時はClaim登録だけ成功）

@@ -12,8 +12,8 @@
  * - ScopedResourceInvariant: スコープ終了時のリソース解放
  * - UniqueOwnership: リソース一意所有権
  */
-import * as E from "fp-ts/Either";
-import type { DomainError } from "../domain/errors.js";
+import * as E from 'fp-ts/Either';
+import type { DomainError } from '../domain/errors.js';
 import {
   type LayerGraph,
   type Capability,
@@ -21,7 +21,7 @@ import {
   registerLayer,
   hasCapability,
   dependenciesSatisfied,
-} from "../layer/graph.js";
+} from '../layer/graph.js';
 import {
   type ScopeState,
   type ScopeId,
@@ -31,7 +31,7 @@ import {
   addResourceToScope,
   isScopeActive,
   getLiveResources,
-} from "../layer/scope.js";
+} from '../layer/scope.js';
 
 // ========== モジュールスコープ状態 ==========
 

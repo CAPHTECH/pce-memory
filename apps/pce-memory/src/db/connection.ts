@@ -1,5 +1,5 @@
-import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { SCHEMA_SQL } from "./schema.js";
+import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
+import { SCHEMA_SQL } from './schema.js';
 
 let instance: DuckDBInstance | null = null;
 let cachedConnection: DuckDBConnection | null = null;
@@ -10,7 +10,7 @@ let cachedConnection: DuckDBConnection | null = null;
  */
 export async function initDb(): Promise<DuckDBInstance> {
   if (instance) return instance;
-  const dbPath = process.env["PCE_DB"] ?? ":memory:";
+  const dbPath = process.env['PCE_DB'] ?? ':memory:';
   instance = await DuckDBInstance.create(dbPath);
   return instance;
 }
@@ -21,7 +21,7 @@ export async function initDb(): Promise<DuckDBInstance> {
  */
 export function getDb(): DuckDBInstance {
   if (!instance) {
-    throw new Error("Database not initialized. Call initDb() first.");
+    throw new Error('Database not initialized. Call initDb() first.');
   }
   return instance;
 }
@@ -43,7 +43,7 @@ export async function getConnection(): Promise<DuckDBConnection> {
  */
 export async function initSchema() {
   const conn = await getConnection();
-  const statements = SCHEMA_SQL.split(";")
+  const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())
     .filter(Boolean);
   for (const stmt of statements) {

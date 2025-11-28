@@ -1,8 +1,8 @@
-import { getConnection } from "../db/connection.js";
+import { getConnection } from '../db/connection.js';
 
 export interface FeedbackInput {
   claim_id: string;
-  signal: "helpful" | "harmful" | "outdated" | "duplicate";
+  signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
   score?: number;
 }
 
@@ -18,13 +18,13 @@ export interface FeedbackInput {
  * | duplicate | -0.05   |  0         |
  */
 export const FEEDBACK_DELTAS: Record<
-  FeedbackInput["signal"],
+  FeedbackInput['signal'],
   { utility: number; confidence: number }
 > = {
-  helpful: { utility: 0.10, confidence: 0.05 },
-  harmful: { utility: -0.20, confidence: -0.10 },
-  outdated: { utility: 0.00, confidence: -0.20 },
-  duplicate: { utility: -0.05, confidence: 0.00 },
+  helpful: { utility: 0.1, confidence: 0.05 },
+  harmful: { utility: -0.2, confidence: -0.1 },
+  outdated: { utility: 0.0, confidence: -0.2 },
+  duplicate: { utility: -0.05, confidence: 0.0 },
 };
 
 /**
@@ -39,10 +39,12 @@ export async function recordFeedback(input: FeedbackInput): Promise<{ id: string
   const id = `fb_${crypto.randomUUID().slice(0, 8)}`;
 
   // 1. feedbackテーブルにイベント記録
-  await conn.run(
-    "INSERT INTO feedback (id, claim_id, signal, score) VALUES ($1, $2, $3, $4)",
-    [id, input.claim_id, input.signal, input.score ?? null]
-  );
+  await conn.run('INSERT INTO feedback (id, claim_id, signal, score) VALUES ($1, $2, $3, $4)', [
+    id,
+    input.claim_id,
+    input.signal,
+    input.score ?? null,
+  ]);
 
   // 2. claimsのutility/confidence更新（g()再ランキング用）
   // positive feedback (utility > 0) のみrecency_anchorを更新

@@ -92,16 +92,16 @@ Uninitialized → PolicyApplied → HasClaims → Ready
 
 ### MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `pce.memory.policy.apply` | Apply policy (initialization) |
-| `pce.memory.upsert` | Register claim with entities/relations |
-| `pce.memory.upsert.entity` | Register graph entity |
-| `pce.memory.upsert.relation` | Register graph relation |
-| `pce.memory.activate` | Build active context (hybrid search) |
-| `pce.memory.feedback` | Update critic (helpful/harmful/outdated/duplicate) |
-| `pce.memory.boundary.validate` | Pre-generation boundary check |
-| `pce.memory.state` | Get current state |
+| Tool                           | Description                                        |
+| ------------------------------ | -------------------------------------------------- |
+| `pce.memory.policy.apply`      | Apply policy (initialization)                      |
+| `pce.memory.upsert`            | Register claim with entities/relations             |
+| `pce.memory.upsert.entity`     | Register graph entity                              |
+| `pce.memory.upsert.relation`   | Register graph relation                            |
+| `pce.memory.activate`          | Build active context (hybrid search)               |
+| `pce.memory.feedback`          | Update critic (helpful/harmful/outdated/duplicate) |
+| `pce.memory.boundary.validate` | Pre-generation boundary check                      |
+| `pce.memory.state`             | Get current state                                  |
 
 ## Testing Approach
 
@@ -128,37 +128,37 @@ const entity = await upsertEntity({
 
 ### Pace Layering (Scope)
 
-| Scope | Change Rate | Use Case |
-|-------|-------------|----------|
-| `session` | Fast | Session-specific temporary info |
-| `project` | Medium | Project-specific patterns |
-| `principle` | Slow | Universal principles |
+| Scope       | Change Rate | Use Case                        |
+| ----------- | ----------- | ------------------------------- |
+| `session`   | Fast        | Session-specific temporary info |
+| `project`   | Medium      | Project-specific patterns       |
+| `principle` | Slow        | Universal principles            |
 
 ### Boundary Classes
 
-| Class | Use Case |
-|-------|----------|
-| `public` | Publicly shareable |
-| `internal` | Internal only |
-| `pii` | Contains personal info |
-| `secret` | Credentials (avoid storing) |
+| Class      | Use Case                    |
+| ---------- | --------------------------- |
+| `public`   | Publicly shareable          |
+| `internal` | Internal only               |
+| `pii`      | Contains personal info      |
+| `secret`   | Credentials (avoid storing) |
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PCE_DB` | DuckDB file path | `:memory:` |
-| `PCE_RATE_CAP` | Rate limit per bucket | `100` |
-| `PCE_RATE_WINDOW` | Rate window (seconds) | `60` |
-| `PCE_TOKEN` | Auth token (required in production) | - |
+| Variable          | Description                         | Default    |
+| ----------------- | ----------------------------------- | ---------- |
+| `PCE_DB`          | DuckDB file path                    | `:memory:` |
+| `PCE_RATE_CAP`    | Rate limit per bucket               | `100`      |
+| `PCE_RATE_WINDOW` | Rate window (seconds)               | `60`       |
+| `PCE_TOKEN`       | Auth token (required in production) | -          |
 
 ## Quality Gates
 
-| Gate | Threshold |
-|------|-----------|
-| Static Analysis | 0 errors |
-| Coverage | ≥ 80% |
-| Cyclomatic Complexity | ≤ 10 |
+| Gate                  | Threshold |
+| --------------------- | --------- |
+| Static Analysis       | 0 errors  |
+| Coverage              | ≥ 80%     |
+| Cyclomatic Complexity | ≤ 10      |
 
 ---
 

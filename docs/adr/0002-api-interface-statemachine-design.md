@@ -10,10 +10,10 @@ PCE-MemoryのAPIインターフェース設計について、形式検証（Allo
 
 ### 評価した設計パターン
 
-| 設計 | 概要 |
-|------|------|
-| A: フラットAPI | 全操作がいつでも呼び出し可能 |
-| B: ビルダーAPI | 段階的構築、完成まで実行不可 |
+| 設計           | 概要                               |
+| -------------- | ---------------------------------- |
+| A: フラットAPI | 全操作がいつでも呼び出し可能       |
+| B: ビルダーAPI | 段階的構築、完成まで実行不可       |
 | C: 状態機械API | 状態ごとに許可操作を型レベルで制限 |
 
 ### 形式検証の結果（Alloy）
@@ -28,14 +28,17 @@ SM_ActivateRequiresClaims       UNSAT ← 成立（安全）
 ### 発見された問題
 
 **設計A（フラットAPI）**:
+
 - `policyApplied = False` の状態で `Upsert()` 呼び出しが可能
 - 実行時エラーとして処理される（呼び出し自体は防げない）
 
 **設計B（ビルダーAPI）**:
+
 - 順序は強制されるが、`policyApplied = False` でも `Build()` 可能
 - 実行時エラーとして処理される
 
 **設計C（状態機械API）**:
+
 - 不正な呼び出しは状態遷移として定義されていない
 - コンパイル時に排除される（反例なし）
 
@@ -51,10 +54,10 @@ SM_ActivateRequiresClaims       UNSAT ← 成立（安全）
 
 ### 採用しない設計
 
-| 設計 | 不採用理由 |
-|------|-----------|
+| 設計           | 不採用理由                           |
+| -------------- | ------------------------------------ |
 | A: フラットAPI | 不正呼び出しが実行時まで検出されない |
-| B: ビルダーAPI | ポリシー適用チェックが実行時依存 |
+| B: ビルダーAPI | ポリシー適用チェックが実行時依存     |
 
 ## 設計詳細
 
@@ -88,21 +91,21 @@ SM_ActivateRequiresClaims       UNSAT ← 成立（安全）
 
 ### 各状態で許可される操作
 
-| 状態 | 許可操作 |
-|------|---------|
-| Uninitialized | `applyPolicy()` のみ |
-| PolicyApplied | `upsert()` のみ |
-| HasClaims | `upsert()`, `activate()` |
-| Ready | `feedback()`, `activate()` |
+| 状態          | 許可操作                   |
+| ------------- | -------------------------- |
+| Uninitialized | `applyPolicy()` のみ       |
+| PolicyApplied | `upsert()` のみ            |
+| HasClaims     | `upsert()`, `activate()`   |
+| Ready         | `feedback()`, `activate()` |
 
 ### TypeScript実装パターン
 
 ```typescript
 // 状態をPhantom Typeで表現
-type Uninitialized = { readonly _brand: "Uninitialized" };
-type PolicyApplied = { readonly _brand: "PolicyApplied" };
-type HasClaims = { readonly _brand: "HasClaims" };
-type Ready = { readonly _brand: "Ready" };
+type Uninitialized = { readonly _brand: 'Uninitialized' };
+type PolicyApplied = { readonly _brand: 'PolicyApplied' };
+type HasClaims = { readonly _brand: 'HasClaims' };
+type Ready = { readonly _brand: 'Ready' };
 
 // 状態ごとに異なるメソッドシグネチャ
 interface PCEMemory<S> {
@@ -123,12 +126,12 @@ function createPCEMemory(): PCEMemory<Uninitialized>;
 // ✅ 正しい使用（コンパイル成功）
 const api = createPCEMemory();
 const applied = api.applyPolicy();
-const hasClaims = applied.upsert({ text: "...", scope: "session" });
-const ready = hasClaims.activate({ scopes: ["session"], allow: ["public"] });
-ready.feedback({ claim_id: "...", signal: "helpful" });
+const hasClaims = applied.upsert({ text: '...', scope: 'session' });
+const ready = hasClaims.activate({ scopes: ['session'], allow: ['public'] });
+ready.feedback({ claim_id: '...', signal: 'helpful' });
 
 // ❌ 不正な使用（コンパイルエラー）
-api.upsert({ text: "..." });
+api.upsert({ text: '...' });
 // Error: 'this' context of type 'PCEMemory<Uninitialized>'
 // is not assignable to method's 'this' of type 'PCEMemory<PolicyApplied>'
 ```
@@ -137,18 +140,18 @@ api.upsert({ text: "..." });
 
 ### 保証される性質
 
-| 性質 | 保証方法 |
-|------|---------|
+| 性質                         | 保証方法                   |
+| ---------------------------- | -------------------------- |
 | ポリシー適用後のみupsert可能 | 型システム（コンパイル時） |
 | claims存在後のみactivate可能 | 型システム（コンパイル時） |
-| 不正呼び出しなし | 状態遷移の不存在 |
+| 不正呼び出しなし             | 状態遷移の不存在           |
 
 ### トレードオフ
 
-| メリット | デメリット |
-|---------|-----------|
-| コンパイル時安全性 | API複雑性の増加 |
-| 実行時エラーなし | 状態管理の理解が必要 |
+| メリット           | デメリット                 |
+| ------------------ | -------------------------- |
+| コンパイル時安全性 | API複雑性の増加            |
+| 実行時エラーなし   | 状態管理の理解が必要       |
 | 形式検証で証明済み | 動的な使用パターンに不向き |
 
 ## 参考資料

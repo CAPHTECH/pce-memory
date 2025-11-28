@@ -17,6 +17,7 @@ PBTは**すべての入力に対して成り立つべき性質（不変条件）
 ### 例: Example-based vs Property-based
 
 **Example-based**:
+
 ```typescript
 test('add(2, 3) should return 5', () => {
   expect(add(2, 3)).toBe(5);
@@ -24,6 +25,7 @@ test('add(2, 3) should return 5', () => {
 ```
 
 **Property-based**:
+
 ```typescript
 test('Property: add is commutative', () => {
   fc.assert(
@@ -71,9 +73,7 @@ test('Property: some invariant', () => {
 
 ```typescript
 // 特定の条件を満たすClaimを生成
-const PublicClaimArb = ClaimArb.filter(
-  (claim) => claim.boundary_class === 'public'
-);
+const PublicClaimArb = ClaimArb.filter((claim) => claim.boundary_class === 'public');
 
 // 複数のArbitraryを組み合わせ
 const ClaimWithFeedbackArb = fc.tuple(ClaimArb, FeedbackArb);
@@ -119,8 +119,8 @@ pnpm test:pbt
 
 ```typescript
 fc.assert(fc.property(/* ... */), {
-  numRuns: 200,        // デフォルトは100、重要な不変条件は200-1000
-  endOnFailure: true,  // 失敗時即座に停止（デバッグが容易）
+  numRuns: 200, // デフォルトは100、重要な不変条件は200-1000
+  endOnFailure: true, // 失敗時即座に停止（デバッグが容易）
 });
 ```
 
@@ -138,8 +138,8 @@ Property failed after 47 runs with seed=1234567890 and path="42:1:0:0":
 
 ```typescript
 fc.assert(fc.property(/* ... */), {
-  seed: 1234567890,  // 失敗したテストを再現
-  path: "42:1:0:0",  // shrinkingのパス
+  seed: 1234567890, // 失敗したテストを再現
+  path: '42:1:0:0', // shrinkingのパス
 });
 ```
 

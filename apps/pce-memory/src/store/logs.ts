@@ -1,6 +1,6 @@
-import { getConnection } from "../db/connection.js";
-import { appendFileSync, existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { getConnection } from '../db/connection.js';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 
 export interface AuditLog {
   id: string;
@@ -42,14 +42,14 @@ export function setAuditLogPath(path: string | undefined): void {
 export async function appendLog(entry: AuditLog): Promise<void> {
   const conn = await getConnection();
   await conn.run(
-    "INSERT INTO logs (id, op, ok, req, trace, policy_version) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+    'INSERT INTO logs (id, op, ok, req, trace, policy_version) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
     [
       entry.id,
       entry.op,
       entry.ok,
       entry.req ?? null,
       entry.trace ?? null,
-      entry.policy_version ?? null
+      entry.policy_version ?? null,
     ]
   );
 }
@@ -58,7 +58,7 @@ export async function appendLog(entry: AuditLog): Promise<void> {
  * 監査ログファイルへの追記（append-only JSONL形式）
  * AUDIT_LOG_PATH が設定されている場合のみ出力
  */
-export function appendAuditFile(record: Omit<AuditFileRecord, "ts">): void {
+export function appendAuditFile(record: Omit<AuditFileRecord, 'ts'>): void {
   if (!auditLogPath) return;
 
   // ディレクトリが存在しない場合は作成
@@ -73,8 +73,8 @@ export function appendAuditFile(record: Omit<AuditFileRecord, "ts">): void {
   };
 
   // JSONL形式で追記（1行1JSON + 改行）
-  const line = JSON.stringify(fullRecord) + "\n";
-  appendFileSync(auditLogPath, line, { encoding: "utf-8" });
+  const line = JSON.stringify(fullRecord) + '\n';
+  appendFileSync(auditLogPath, line, { encoding: 'utf-8' });
 }
 
 /**
@@ -88,10 +88,10 @@ export async function recordAudit(
   await appendLog(entry);
 
   // ファイルにも記録（パスが設定されている場合）
-  const record: Omit<AuditFileRecord, "ts"> = {
+  const record: Omit<AuditFileRecord, 'ts'> = {
     request_id: entry.req ?? entry.id,
-    trace_id: entry.trace ?? "",
-    policy_version: entry.policy_version ?? "",
+    trace_id: entry.trace ?? '',
+    policy_version: entry.policy_version ?? '',
     op: entry.op,
     ok: entry.ok,
   };

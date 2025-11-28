@@ -7,46 +7,35 @@
  * - Uninitialized → PolicyApplied → HasClaims → Ready の遷移を強制
  * - PCEMemoryクラスを直接使用（StateManager廃止）
  */
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import {
   initLocalProvider,
   localProvider,
   createInMemoryCache,
   createLocalOnlyService,
-} from "@pce/embeddings";
-import { initDb, initSchema } from "./db/connection.js";
-import { setEmbeddingService } from "./store/hybridSearch.js";
-import { setAuditLogPath } from "./store/logs.js";
-import { initRateState } from "./store/rate.js";
-import { loadEnv } from "./config/env.js";
-import { sanitizeErrorMessage } from "./audit/filter.js";
-import * as E from "fp-ts/Either";
+} from '@pce/embeddings';
+import { initDb, initSchema } from './db/connection.js';
+import { setEmbeddingService } from './store/hybridSearch.js';
+import { setAuditLogPath } from './store/logs.js';
+import { initRateState } from './store/rate.js';
+import { loadEnv } from './config/env.js';
+import { sanitizeErrorMessage } from './audit/filter.js';
+import * as E from 'fp-ts/Either';
 
 // memoryState モジュールから状態管理関数をインポート
-import {
-  initMemoryState,
-} from "./state/memoryState.js";
+import { initMemoryState } from './state/memoryState.js';
 
 // layerScopeState モジュールからLayer/Scope管理関数をインポート
-import {
-  registerSystemLayer,
-  getLayerScopeSummary,
-} from "./state/layerScopeState.js";
+import { registerSystemLayer, getLayerScopeSummary } from './state/layerScopeState.js';
 
 // Core handlers from handlers.ts（重複を排除して一元化）
-import {
-  dispatchTool,
-  TOOL_DEFINITIONS,
-} from "./core/handlers.js";
+import { dispatchTool, TOOL_DEFINITIONS } from './core/handlers.js';
 
 // サーバー情報
-const SERVER_NAME = "pce-memory";
-const SERVER_VERSION = "0.1.0";
+const SERVER_NAME = 'pce-memory';
+const SERVER_VERSION = '0.1.0';
 
 /**
  * MCP ツールハンドラの登録（CallToolRequestSchema を使用）
@@ -78,42 +67,49 @@ export async function main() {
     const embeddingCache = createInMemoryCache({ initialModelVersion: localProvider.modelVersion });
     const embeddingService = createLocalOnlyService(localProvider, embeddingCache);
     setEmbeddingService(embeddingService);
-    console.error(`[${SERVER_NAME}] EmbeddingService initialized (model: ${localProvider.modelVersion})`);
+    console.error(
+      `[${SERVER_NAME}] EmbeddingService initialized (model: ${localProvider.modelVersion})`
+    );
   } catch (e: unknown) {
     // 埋め込み初期化失敗時はText-only検索で動作（ベストエフォート）
-    console.error(`[${SERVER_NAME}] EmbeddingService initialization failed (fallback to text-only search):`, e);
+    console.error(
+      `[${SERVER_NAME}] EmbeddingService initialization failed (fallback to text-only search):`,
+      e
+    );
   }
 
   // システムLayer登録（ADR-0001 V2 Effect設計）
   // TLA+ RegisterLayerに対応: 依存グラフを構築
-  const dbLayerResult = registerSystemLayer(
-    "db",
-    new Set(["db_access"] as const),
-    new Set()
-  );
+  const dbLayerResult = registerSystemLayer('db', new Set(['db_access'] as const), new Set());
   if (E.isLeft(dbLayerResult)) {
     console.error(`[${SERVER_NAME}] Failed to register db layer: ${dbLayerResult.left.message}`);
   }
 
   const policyLayerResult = registerSystemLayer(
-    "policy",
-    new Set(["policy_check"] as const),
-    new Set(["db"]) // policyはdbに依存
+    'policy',
+    new Set(['policy_check'] as const),
+    new Set(['db']) // policyはdbに依存
   );
   if (E.isLeft(policyLayerResult)) {
-    console.error(`[${SERVER_NAME}] Failed to register policy layer: ${policyLayerResult.left.message}`);
+    console.error(
+      `[${SERVER_NAME}] Failed to register policy layer: ${policyLayerResult.left.message}`
+    );
   }
 
   const schemaLayerResult = registerSystemLayer(
-    "schema",
-    new Set(["schema_validate"] as const),
-    new Set(["db"]) // schemaはdbに依存
+    'schema',
+    new Set(['schema_validate'] as const),
+    new Set(['db']) // schemaはdbに依存
   );
   if (E.isLeft(schemaLayerResult)) {
-    console.error(`[${SERVER_NAME}] Failed to register schema layer: ${schemaLayerResult.left.message}`);
+    console.error(
+      `[${SERVER_NAME}] Failed to register schema layer: ${schemaLayerResult.left.message}`
+    );
   }
 
-  console.error(`[${SERVER_NAME}] System layers registered: ${getLayerScopeSummary().layers.join(", ")}`);
+  console.error(
+    `[${SERVER_NAME}] System layers registered: ${getLayerScopeSummary().layers.join(', ')}`
+  );
 
   // 状態復元: memoryStateモジュールの初期化
   // DBからポリシーとclaim数を読み込み、適切な状態に復元
@@ -122,7 +118,9 @@ export async function main() {
     console.error(`[${SERVER_NAME}] Failed to initialize state: ${initResult.left.message}`);
     // 初期化失敗時はUninitializedのまま起動（policy.applyで初期化可能）
   } else {
-    console.error(`[${SERVER_NAME}] Restored state: ${initResult.right.state} (policy: ${initResult.right.policyVersion})`);
+    console.error(
+      `[${SERVER_NAME}] Restored state: ${initResult.right.state} (policy: ${initResult.right.policyVersion})`
+    );
   }
 
   // サーバー作成（名前とバージョンを指定）
@@ -154,8 +152,8 @@ export async function main() {
     process.exit(0);
   };
 
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 main().catch((err) => {

@@ -2,21 +2,21 @@
  * 機密データフィルタリング
  * ログに機密情報を残さないためのユーティリティ
  */
-import { createHash } from "crypto";
+import { createHash } from 'crypto';
 
 // フィルタ対象のフィールド名パターン
 const SENSITIVE_FIELDS = [
-  "email",
-  "phone",
-  "password",
-  "secret",
-  "token",
-  "authorization",
-  "api_key",
-  "apikey",
-  "credential",
-  "private_key",
-  "privatekey",
+  'email',
+  'phone',
+  'password',
+  'secret',
+  'token',
+  'authorization',
+  'api_key',
+  'apikey',
+  'credential',
+  'private_key',
+  'privatekey',
 ] as const;
 
 // フィールド名が機密かどうかを判定（大文字小文字無視）
@@ -34,7 +34,7 @@ export function redactSensitiveFields<T>(obj: T): T {
     return obj;
   }
 
-  if (typeof obj !== "object") {
+  if (typeof obj !== 'object') {
     return obj;
   }
 
@@ -45,8 +45,8 @@ export function redactSensitiveFields<T>(obj: T): T {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
     if (isSensitiveField(key)) {
-      result[key] = "[REDACTED]";
-    } else if (typeof value === "object" && value !== null) {
+      result[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
       result[key] = redactSensitiveFields(value);
     } else {
       result[key] = value;
@@ -60,7 +60,7 @@ export function redactSensitiveFields<T>(obj: T): T {
  * ペイロード内容をログに残さず、検証用ハッシュのみ記録
  */
 export function computeDigest(content: string): string {
-  return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+  return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
 }
 
 /**
@@ -73,10 +73,7 @@ export interface SafePayload {
   metadata?: Record<string, unknown>;
 }
 
-export function sanitizeForAudit(
-  payload: string,
-  metadata?: Record<string, unknown>
-): SafePayload {
+export function sanitizeForAudit(payload: string, metadata?: Record<string, unknown>): SafePayload {
   const result: SafePayload = {
     payload_digest: computeDigest(payload),
     payload_length: payload.length,
@@ -96,7 +93,7 @@ export function sanitizeErrorMessage(error: unknown): string {
     // スタックトレースは除外、メッセージのみ
     const msg = error.message;
     // パス情報を除去
-    return msg.replace(/\/[^\s]+/g, "[PATH]");
+    return msg.replace(/\/[^\s]+/g, '[PATH]');
   }
   return String(error);
 }

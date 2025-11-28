@@ -6,24 +6,20 @@
  * 実装: @xenova/transformers (ONNX Runtime + Tokenizer統合)
  */
 
-import * as TE from "fp-ts/TaskEither";
-import { pipe } from "fp-ts/function";
-import type { EmbeddingProvider, ProviderStatus } from "../types.js";
-import { MAX_BATCH_SIZE, DEFAULT_DIMENSIONS } from "../types.js";
-import type { EmbeddingError } from "../errors.js";
-import {
-  localInferenceError,
-  batchSizeExceededError,
-  noProviderError,
-} from "../errors.js";
+import * as TE from 'fp-ts/TaskEither';
+import { pipe } from 'fp-ts/function';
+import type { EmbeddingProvider, ProviderStatus } from '../types.js';
+import { MAX_BATCH_SIZE, DEFAULT_DIMENSIONS } from '../types.js';
+import type { EmbeddingError } from '../errors.js';
+import { localInferenceError, batchSizeExceededError, noProviderError } from '../errors.js';
 
 // ========== 定数 ==========
 
 /** デフォルトモデル */
-export const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
+export const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';
 
 /** モデルバージョン */
-export const MODEL_VERSION = "all-MiniLM-L6-v2";
+export const MODEL_VERSION = 'all-MiniLM-L6-v2';
 
 // ========== 型定義 ==========
 
@@ -45,7 +41,7 @@ export interface LocalProviderConfig {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pipeline: any = null;
 /** 現在のプロバイダー状態 */
-let providerStatus: ProviderStatus = "unavailable";
+let providerStatus: ProviderStatus = 'unavailable';
 /** 現在のモデルバージョン */
 let currentModelVersion: string = MODEL_VERSION;
 /** 初期化中のPromise（レース条件防止用） */
@@ -65,9 +61,7 @@ let initPromise: Promise<void> | null = null;
  *
  * @param config プロバイダー設定
  */
-export const initLocalProvider = async (
-  config: LocalProviderConfig = {}
-): Promise<void> => {
+export const initLocalProvider = async (config: LocalProviderConfig = {}): Promise<void> => {
   // 既に初期化済みの場合は即座に返す
   if (pipeline !== null) {
     return;
@@ -85,9 +79,7 @@ export const initLocalProvider = async (
   initPromise = (async () => {
     try {
       // 動的インポート（ESMモジュール対応）
-      const { pipeline: createPipeline, env } = await import(
-        "@xenova/transformers"
-      );
+      const { pipeline: createPipeline, env } = await import('@xenova/transformers');
 
       // キャッシュディレクトリ設定
       if (config.cacheDir) {
@@ -95,15 +87,15 @@ export const initLocalProvider = async (
       }
 
       // feature-extraction パイプラインを作成
-      pipeline = await createPipeline("feature-extraction", modelId, {
+      pipeline = await createPipeline('feature-extraction', modelId, {
         quantized: true, // 量子化モデル使用（高速化）
       });
 
-      providerStatus = "available";
+      providerStatus = 'available';
     } catch (e) {
       // 初期化失敗時はPromiseをクリア（再試行可能に）
       initPromise = null;
-      providerStatus = "unavailable";
+      providerStatus = 'unavailable';
       throw new Error(`Failed to initialize local provider: ${e}`);
     }
   })();
@@ -121,7 +113,7 @@ export const isInitialized = (): boolean => pipeline !== null;
  */
 export const resetLocalProvider = (): void => {
   pipeline = null;
-  providerStatus = "unavailable";
+  providerStatus = 'unavailable';
   currentModelVersion = MODEL_VERSION;
   initPromise = null;
 };
@@ -133,12 +125,12 @@ export const resetLocalProvider = (): void => {
  */
 const embedSingle = async (text: string): Promise<readonly number[]> => {
   if (!pipeline) {
-    throw new Error("Provider not initialized");
+    throw new Error('Provider not initialized');
   }
 
   // @xenova/transformers の pipeline を呼び出し
   const output = await pipeline(text, {
-    pooling: "mean", // Mean pooling
+    pooling: 'mean', // Mean pooling
     normalize: true, // L2正規化
   });
 
@@ -162,7 +154,7 @@ const embedBatchInternal = async (
   texts: readonly string[]
 ): Promise<readonly (readonly number[])[]> => {
   if (!pipeline) {
-    throw new Error("Provider not initialized");
+    throw new Error('Provider not initialized');
   }
 
   // 並列処理で各テキストを埋め込み
@@ -194,7 +186,7 @@ export const localProvider: EmbeddingProvider = {
       TE.tryCatch(
         async () => {
           if (!isInitialized()) {
-            throw new Error("Provider not initialized");
+            throw new Error('Provider not initialized');
           }
           return embedSingle(text);
         },
@@ -219,7 +211,7 @@ export const localProvider: EmbeddingProvider = {
       TE.tryCatch(
         async () => {
           if (!isInitialized()) {
-            throw new Error("Provider not initialized");
+            throw new Error('Provider not initialized');
           }
           return embedBatchInternal(texts);
         },
@@ -234,10 +226,7 @@ export const localProvider: EmbeddingProvider = {
  *
  * @returns 初期化済みの場合はプロバイダー、未初期化の場合はエラー
  */
-export const getLocalProvider = (): TE.TaskEither<
-  EmbeddingError,
-  EmbeddingProvider
-> => {
+export const getLocalProvider = (): TE.TaskEither<EmbeddingError, EmbeddingProvider> => {
   if (!isInitialized()) {
     return TE.left(noProviderError());
   }
@@ -250,11 +239,9 @@ export const getLocalProvider = (): TE.TaskEither<
  * テスト用スタブプロバイダーを作成
  * 決定的なベクトルを返す（ONNX依存なし）
  */
-export const createStubProvider = (
-  version = "stub-v1"
-): EmbeddingProvider => ({
+export const createStubProvider = (version = 'stub-v1'): EmbeddingProvider => ({
   modelVersion: version,
-  status: "available",
+  status: 'available',
 
   embed: (text: string): TE.TaskEither<EmbeddingError, readonly number[]> =>
     TE.right(generateDeterministicVector(text)),

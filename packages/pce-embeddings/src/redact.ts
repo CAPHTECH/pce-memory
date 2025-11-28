@@ -3,12 +3,12 @@
  * Alloy RedactBeforeEmbed: Confidentialデータは埋め込み前にredact必須
  */
 
-import * as E from "fp-ts/Either";
-import { boundaryValidate } from "@pce/boundary";
-import type { BoundaryPolicy } from "@pce/policy-schemas";
-import { defaultPolicy } from "@pce/policy-schemas";
-import type { SensitivityLevel } from "./types.js";
-import { computeContentHash } from "./hash.js";
+import * as E from 'fp-ts/Either';
+import { boundaryValidate } from '@pce/boundary';
+import type { BoundaryPolicy } from '@pce/policy-schemas';
+import { defaultPolicy } from '@pce/policy-schemas';
+import type { SensitivityLevel } from './types.js';
+import { computeContentHash } from './hash.js';
 
 /**
  * 埋め込み用に準備されたテキスト
@@ -28,13 +28,13 @@ export interface PreparedText {
  * Redactエラー
  */
 export interface RedactError {
-  readonly _tag: "RedactError";
+  readonly _tag: 'RedactError';
   readonly message: string;
   readonly cause?: unknown;
 }
 
 export const redactError = (message: string, cause?: unknown): RedactError => ({
-  _tag: "RedactError",
+  _tag: 'RedactError',
   message,
   cause,
 });
@@ -57,7 +57,7 @@ export const prepareForEmbedding = (
   policy: BoundaryPolicy = defaultPolicy.boundary
 ): E.Either<RedactError, PreparedText> => {
   // Alloy fact: Confidential -> MUST redact
-  if (sensitivity === "confidential") {
+  if (sensitivity === 'confidential') {
     return applyRedact(text, policy);
   }
 
@@ -74,18 +74,15 @@ export const prepareForEmbedding = (
 /**
  * Redact処理を適用
  */
-const applyRedact = (
-  text: string,
-  policy: BoundaryPolicy
-): E.Either<RedactError, PreparedText> => {
+const applyRedact = (text: string, policy: BoundaryPolicy): E.Either<RedactError, PreparedText> => {
   try {
     // BoundaryValidateを使用してredact
     // confidentialデータは全てredact対象
     const result = boundaryValidate(
       {
         payload: text,
-        allow: ["*"], // 全アクションを許可（redact処理のみが目的）
-        scope: "session",
+        allow: ['*'], // 全アクションを許可（redact処理のみが目的）
+        scope: 'session',
       },
       policy
     );
@@ -101,7 +98,7 @@ const applyRedact = (
       wasRedacted: redactedText !== text,
     });
   } catch (e) {
-    return E.left(redactError("Redact processing failed", e));
+    return E.left(redactError('Redact processing failed', e));
   }
 };
 
@@ -119,23 +116,17 @@ const applyDefaultRedactPatterns = (text: string): string => {
     /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g,
   ];
 
-  return patterns.reduce(
-    (result, pattern) => result.replace(pattern, "[REDACTED]"),
-    text
-  );
+  return patterns.reduce((result, pattern) => result.replace(pattern, '[REDACTED]'), text);
 };
 
 /**
  * テキストがRedact必須かどうかをチェック
  */
 export const requiresRedact = (sensitivity: SensitivityLevel): boolean =>
-  sensitivity === "confidential";
+  sensitivity === 'confidential';
 
 /**
  * 型ガード: RedactErrorかどうか
  */
 export const isRedactError = (e: unknown): e is RedactError =>
-  typeof e === "object" &&
-  e !== null &&
-  "_tag" in e &&
-  (e as RedactError)._tag === "RedactError";
+  typeof e === 'object' && e !== null && '_tag' in e && (e as RedactError)._tag === 'RedactError';

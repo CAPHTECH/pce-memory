@@ -46,8 +46,8 @@
 - 境界: \( B \in \mathcal{B} \)
 - 変化束: \( D \in \mathcal{D} \)
 
-- 潜在文脈: \( C^L \in \mathcal{C}_L \)（LCP の状態）
-- アクティブ文脈: \( C^A \in \mathcal{C}_A \)（LCP からの選択／要約）
+- 潜在文脈: \( C^L \in \mathcal{C}\_L \)（LCP の状態）
+- アクティブ文脈: \( C^A \in \mathcal{C}\_A \)（LCP からの選択／要約）
 
 - **S**：語彙上の部分順序 ≤ₛ（抽象度）と距離 dₛ（語彙距離）
 - **𝒞**：層別部分順序 ≤꜀（micro/meso/macro の包含）と距離 d꜀（文脈差）
@@ -62,7 +62,7 @@ meaning(s) := f(s, C, P) → D
 ```
 
 - **functional ≠ functionalist**：ここでの「関数的」は**写像**を指し、役割・目的論（機能主義）とは区別する。
-- *D* の例: 選好の更新、推論の閾値変化、他記号への再記述方針。
+- _D_ の例: 選好の更新、推論の閾値変化、他記号への再記述方針。
 
 ※ 運用上，`f` は既定で **アクティブ文脈 \(C^A\)** に対して評価される（明示しない限り `C = C^A`）。
 
@@ -79,11 +79,11 @@ C_{t+1} = g(C_t, outputs(P_t), inscription_t, B_t, critic_t)
 次の項 `critic_t` は成功条件束（§2.4）に基づく評価関数であり，revocability / traceability / replicability 等の指標を含む。
 
 **〔アクティベーション（選択）〕**
-C^A_t = r\!\left(q_t,\; C^L_t,\; B_t,\; policy_t,\; critic_{t-1}\right)
+C^A*t = r\!\left(q_t,\; C^L_t,\; B_t,\; policy_t,\; critic*{t-1}\right)
 （`r` はクエリ `q_t` と境界・方針に基づき LCP から AC を選択／要約する関数）
 
 **〔潜在更新（蒸留・統合）〕**
-C^L_{t+1} = h\!\left(C^L_t,\; inscription_t,\; feedback_t,\; B_t\right)
+C^L\_{t+1} = h\!\left(C^L_t,\; inscription_t,\; feedback_t,\; B_t\right)
 （`h` は記述化・フィードバックを LCP に統合し，冗長・矛盾を整理する関数）
 
 ### 2.4 成功条件束（可否判定の枠）
@@ -114,9 +114,9 @@ C^L_{t+1} = h\!\left(C^L_t,\; inscription_t,\; feedback_t,\; B_t\right)
 
 - 各文脈層 \(L \in \{\text{micro, meso, macro}\}\) に時間定数 \(\tau_L\) を与える（micro: 小 / meso: 中 / macro: 大）。
 - 層別文脈の更新を
-  \( C^{(L)}_{t+1} = g^{(L)}\!\left(C^{(L)}_t,\; \text{outputs}(P_t),\; \text{inscription}_t,\; B_t,\; critic_t\right) \)
+  \( C^{(L)}\_{t+1} = g^{(L)}\!\left(C^{(L)}\_t,\; \text{outputs}(P_t),\; \text{inscription}\_t,\; B_t,\; critic_t\right) \)
   とし，\(\tau_L\) に応じて更新幅を制約する。
-- 層間結合は結合係数 \(k_{L \to M}\) で記す（下位→上位の昇格は \(k_{micro\to meso}, k_{meso\to macro}\) が小，上位→下位の拘束は \(k_{macro\to meso}, k_{meso\to micro}\) が大）。
+- 層間結合は結合係数 \(k*{L \to M}\) で記す（下位→上位の昇格は \(k*{micro\to meso}, k*{meso\to macro}\) が小，上位→下位の拘束は \(k*{macro\to meso}, k\_{meso\to micro}\) が大）。
 - **不変量の錨付け**：不変量 \(I(B)\) のうち制度・規範に属するものは macro 層に錨付けし，下位層の g は \(I(B)\) を侵害しない範囲でのみ更新を許す。
 
 ---
@@ -151,18 +151,18 @@ C^L_{t+1} = h\!\left(C^L_t,\; inscription_t,\; feedback_t,\; B_t\right)
 
 ### 3.4 ペースレイヤリング（時間層と更新リズム）
 
-層  | 例 | 更新テンポ | 役割
---- | --- | --- | ---
-micro | 注意・感情・会話の即時合意 | 速（秒～日） | 実験・発見・変異
-meso  | 手続・チーム実践・設計規約 | 中（週～月） | 蒸留・標準化・普及
-macro | 制度・規範・インフラ・文化 | 遅（年～十年） | 保全・安全・責任の保持
+| 層    | 例                         | 更新テンポ     | 役割                   |
+| ----- | -------------------------- | -------------- | ---------------------- |
+| micro | 注意・感情・会話の即時合意 | 速（秒～日）   | 実験・発見・変異       |
+| meso  | 手続・チーム実践・設計規約 | 中（週～月）   | 蒸留・標準化・普及     |
+| macro | 制度・規範・インフラ・文化 | 遅（年～十年） | 保全・安全・責任の保持 |
 
 - **原則**：「遅い層は覚え，速い層は学ぶ」。遅層の不変量がガードとなり，速層の成果は Boundary Object と inscription を介して**昇格（distill）**される。
 - **昇格/沈降の手続**：
-  1) micro の成果を meso の **Boundary Object** に束ね，再現性を確認  
-  2) inscription とレビューを経て meso 規約へ編入  
-  3) 長期安全性・責任要件を満たすものだけが macro の不変量へ昇格  
-  4) 反証や事故時は **沈降（rollback）** し，下位層で再実験
+  1. micro の成果を meso の **Boundary Object** に束ね，再現性を確認
+  2. inscription とレビューを経て meso 規約へ編入
+  3. 長期安全性・責任要件を満たすものだけが macro の不変量へ昇格
+  4. 反証や事故時は **沈降（rollback）** し，下位層で再実験
 - **LCP↔AC の対応**：LCP は主に meso/macro に錨付けられ，AC は micro に属する短期集合として作動する。
 - **往還**：AC の成果は蒸留されて LCP に昇格し（distill），不整合・事故時は LCP の安全側へ沈降（rollback）する。
 
@@ -179,9 +179,9 @@ macro | 制度・規範・インフラ・文化 | 遅（年～十年） | 保全
 
 ### 4.1 生成の主ループ
 
-1) 観測 → 2) アクティベーション `C^A = r(q, C^L, B, policy, critic)` → 3) 解釈（`f(s,C^A,P) → D`）
-→ 4) 行為 → 5) 記述化（inscription） → 6) 評価（critic; §2.4）
-→ 7) 層別更新 `g^{(L)}`（`τ_L` と `I(B)` を尊重）／潜在更新 `h` → 8) 境界再調整（必要なら昇格/沈降）
+1. 観測 → 2) アクティベーション `C^A = r(q, C^L, B, policy, critic)` → 3) 解釈（`f(s,C^A,P) → D`）
+   → 4) 行為 → 5) 記述化（inscription） → 6) 評価（critic; §2.4）
+   → 7) 層別更新 `g^{(L)}`（`τ_L` と `I(B)` を尊重）／潜在更新 `h` → 8) 境界再調整（必要なら昇格/沈降）
 
 ```mermaid
 flowchart LR

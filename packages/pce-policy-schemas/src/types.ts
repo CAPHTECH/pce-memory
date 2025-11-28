@@ -1,4 +1,4 @@
-export type BoundaryClass = "public" | "internal" | "pii" | "secret" | string;
+export type BoundaryClass = 'public' | 'internal' | 'pii' | 'secret' | string;
 
 export interface BoundaryPolicy {
   version: string;
@@ -12,7 +12,7 @@ export interface BoundaryPolicy {
     {
       allow: string[];
       redact?: string[];
-      escalation?: "deny" | "human_review" | string;
+      escalation?: 'deny' | 'human_review' | string;
     }
   >;
 }

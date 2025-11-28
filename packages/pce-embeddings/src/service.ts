@@ -12,10 +12,10 @@
  * - RedactBeforeEmbed: 機密データは埋め込み前にRedact
  */
 
-import * as TE from "fp-ts/TaskEither";
-import * as E from "fp-ts/Either";
-import * as A from "fp-ts/Array";
-import { pipe } from "fp-ts/function";
+import * as TE from 'fp-ts/TaskEither';
+import * as E from 'fp-ts/Either';
+import * as A from 'fp-ts/Array';
+import { pipe } from 'fp-ts/function';
 import type {
   EmbeddingProvider,
   EmbeddingCache,
@@ -24,12 +24,12 @@ import type {
   EmbedResult,
   BatchEmbedResult,
   SensitivityLevel,
-} from "./types.js";
-import { MAX_BATCH_SIZE } from "./types.js";
-import type { EmbeddingError, CacheError } from "./errors.js";
-import { batchSizeExceededError, noProviderError } from "./errors.js";
-import { computeContentHash } from "./hash.js";
-import { prepareForEmbedding, requiresRedact } from "./redact.js";
+} from './types.js';
+import { MAX_BATCH_SIZE } from './types.js';
+import type { EmbeddingError, CacheError } from './errors.js';
+import { batchSizeExceededError, noProviderError } from './errors.js';
+import { computeContentHash } from './hash.js';
+import { prepareForEmbedding, requiresRedact } from './redact.js';
 
 // ========== 型定義 ==========
 
@@ -42,7 +42,7 @@ export interface EmbeddingService {
   readonly modelVersion: string;
 
   /** プライマリプロバイダーのステータス */
-  readonly primaryStatus: "available" | "unavailable" | "degraded";
+  readonly primaryStatus: 'available' | 'unavailable' | 'degraded';
 
   /**
    * 単一テキストの埋め込み生成
@@ -53,9 +53,7 @@ export interface EmbeddingService {
   /**
    * バッチ埋め込み生成（最大32件）
    */
-  embedBatch(
-    params: readonly EmbedParams[]
-  ): TE.TaskEither<EmbeddingError, BatchEmbedResult>;
+  embedBatch(params: readonly EmbedParams[]): TE.TaskEither<EmbeddingError, BatchEmbedResult>;
 
   /**
    * キャッシュをクリア
@@ -94,8 +92,8 @@ const applyRedact = (
   if (E.isLeft(prepared)) {
     // RedactErrorをEmbeddingErrorに変換
     return E.left({
-      _tag: "EmbeddingError",
-      code: "REDACT_REQUIRED",
+      _tag: 'EmbeddingError',
+      code: 'REDACT_REQUIRED',
       message: prepared.left.message,
       cause: prepared.left,
     } as EmbeddingError);
@@ -119,9 +117,7 @@ const applyRedact = (
  * @param config サービス設定
  * @returns EmbeddingService
  */
-export const createEmbeddingService = (
-  config: EmbeddingServiceConfig
-): EmbeddingService => {
+export const createEmbeddingService = (config: EmbeddingServiceConfig): EmbeddingService => {
   const { primary, fallback, cache, onCacheError } = config;
 
   // 最後に同期したバージョン（レース条件でのロールバック防止用）
@@ -133,7 +129,7 @@ export const createEmbeddingService = (
    * コールバック内の例外でリクエスト全体が失敗することを防ぐ
    * Note: Promise.resolve()でラップすることで非同期コールバックのrejectionも捕捉
    */
-  const safeOnCacheError = (error: CacheError, operation: "read" | "write"): void => {
+  const safeOnCacheError = (error: CacheError, operation: 'read' | 'write'): void => {
     try {
       // 同期例外をキャッチし、非同期rejectionもPromise.resolve().catch()で捕捉
       Promise.resolve(onCacheError?.(error, operation)).catch(() => {
@@ -149,16 +145,14 @@ export const createEmbeddingService = (
    * キャッシュエラー時はundefinedを返し、処理を継続
    */
   type CacheHit = { embedding: readonly number[]; modelVersion: string };
-  const cacheGetBestEffort = (
-    textHash: string
-  ): TE.TaskEither<never, CacheHit | undefined> =>
+  const cacheGetBestEffort = (textHash: string): TE.TaskEither<never, CacheHit | undefined> =>
     pipe(
       cache.get(textHash),
       TE.map((entry): CacheHit | undefined =>
         entry ? { embedding: entry.embedding, modelVersion: entry.modelVersion } : undefined
       ),
       TE.orElse((cacheErr): TE.TaskEither<never, CacheHit | undefined> => {
-        safeOnCacheError(cacheErr, "read");
+        safeOnCacheError(cacheErr, 'read');
         return TE.right(undefined);
       })
     );
@@ -175,7 +169,7 @@ export const createEmbeddingService = (
     pipe(
       cache.set(textHash, embedding, modelVersion),
       TE.orElse((cacheErr) => {
-        safeOnCacheError(cacheErr, "write");
+        safeOnCacheError(cacheErr, 'write');
         return TE.right(undefined as void);
       })
     );
@@ -249,8 +243,8 @@ export const createEmbeddingService = (
         return true;
       }),
       TE.orElse((cacheErr) => {
-        safeOnCacheError(cacheErr, "write");
-        return TE.right(false);  // 同期失敗（ただしfatalではない）
+        safeOnCacheError(cacheErr, 'write');
+        return TE.right(false); // 同期失敗（ただしfatalではない）
       })
     );
   };
@@ -277,14 +271,14 @@ export const createEmbeddingService = (
     });
 
     // プライマリが利用可能な場合
-    if (primary.status === "available" || primary.status === "degraded") {
+    if (primary.status === 'available' || primary.status === 'degraded') {
       return pipe(
         primary.embed(text),
         // まず結果をラップ（TE.orElseの前にmapして型を統一）
         TE.map((embedding) => wrapResult(embedding, primary.modelVersion)),
         // プライマリ失敗時のフェイルオーバー
         TE.orElse((primaryError) => {
-          if (fallback && (fallback.status === "available" || fallback.status === "degraded")) {
+          if (fallback && (fallback.status === 'available' || fallback.status === 'degraded')) {
             return pipe(
               fallback.embed(text),
               TE.map((embedding) => wrapResult(embedding, fallback.modelVersion))
@@ -296,7 +290,7 @@ export const createEmbeddingService = (
     }
 
     // プライマリが利用不可の場合、フォールバックへ
-    if (fallback && (fallback.status === "available" || fallback.status === "degraded")) {
+    if (fallback && (fallback.status === 'available' || fallback.status === 'degraded')) {
       return pipe(
         fallback.embed(text),
         TE.map((embedding) => wrapResult(embedding, fallback.modelVersion))
@@ -315,9 +309,7 @@ export const createEmbeddingService = (
    * 3. キャッシュミス時: プロバイダー呼び出し
    * 4. フェイルオーバー時: cache.updateModelVersionでバージョン同期
    */
-  const processOne = (
-    params: EmbedParams
-  ): TE.TaskEither<EmbeddingError, EmbedResult> => {
+  const processOne = (params: EmbedParams): TE.TaskEither<EmbeddingError, EmbedResult> => {
     const { text, sensitivity, skipCache = false } = params;
 
     // Step 1: Redact-before-Embed
@@ -357,14 +349,15 @@ export const createEmbeddingService = (
                 // TLA+ Inv_CacheVersionConsistency準拠
                 modelVersion !== cache.currentModelVersion
                   ? syncCacheVersion(modelVersion)
-                  : TE.right<never, boolean>(true),  // 同期不要=成功扱い
+                  : TE.right<never, boolean>(true), // 同期不要=成功扱い
                 // Step 6: キャッシュに保存（同期成功時 & バージョン一致時のみ）
                 // cacheSetIfVersionMatchesで書き込み直前にバージョン再チェック
                 // → レース条件緩和（別リクエストが先に同期完了した場合はスキップ）
-                TE.flatMap((syncSucceeded) =>
-                  syncSucceeded
-                    ? cacheSetIfVersionMatches(textHash, embedding, modelVersion)
-                    : TE.right<never, void>(undefined)  // 同期失敗時はスキップ
+                TE.flatMap(
+                  (syncSucceeded) =>
+                    syncSucceeded
+                      ? cacheSetIfVersionMatches(textHash, embedding, modelVersion)
+                      : TE.right<never, void>(undefined) // 同期失敗時はスキップ
                 ),
                 TE.map(() => ({
                   embedding,
@@ -390,7 +383,7 @@ export const createEmbeddingService = (
           // skipCache時もバージョン同期は必要（次回リクエストのため）
           modelVersion !== cache.currentModelVersion
             ? syncCacheVersion(modelVersion)
-            : TE.right<never, boolean>(true),  // 同期不要=成功扱い
+            : TE.right<never, boolean>(true), // 同期不要=成功扱い
           // skipCache: キャッシュ書き込みなし（同期結果は無視）
           TE.map(() => ({
             embedding,
@@ -427,7 +420,7 @@ export const createEmbeddingService = (
     // 各アイテムを逐次処理（並列実行によるレース条件を回避）
     // Note: TE.ApplicativeSeqを使用して逐次実行を保証
     return pipe(
-      [...params],  // readonly配列を可変配列に変換
+      [...params], // readonly配列を可変配列に変換
       A.traverse(TE.ApplicativeSeq)(processOne),
       TE.map((results) => ({
         results,

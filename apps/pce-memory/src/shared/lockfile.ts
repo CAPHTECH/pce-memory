@@ -7,7 +7,7 @@
  * @see kiri/src/shared/utils/lockfile.ts
  */
 
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 
 /**
  * ロックファイルエラー
@@ -19,7 +19,7 @@ export class LockfileError extends Error {
     public readonly ownerPid?: number
   ) {
     super(message);
-    this.name = "LockfileError";
+    this.name = 'LockfileError';
   }
 }
 
@@ -52,14 +52,14 @@ function isProcessRunning(pid: number): boolean {
 export function acquireLock(lockfilePath: string): void {
   try {
     // アトミックな排他的作成（wx flag）
-    writeFileSync(lockfilePath, String(process.pid), { flag: "wx" });
+    writeFileSync(lockfilePath, String(process.pid), { flag: 'wx' });
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
 
-    if (err.code === "EEXIST") {
+    if (err.code === 'EEXIST') {
       // ロックファイルが既に存在 → stale checkを実行
       try {
-        const existingPidStr = readFileSync(lockfilePath, "utf8");
+        const existingPidStr = readFileSync(lockfilePath, 'utf8');
         const existingPid = parseInt(existingPidStr, 10);
 
         if (!isNaN(existingPid) && !isProcessRunning(existingPid)) {
@@ -67,7 +67,7 @@ export function acquireLock(lockfilePath: string): void {
           console.error(`[Lockfile] Removing stale lock file (PID ${existingPid} not running)`);
 
           if (existsSync(lockfilePath)) {
-            const recheckPidStr = readFileSync(lockfilePath, "utf8");
+            const recheckPidStr = readFileSync(lockfilePath, 'utf8');
             const recheckPid = parseInt(recheckPidStr, 10);
 
             // PIDが一致し、プロセスがまだ死んでいる場合のみ削除
@@ -75,7 +75,7 @@ export function acquireLock(lockfilePath: string): void {
               unlinkSync(lockfilePath);
 
               // 再取得を試みる
-              writeFileSync(lockfilePath, String(process.pid), { flag: "wx" });
+              writeFileSync(lockfilePath, String(process.pid), { flag: 'wx' });
               return;
             }
           }
@@ -145,7 +145,7 @@ export function isLocked(lockfilePath: string): boolean {
 export function getLockOwner(lockfilePath: string): number | null {
   try {
     if (existsSync(lockfilePath)) {
-      const pidStr = readFileSync(lockfilePath, "utf8");
+      const pidStr = readFileSync(lockfilePath, 'utf8');
       const pid = parseInt(pidStr, 10);
       return isNaN(pid) ? null : pid;
     }

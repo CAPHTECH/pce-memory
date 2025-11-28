@@ -6,7 +6,10 @@ export default defineConfig({
     alias: {
       // ワークスペースパッケージのエイリアス設定
       '@pce/boundary': resolve(__dirname, 'packages/pce-boundary/src/index.ts'),
-      '@pce/policy-schemas/src/defaults': resolve(__dirname, 'packages/pce-policy-schemas/src/defaults.ts'),
+      '@pce/policy-schemas/src/defaults': resolve(
+        __dirname,
+        'packages/pce-policy-schemas/src/defaults.ts'
+      ),
       '@pce/policy-schemas': resolve(__dirname, 'packages/pce-policy-schemas/src/index.ts'),
       '@pce/embeddings': resolve(__dirname, 'packages/pce-embeddings/src/index.ts'),
       '@pce/sdk-ts': resolve(__dirname, 'packages/pce-sdk-ts/src/index.ts'),

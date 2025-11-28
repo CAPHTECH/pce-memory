@@ -1,8 +1,14 @@
 # MCP Error Vocabulary (実装同期版)
 
 - 共通レスポンスエンベロープ：
+
   ```json
-  {"error":{"code":"<CODE>","message":"..."},"request_id":"<uuid>","trace_id":"<uuid>","policy_version":"<semver>"}
+  {
+    "error": { "code": "<CODE>", "message": "..." },
+    "request_id": "<uuid>",
+    "trace_id": "<uuid>",
+    "policy_version": "<semver>"
+  }
   ```
 
 - 使用中のコード（apps/pce-memory 実装と同期）

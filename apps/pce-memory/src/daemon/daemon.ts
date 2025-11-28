@@ -6,34 +6,31 @@
  * DuckDB接続を保持し、Unix socket経由でリクエストを受け付ける。
  */
 
-import * as path from "path";
-import * as fs from "fs/promises";
-import { parseArgs } from "util";
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import { parseArgs } from 'util';
 
-import { initDb, initSchema } from "../db/connection.js";
+import { initDb, initSchema } from '../db/connection.js';
 import {
   initLocalProvider,
   localProvider,
   createInMemoryCache,
   createLocalOnlyService,
-} from "@pce/embeddings";
-import { setEmbeddingService } from "../store/hybridSearch.js";
-import { initRateState } from "../store/rate.js";
-import { initMemoryState } from "../state/memoryState.js";
-import {
-  registerSystemLayer,
-  getLayerScopeSummary,
-} from "../state/layerScopeState.js";
-import * as E from "fp-ts/Either";
+} from '@pce/embeddings';
+import { setEmbeddingService } from '../store/hybridSearch.js';
+import { initRateState } from '../store/rate.js';
+import { initMemoryState } from '../state/memoryState.js';
+import { registerSystemLayer, getLayerScopeSummary } from '../state/layerScopeState.js';
+import * as E from 'fp-ts/Either';
 
-import { DaemonLifecycle } from "./lifecycle.js";
-import { createSocketServer } from "./socket.js";
-import type { JsonRpcRequest, JsonRpcResponse } from "./socket.js";
-import { getSocketPath } from "../shared/socket.js";
-import { dispatchTool, TOOL_DEFINITIONS } from "../core/handlers.js";
+import { DaemonLifecycle } from './lifecycle.js';
+import { createSocketServer } from './socket.js';
+import type { JsonRpcRequest, JsonRpcResponse } from './socket.js';
+import { getSocketPath } from '../shared/socket.js';
+import { dispatchTool, TOOL_DEFINITIONS } from '../core/handlers.js';
 
-const SERVER_NAME = "pce-memory-daemon";
-const SERVER_VERSION = "0.1.0";
+const SERVER_NAME = 'pce-memory-daemon';
+const SERVER_VERSION = '0.1.0';
 
 /**
  * CLI引数をパース
@@ -41,10 +38,10 @@ const SERVER_VERSION = "0.1.0";
 function parseCliArgs() {
   const { values } = parseArgs({
     options: {
-      db: { type: "string", short: "d" },
-      "socket-path": { type: "string", short: "s" },
-      "daemon-timeout": { type: "string", short: "t" },
-      help: { type: "boolean", short: "h" },
+      db: { type: 'string', short: 'd' },
+      'socket-path': { type: 'string', short: 's' },
+      'daemon-timeout': { type: 'string', short: 't' },
+      help: { type: 'boolean', short: 'h' },
     },
     strict: true,
   });
@@ -66,18 +63,16 @@ Options:
 
   const databasePath = values.db;
   if (!databasePath) {
-    console.error("Error: --db is required");
+    console.error('Error: --db is required');
     process.exit(1);
   }
 
   const resolvedDbPath = path.resolve(databasePath);
-  const socketPath = values["socket-path"]
-    ? path.resolve(values["socket-path"])
+  const socketPath = values['socket-path']
+    ? path.resolve(values['socket-path'])
     : getSocketPath(resolvedDbPath, { ensureDir: true });
 
-  const idleTimeoutMinutes = values["daemon-timeout"]
-    ? parseInt(values["daemon-timeout"], 10)
-    : 5;
+  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 5;
 
   return {
     databasePath: resolvedDbPath,
@@ -93,12 +88,12 @@ async function handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcRes
   const { method, params, id } = request;
 
   // pingリクエスト（ヘルスチェック用）
-  if (method === "ping") {
+  if (method === 'ping') {
     return {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: id ?? null,
       result: {
-        status: "ok",
+        status: 'ok',
         serverInfo: {
           name: SERVER_NAME,
           version: SERVER_VERSION,
@@ -108,12 +103,12 @@ async function handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcRes
   }
 
   // MCP initialize（MCPプロトコル必須）
-  if (method === "initialize") {
+  if (method === 'initialize') {
     return {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: id ?? null,
       result: {
-        protocolVersion: "2024-11-05",
+        protocolVersion: '2024-11-05',
         capabilities: {
           tools: {},
         },
@@ -126,29 +121,32 @@ async function handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcRes
   }
 
   // MCP notifications/initialized（初期化完了通知、レスポンス不要）
-  if (method === "notifications/initialized") {
+  if (method === 'notifications/initialized') {
     // 通知なのでレスポンスは不要
     return null;
   }
 
   // MCP tools/list（ツール一覧）
-  if (method === "tools/list") {
+  if (method === 'tools/list') {
     return {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: id ?? null,
       result: { tools: TOOL_DEFINITIONS },
     };
   }
 
   // MCP tools/call（ツール呼び出し）
-  if (method === "tools/call") {
-    const toolName = (params as Record<string, unknown>)?.["name"] as string;
-    const toolArgs = ((params as Record<string, unknown>)?.["arguments"] ?? {}) as Record<string, unknown>;
+  if (method === 'tools/call') {
+    const toolName = (params as Record<string, unknown>)?.['name'] as string;
+    const toolArgs = ((params as Record<string, unknown>)?.['arguments'] ?? {}) as Record<
+      string,
+      unknown
+    >;
 
     const result = await dispatchTool(toolName, toolArgs);
 
     return {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: id ?? null,
       result,
     };
@@ -156,7 +154,7 @@ async function handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcRes
 
   // 未知のメソッド
   return {
-    jsonrpc: "2.0",
+    jsonrpc: '2.0',
     id: id ?? null,
     error: {
       code: -32601,
@@ -176,7 +174,7 @@ async function main() {
     // スタートアップロックを取得
     const lockAcquired = await lifecycle.acquireStartupLock();
     if (!lockAcquired) {
-      console.error("[Daemon] Another daemon is starting up. Exiting.");
+      console.error('[Daemon] Another daemon is starting up. Exiting.');
       process.exit(1);
     }
 
@@ -191,7 +189,7 @@ async function main() {
     await fs.mkdir(dbDir, { recursive: true });
 
     // 環境変数を設定してDB初期化
-    process.env["PCE_DB"] = options.databasePath;
+    process.env['PCE_DB'] = options.databasePath;
     await initDb();
     await initSchema();
     await initRateState();
@@ -199,38 +197,53 @@ async function main() {
     // EmbeddingService初期化
     try {
       await initLocalProvider();
-      const embeddingCache = createInMemoryCache({ initialModelVersion: localProvider.modelVersion });
+      const embeddingCache = createInMemoryCache({
+        initialModelVersion: localProvider.modelVersion,
+      });
       const embeddingService = createLocalOnlyService(localProvider, embeddingCache);
       setEmbeddingService(embeddingService);
       console.error(`[Daemon] EmbeddingService initialized (model: ${localProvider.modelVersion})`);
     } catch (e: unknown) {
-      console.error(`[Daemon] EmbeddingService initialization failed (fallback to text-only search):`, e);
+      console.error(
+        `[Daemon] EmbeddingService initialization failed (fallback to text-only search):`,
+        e
+      );
     }
 
     // システムLayer登録
-    const dbLayerResult = registerSystemLayer("db", new Set(["db_access"] as const), new Set());
+    const dbLayerResult = registerSystemLayer('db', new Set(['db_access'] as const), new Set());
     if (E.isLeft(dbLayerResult)) {
       console.error(`[Daemon] Failed to register db layer: ${dbLayerResult.left.message}`);
     }
 
-    const policyLayerResult = registerSystemLayer("policy", new Set(["policy_check"] as const), new Set(["db"]));
+    const policyLayerResult = registerSystemLayer(
+      'policy',
+      new Set(['policy_check'] as const),
+      new Set(['db'])
+    );
     if (E.isLeft(policyLayerResult)) {
       console.error(`[Daemon] Failed to register policy layer: ${policyLayerResult.left.message}`);
     }
 
-    const schemaLayerResult = registerSystemLayer("schema", new Set(["schema_validate"] as const), new Set(["db"]));
+    const schemaLayerResult = registerSystemLayer(
+      'schema',
+      new Set(['schema_validate'] as const),
+      new Set(['db'])
+    );
     if (E.isLeft(schemaLayerResult)) {
       console.error(`[Daemon] Failed to register schema layer: ${schemaLayerResult.left.message}`);
     }
 
-    console.error(`[Daemon] System layers registered: ${getLayerScopeSummary().layers.join(", ")}`);
+    console.error(`[Daemon] System layers registered: ${getLayerScopeSummary().layers.join(', ')}`);
 
     // 状態復元
     const initResult = await initMemoryState()();
     if (E.isLeft(initResult)) {
       console.error(`[Daemon] Failed to initialize state: ${initResult.left.message}`);
     } else {
-      console.error(`[Daemon] Restored state: ${initResult.right.state} (policy: ${initResult.right.policyVersion})`);
+      console.error(
+        `[Daemon] Restored state: ${initResult.right.state} (policy: ${initResult.right.policyVersion})`
+      );
     }
 
     // ソケットサーバーを作成
@@ -257,15 +270,15 @@ async function main() {
 
     // グレースフルシャットダウンの設定
     lifecycle.onShutdown(async () => {
-      await lifecycle.log("Shutting down daemon...");
-      console.error("[Daemon] Closing server...");
+      await lifecycle.log('Shutting down daemon...');
+      console.error('[Daemon] Closing server...');
       await closeServer();
     });
 
     lifecycle.setupGracefulShutdown();
 
-    await lifecycle.log("Daemon started successfully");
-    console.error("[Daemon] Ready to accept connections");
+    await lifecycle.log('Daemon started successfully');
+    console.error('[Daemon] Ready to accept connections');
   } catch (err) {
     const error = err as Error;
     await lifecycle.log(`Fatal error: ${error.message}`);

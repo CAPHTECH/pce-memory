@@ -1,12 +1,8 @@
-import { defineConfig } from "tsdown";
+import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: [
-    "src/index.ts",
-    "src/daemon/daemon.ts",
-    "src/client/proxy.ts",
-  ],
-  format: ["esm"],
+  entry: ['src/index.ts', 'src/daemon/daemon.ts', 'src/client/proxy.ts'],
+  format: ['esm'],
   dts: true,
   clean: true,
   // バンドルに含めるパッケージ

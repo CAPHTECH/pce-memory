@@ -1,9 +1,9 @@
-import type { BoundaryPolicy } from "@pce/policy-schemas";
+import type { BoundaryPolicy } from '@pce/policy-schemas';
 
 export interface BoundaryValidateInput {
   payload: string;
   allow: string[];
-  scope: "session" | "project" | "principle" | string;
+  scope: 'session' | 'project' | 'principle' | string;
 }
 
 export interface BoundaryValidateResult {
@@ -23,19 +23,21 @@ export function boundaryValidate(
 ): BoundaryValidateResult {
   const { payload, allow, scope } = input;
   const bc = policy.boundary_classes;
-  const matched = Object.values(bc).find((c) => c.allow.some((a) => allow.includes(a) || a === "*"));
+  const matched = Object.values(bc).find((c) =>
+    c.allow.some((a) => allow.includes(a) || a === '*')
+  );
   if (!matched) {
-    return { allowed: false, reason: "BOUNDARY_DENIED" };
+    return { allowed: false, reason: 'BOUNDARY_DENIED' };
   }
   if (!policy.scopes[scope as keyof typeof policy.scopes]) {
-    return { allowed: false, reason: "SCOPE_UNKNOWN" };
+    return { allowed: false, reason: 'SCOPE_UNKNOWN' };
   }
   let redactedPayload = payload;
   if (matched.redact) {
     const patterns = matched.redact
       .map((p) => SAFE_REDACT_PATTERNS[p])
       .filter((re): re is RegExp => re !== undefined);
-    redactedPayload = patterns.reduce((acc, re) => acc.replace(re, "[REDACTED]"), payload);
+    redactedPayload = patterns.reduce((acc, re) => acc.replace(re, '[REDACTED]'), payload);
   }
   return { allowed: true, redacted: redactedPayload };
 }
