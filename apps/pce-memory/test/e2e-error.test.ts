@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import { upsertClaim } from '../src/store/claims';
 import { boundaryValidate } from '@pce/boundary';
 import { defaultPolicy } from '@pce/policy-schemas/src/defaults';
 import { checkAndConsume, resetRates, initRateState } from '../src/store/rate';
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   process.env.PCE_RATE_CAP = '1';
   await initDb();

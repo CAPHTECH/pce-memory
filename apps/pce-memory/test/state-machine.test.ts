@@ -3,7 +3,7 @@
  * 状態遷移と STATE_ERROR のテストカバレッジ
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import { initRateState, resetRates } from '../src/store/rate';
 
 // テスト用のハンドラをimportするため、index.tsをモジュールとしてテスト
@@ -168,7 +168,7 @@ describe('PCEMemoryクラス', () => {
 
 describe('状態遷移のE2Eシナリオ', () => {
   beforeEach(async () => {
-    resetDb();
+    await resetDbAsync();
     process.env.PCE_DB = ':memory:';
     process.env.PCE_RATE_CAP = '100';
     await initDb();
@@ -219,7 +219,7 @@ describe('状態遷移のE2Eシナリオ', () => {
 
 describe('countClaims関数', () => {
   beforeEach(async () => {
-    resetDb();
+    await resetDbAsync();
     process.env.PCE_DB = ':memory:';
     await initDb();
     await initSchema();
@@ -288,7 +288,7 @@ describe('PCEMemory.restore状態復元', () => {
 
 describe('重複upsertとisNewフラグ', () => {
   beforeEach(async () => {
-    resetDb();
+    await resetDbAsync();
     process.env.PCE_DB = ':memory:';
     await initDb();
     await initSchema();

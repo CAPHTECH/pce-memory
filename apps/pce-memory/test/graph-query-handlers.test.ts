@@ -3,7 +3,7 @@
  * handleQueryEntity, handleQueryRelation のテスト
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb, getConnection } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
 import { initRateState, resetRates } from '../src/store/rate';
 import {
   handleUpsertEntity,
@@ -39,7 +39,7 @@ async function clearAllTables() {
  * 標準的なテストセットアップ: DB初期化 + PolicyApplied状態
  */
 async function setupWithPolicy() {
-  resetDb();
+  await resetDbAsync();
   resetMemoryState();
   process.env.PCE_DB = ':memory:';
   process.env.PCE_RATE_CAP = '100';
@@ -57,7 +57,7 @@ async function setupWithPolicy() {
  * Uninitialized状態のセットアップ（ポリシー未適用）
  */
 async function setupWithoutPolicy() {
-  resetDb();
+  await resetDbAsync();
   resetMemoryState();
   process.env.PCE_DB = ':memory:';
   process.env.PCE_RATE_CAP = '100';

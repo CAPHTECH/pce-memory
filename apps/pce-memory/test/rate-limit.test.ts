@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { checkAndConsume, initRateState, resetRates } from '../src/store/rate';
-import { initDb, initSchema, resetDb, getConnection } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   process.env.PCE_RATE_CAP = '1';
   process.env.PCE_RATE_WINDOW = '100'; // large window to avoid auto-reset

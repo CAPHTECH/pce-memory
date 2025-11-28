@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb, getConnection } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
 import { upsertClaim } from '../src/store/claims';
 import { recordFeedback } from '../src/store/feedback';
 import { updateCritic } from '../src/store/critic';
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   await initDb();
   await initSchema();

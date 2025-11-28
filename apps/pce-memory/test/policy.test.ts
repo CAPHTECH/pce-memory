@@ -3,7 +3,7 @@
  * ADR-0002: ポリシー永続化機能の検証
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import {
   savePolicy,
   loadLatestPolicy,
@@ -14,7 +14,7 @@ import { defaultPolicy } from '@pce/policy-schemas/src/defaults';
 import * as E from 'fp-ts/Either';
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   await initDb();
   await initSchema();

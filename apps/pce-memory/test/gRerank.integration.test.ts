@@ -8,7 +8,7 @@
  * - Inv_RecencyMonotonicity
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initDb, initSchema, resetDb, getConnection } from '../src/db/connection.js';
+import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection.js';
 import { upsertClaim } from '../src/store/claims.js';
 import { recordFeedback, FEEDBACK_DELTAS } from '../src/store/feedback.js';
 import { hybridSearch, setEmbeddingService, textSearch } from '../src/store/hybridSearch.js';
@@ -37,7 +37,7 @@ const createTestEmbeddingService = (): EmbeddingService => ({
 
 describe('g() SQL Macros Integration', () => {
   beforeEach(async () => {
-    resetDb();
+    await resetDbAsync();
     process.env.PCE_DB = ':memory:';
     await initDb();
     await initSchema();

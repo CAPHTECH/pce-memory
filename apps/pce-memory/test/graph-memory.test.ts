@@ -3,7 +3,7 @@
  * entities.ts, relations.ts, evidence.ts のユニットテスト
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import {
   upsertEntity,
   linkClaimEntity,
@@ -27,7 +27,7 @@ import {
 import { upsertClaim } from '../src/store/claims';
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   await initDb();
   await initSchema();

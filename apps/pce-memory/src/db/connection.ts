@@ -52,9 +52,29 @@ export async function initSchema() {
 }
 
 /**
- * テスト用: DB をリセット
+ * テスト用: DB をリセット（非同期版を推奨）
+ * 互換性のため同期版も維持
  */
 export function resetDb(): void {
+  // 注意: この関数はコネクションを適切にクローズしない
+  // 可能であれば resetDbAsync() を使用すること
+  cachedConnection = null;
+  instance = null;
+}
+
+/**
+ * テスト用: DB をリセット（非同期）
+ * コネクションを適切にクローズしてからリセット
+ */
+export async function resetDbAsync(): Promise<void> {
+  if (cachedConnection) {
+    try {
+      // DuckDB Node APIはcloseSync()を使用
+      cachedConnection.closeSync();
+    } catch {
+      // クローズエラーは無視（既にクローズされている可能性）
+    }
+  }
   cachedConnection = null;
   instance = null;
 }

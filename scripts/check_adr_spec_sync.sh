@@ -61,16 +61,21 @@ for adr in "$ADR_DIR"/*.md; do
       continue
     fi
 
-    # 仕様ファイルの最終更新日を取得
-    spec_mtime=$(stat -f "%Sm" -t "%Y-%m-%d" "$spec_path" 2>/dev/null || stat -c "%y" "$spec_path" 2>/dev/null | cut -d' ' -f1)
-    adr_mtime=$(stat -f "%Sm" -t "%Y-%m-%d" "$adr" 2>/dev/null || stat -c "%y" "$adr" 2>/dev/null | cut -d' ' -f1)
+    # 仕様ファイルの最終コミット時刻を取得（Gitタイムスタンプを使用）
+    # CIではファイルmtimeがcheckout時刻に統一されるため、git logを使用
+    spec_commit_time=$(git log -1 --format="%ct" -- "$spec_path" 2>/dev/null || echo "0")
+    adr_commit_time=$(git log -1 --format="%ct" -- "$adr" 2>/dev/null || echo "0")
+
+    # 日付表示用（人間可読形式）
+    spec_date=$(git log -1 --format="%cs" -- "$spec_path" 2>/dev/null || echo "unknown")
+    adr_date=$(git log -1 --format="%cs" -- "$adr" 2>/dev/null || echo "unknown")
 
     # ADRより仕様ファイルが新しい場合は警告
-    if [[ "$spec_mtime" > "$adr_mtime" ]]; then
-      echo -e "  ${YELLOW}WARN${NC}: $spec (modified: $spec_mtime) is newer than ADR (modified: $adr_mtime)"
+    if [[ "$spec_commit_time" -gt "$adr_commit_time" ]]; then
+      echo -e "  ${YELLOW}WARN${NC}: $spec (committed: $spec_date) is newer than ADR (committed: $adr_date)"
       ((warnings++))
     else
-      echo -e "  ${GREEN}OK${NC}: $spec"
+      echo -e "  ${GREEN}OK${NC}: $spec (committed: $spec_date)"
     fi
   done
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import { upsertClaim, listClaimsByScope } from '../src/store/claims';
 import { boundaryValidate } from '@pce/boundary';
 import { defaultPolicy } from '@pce/policy-schemas/src/defaults';
@@ -7,7 +7,7 @@ import { recordFeedback } from '../src/store/feedback';
 import { updateCritic } from '../src/store/critic';
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   await initDb();
   await initSchema();

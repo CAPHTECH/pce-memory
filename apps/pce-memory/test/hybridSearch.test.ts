@@ -11,7 +11,7 @@
  * @see docs/spec/tlaplus/hybrid_search_simple.tla
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDb, getConnection } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
 import { upsertClaim } from '../src/store/claims';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
@@ -52,7 +52,7 @@ function createFailingEmbeddingService(): EmbeddingService {
 }
 
 beforeEach(async () => {
-  resetDb();
+  await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   await initDb();
   await initSchema();
@@ -208,7 +208,7 @@ describe('vectorSearch', () => {
   });
 
   it('should return empty when no vectors exist', async () => {
-    resetDb();
+    await resetDbAsync();
     await initDb();
     await initSchema();
     await upsertClaim(testClaims[0]);

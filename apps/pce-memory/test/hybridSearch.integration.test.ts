@@ -9,7 +9,7 @@
  * - スコープフィルタリング
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initDb, initSchema, resetDb, getConnection } from '../src/db/connection';
+import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
 import { upsertClaim } from '../src/store/claims';
 import {
   hybridSearch,
@@ -45,7 +45,7 @@ const _vecToJson = (vec: number[]): string => JSON.stringify(vec);
 
 describe('Hybrid Search Integration (Real DuckDB)', () => {
   beforeEach(async () => {
-    resetDb();
+    await resetDbAsync();
     process.env.PCE_DB = ':memory:';
     await initDb();
     await initSchema();
