@@ -29,10 +29,23 @@ export function getDb(): DuckDBInstance {
 /**
  * コネクションを取得（非同期）
  * 単一コネクションを再利用してリーク防止
+ * 無効なコネクションは自動的に再作成
  */
 export async function getConnection(): Promise<DuckDBConnection> {
   if (cachedConnection) {
-    return cachedConnection;
+    try {
+      // コネクションが有効かを簡単なクエリで確認
+      await cachedConnection.runAndReadAll('SELECT 1');
+      return cachedConnection;
+    } catch {
+      // コネクションが無効な場合は再作成
+      try {
+        cachedConnection.closeSync();
+      } catch {
+        // クローズエラーは無視
+      }
+      cachedConnection = null;
+    }
   }
   cachedConnection = await getDb().connect();
   return cachedConnection;
