@@ -15,6 +15,10 @@ import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/conne
 import { upsertClaim } from '../src/store/claims';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
+import { randomUUID } from 'crypto';
+import { unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   textSearch,
   vectorSearch,
@@ -51,11 +55,16 @@ function createFailingEmbeddingService(): EmbeddingService {
   };
 }
 
+// 一意のテストDBパス（テスト間の完全な分離を確保）
+let testDbPath: string;
+
 beforeEach(async () => {
   // EmbeddingServiceをリセット（テスト間で独立させる）
   setEmbeddingService(null as unknown as EmbeddingService);
   await resetDbAsync();
-  process.env.PCE_DB = ':memory:';
+  // 一意のファイルベースDBを使用（CI環境での:memory:の問題を回避）
+  testDbPath = join(tmpdir(), `pce-test-${randomUUID()}.duckdb`);
+  process.env.PCE_DB = testDbPath;
   await initDb();
   await initSchema();
 });
@@ -63,6 +72,24 @@ beforeEach(async () => {
 afterEach(async () => {
   // テスト後のクリーンアップ（グローバル状態をリセット）
   setEmbeddingService(null as unknown as EmbeddingService);
+  await resetDbAsync();
+  // テスト用DBファイルを削除
+  if (testDbPath && existsSync(testDbPath)) {
+    try {
+      unlinkSync(testDbPath);
+    } catch {
+      // 削除エラーは無視（ファイルが既に削除されている可能性）
+    }
+  }
+  // WALファイルも削除
+  const walPath = `${testDbPath}.wal`;
+  if (existsSync(walPath)) {
+    try {
+      unlinkSync(walPath);
+    } catch {
+      // 削除エラーは無視
+    }
+  }
 });
 
 // ========== テストデータ ==========
@@ -213,7 +240,10 @@ describe('vectorSearch', () => {
   });
 
   it('should return empty when no vectors exist', async () => {
+    // 新しい一意のDBファイルで完全に分離
     await resetDbAsync();
+    const freshDbPath = join(tmpdir(), `pce-test-novectors-${randomUUID()}.duckdb`);
+    process.env.PCE_DB = freshDbPath;
     await initDb();
     await initSchema();
     await upsertClaim(testClaims[0]);
@@ -221,6 +251,16 @@ describe('vectorSearch', () => {
 
     const results = await vectorSearch(createDummyEmbedding(1), ['project'], 10);
     expect(results.length).toBe(0);
+
+    // クリーンアップ
+    await resetDbAsync();
+    if (existsSync(freshDbPath)) {
+      try {
+        unlinkSync(freshDbPath);
+      } catch {
+        // ignore
+      }
+    }
   });
 
   it('should return scores normalized to 0-1 range', async () => {
