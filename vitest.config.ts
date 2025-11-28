@@ -60,12 +60,17 @@ export default defineConfig({
 
     // 並列実行設定
     // テスト間のDuckDB状態分離を確保するためforks poolを使用
+    // singleForkでシーケンシャル実行し、フレーキーテストを防止
     pool: 'forks',
     poolOptions: {
       forks: {
-        singleFork: false,
+        singleFork: true,
         isolate: true,
       },
+    },
+    // ファイル内のテストも順次実行
+    sequence: {
+      concurrent: false,
     },
 
     // レポーター設定
