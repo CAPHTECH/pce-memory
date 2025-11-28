@@ -99,3 +99,79 @@ export async function findRelationsByType(type: string, limit: number = 100): Pr
   );
   return reader.getRowObjects() as unknown as Relation[];
 }
+
+/**
+ * IDでRelationを取得
+ */
+export async function findRelationById(id: string): Promise<Relation | undefined> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    "SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE id = $1",
+    [id]
+  );
+  const rows = reader.getRowObjects() as unknown as Relation[];
+  return rows[0];
+}
+
+/**
+ * Relationクエリフィルター型
+ */
+export interface RelationQueryFilters {
+  id?: string;
+  src_id?: string;
+  dst_id?: string;
+  type?: string;
+  evidence_claim_id?: string;
+  limit?: number;
+}
+
+/**
+ * フィルターに基づいてRelationを検索（AND論理）
+ * 少なくとも1つのフィルターが必要
+ */
+export async function queryRelations(filters: RelationQueryFilters): Promise<Relation[]> {
+  const conn = await getConnection();
+  const limit = Math.min(filters.limit ?? 50, 100);
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  let paramIndex = 1;
+
+  if (filters.id !== undefined) {
+    conditions.push(`id = $${paramIndex++}`);
+    params.push(filters.id);
+  }
+
+  if (filters.src_id !== undefined) {
+    conditions.push(`src_id = $${paramIndex++}`);
+    params.push(filters.src_id);
+  }
+
+  if (filters.dst_id !== undefined) {
+    conditions.push(`dst_id = $${paramIndex++}`);
+    params.push(filters.dst_id);
+  }
+
+  if (filters.type !== undefined) {
+    conditions.push(`type = $${paramIndex++}`);
+    params.push(filters.type);
+  }
+
+  if (filters.evidence_claim_id !== undefined) {
+    conditions.push(`evidence_claim_id = $${paramIndex++}`);
+    params.push(filters.evidence_claim_id);
+  }
+
+  // クエリ構築
+  let sql = "SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations";
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(" AND ")}`;
+  }
+
+  sql += ` ORDER BY created_at DESC LIMIT $${paramIndex}`;
+  params.push(limit);
+
+  const reader = await conn.runAndReadAll(sql, params);
+  return reader.getRowObjects() as unknown as Relation[];
+}

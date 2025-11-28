@@ -66,6 +66,15 @@ export function canDoFeedback(): boolean {
   return canFeedback(currentMachine.runtimeState);
 }
 
+/**
+ * 読み取り操作可能かチェック
+ * Query操作はPolicyApplied以降で実行可能（upsertと同じ条件）
+ * セマンティックな明確さのため別名として提供
+ */
+export function canDoQuery(): boolean {
+  return canUpsert(currentMachine.runtimeState);
+}
+
 /** claim数を取得 */
 export function getClaimCount(): number {
   return currentMachine.getClaimCount();

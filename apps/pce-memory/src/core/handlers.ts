@@ -9,10 +9,10 @@ import { boundaryValidate } from "@pce/boundary";
 import { upsertClaim, upsertClaimWithEmbedding, findClaimById } from "../store/claims.js";
 import type { Provenance } from "../store/claims.js";
 import { hybridSearchPaginated, getEmbeddingService } from "../store/hybridSearch.js";
-import { upsertEntity, linkClaimEntity } from "../store/entities.js";
-import type { EntityInput } from "../store/entities.js";
-import { upsertRelation } from "../store/relations.js";
-import type { RelationInput } from "../store/relations.js";
+import { upsertEntity, linkClaimEntity, queryEntities } from "../store/entities.js";
+import type { EntityInput, EntityQueryFilters } from "../store/entities.js";
+import { upsertRelation, queryRelations } from "../store/relations.js";
+import type { RelationInput, RelationQueryFilters } from "../store/relations.js";
 import { getEvidenceForClaims } from "../store/evidence.js";
 import type { Evidence } from "../store/evidence.js";
 import { saveActiveContext } from "../store/activeContext.js";
@@ -22,6 +22,7 @@ import { checkAndConsume } from "../store/rate.js";
 import { updateCritic } from "../store/critic.js";
 import { stateError } from "../domain/stateMachine.js";
 import type { ErrorCode } from "../domain/errors.js";
+import { ENTITY_TYPES, isValidEntityType } from "../domain/types.js";
 import * as E from "fp-ts/Either";
 
 import {
@@ -33,6 +34,7 @@ import {
   canDoUpsert,
   canDoActivate,
   canDoFeedback,
+  canDoQuery,
   transitionToHasClaims,
   transitionToReady,
 } from "../state/memoryState.js";
@@ -460,9 +462,8 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "id, type, name are required", reqId), trace_id: traceId }) }], isError: true };
     }
 
-    const validTypes = ["Actor", "Artifact", "Event", "Concept"];
-    if (!validTypes.includes(type)) {
-      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", `type must be one of: ${validTypes.join(", ")}`, reqId), trace_id: traceId }) }], isError: true };
+    if (!isValidEntityType(type)) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", `type must be one of: ${ENTITY_TYPES.join(", ")}`, reqId), trace_id: traceId }) }], isError: true };
     }
 
     // 文字列長バリデーション
@@ -582,6 +583,137 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
   }
 }
 
+export async function handleQueryEntity(args: Record<string, unknown>) {
+  const { id, type, canonical_key, claim_id, limit } = args as {
+    id?: string;
+    type?: string;
+    canonical_key?: string;
+    claim_id?: string;
+    limit?: number;
+  };
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以降で利用可能）
+    if (!canDoQuery()) {
+      const error = stateError("PolicyApplied or HasClaims or Ready", getStateType());
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume("tool"))) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // バリデーション: 少なくとも1つのフィルターが必要
+    const hasFilter = id !== undefined || type !== undefined || canonical_key !== undefined || claim_id !== undefined;
+    if (!hasFilter) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "at least one filter (id, type, canonical_key, claim_id) is required", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // typeのバリデーション
+    if (type !== undefined && !isValidEntityType(type)) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", `type must be one of: ${ENTITY_TYPES.join(", ")}`, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // クエリ実行
+    const filters: EntityQueryFilters = {
+      ...(id !== undefined && { id }),
+      ...(type !== undefined && { type: type as "Actor" | "Artifact" | "Event" | "Concept" }),
+      ...(canonical_key !== undefined && { canonical_key }),
+      ...(claim_id !== undefined && { claim_id }),
+      ...(limit !== undefined && { limit }),
+    };
+    const entities = await queryEntities(filters);
+
+    await appendLog({ id: `log_${reqId}`, op: "query_entity", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+
+    // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
+    return {
+      content: [{
+        type: "text",
+        text: safeJsonStringify({
+          entities,
+          count: entities.length,
+          policy_version: getPolicyVersion(),
+          state: getStateType(),
+          request_id: reqId,
+          trace_id: traceId
+        })
+      }]
+    };
+  } catch (e: unknown) {
+    await appendLog({ id: `log_${reqId}`, op: "query_entity", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+    const msg = e instanceof Error ? e.message : String(e);
+    return { content: [{ type: "text", text: safeJsonStringify({ ...err("QUERY_ENTITY_FAILED", msg, reqId), trace_id: traceId }) }], isError: true };
+  }
+}
+
+export async function handleQueryRelation(args: Record<string, unknown>) {
+  const { id, src_id, dst_id, type, evidence_claim_id, limit } = args as {
+    id?: string;
+    src_id?: string;
+    dst_id?: string;
+    type?: string;
+    evidence_claim_id?: string;
+    limit?: number;
+  };
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以降で利用可能）
+    if (!canDoQuery()) {
+      const error = stateError("PolicyApplied or HasClaims or Ready", getStateType());
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("STATE_ERROR", error.message, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume("tool"))) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("RATE_LIMIT", "rate limit exceeded", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // バリデーション: 少なくとも1つのフィルターが必要
+    const hasFilter = id !== undefined || src_id !== undefined || dst_id !== undefined || type !== undefined || evidence_claim_id !== undefined;
+    if (!hasFilter) {
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "at least one filter (id, src_id, dst_id, type, evidence_claim_id) is required", reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // クエリ実行
+    const filters: RelationQueryFilters = {
+      ...(id !== undefined && { id }),
+      ...(src_id !== undefined && { src_id }),
+      ...(dst_id !== undefined && { dst_id }),
+      ...(type !== undefined && { type }),
+      ...(evidence_claim_id !== undefined && { evidence_claim_id }),
+      ...(limit !== undefined && { limit }),
+    };
+    const relations = await queryRelations(filters);
+
+    await appendLog({ id: `log_${reqId}`, op: "query_relation", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+
+    // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
+    return {
+      content: [{
+        type: "text",
+        text: safeJsonStringify({
+          relations,
+          count: relations.length,
+          policy_version: getPolicyVersion(),
+          state: getStateType(),
+          request_id: reqId,
+          trace_id: traceId
+        })
+      }]
+    };
+  } catch (e: unknown) {
+    await appendLog({ id: `log_${reqId}`, op: "query_relation", ok: false, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
+    const msg = e instanceof Error ? e.message : String(e);
+    return { content: [{ type: "text", text: safeJsonStringify({ ...err("QUERY_RELATION_FAILED", msg, reqId), trace_id: traceId }) }], isError: true };
+  }
+}
+
 export async function handleGetState(args: Record<string, unknown>) {
   const includeDetails = args?.["debug"] === true;
   const reqId = crypto.randomUUID();
@@ -623,6 +755,10 @@ export async function dispatchTool(name: string, args: Record<string, unknown>):
       return handleUpsertEntity(args);
     case "pce.memory.upsert.relation":
       return handleUpsertRelation(args);
+    case "pce.memory.query.entity":
+      return handleQueryEntity(args);
+    case "pce.memory.query.relation":
+      return handleQueryRelation(args);
     case "pce.memory.activate":
       return handleActivate(args);
     case "pce.memory.boundary.validate":
@@ -644,17 +780,17 @@ export async function dispatchTool(name: string, args: Record<string, unknown>):
 export const TOOL_DEFINITIONS = [
   {
     name: "pce.memory.policy.apply",
-    description: "ポリシーの適用（不変量・用途タグ・redactルール）",
+    description: "Apply policy (invariants, usage tags, redact rules)",
     inputSchema: {
       type: "object",
       properties: {
-        yaml: { type: "string", description: "ポリシーYAML（省略時はデフォルト）" },
+        yaml: { type: "string", description: "Policy YAML (uses default if omitted)" },
       },
     },
   },
   {
     name: "pce.memory.upsert",
-    description: "重要な断片（Claim）を登録。由来（provenance）必須",
+    description: "Register a claim (knowledge fragment). Provenance required",
     inputSchema: {
       type: "object",
       properties: {
@@ -718,23 +854,23 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pce.memory.activate",
-    description: "クエリとポリシーに基づきアクティブコンテキスト（AC）を構成",
+    description: "Build active context (AC) based on query and policy",
     inputSchema: {
       type: "object",
       properties: {
         scope: { type: "array", items: { type: "string", enum: ["session", "project", "principle"] } },
         allow: { type: "array", items: { type: "string" } },
         top_k: { type: "integer", minimum: 1, maximum: 50 },
-        q: { type: "string", description: "検索クエリ文字列（部分一致）" },
-        cursor: { type: "string", description: "ページネーション用カーソル" },
-        include_meta: { type: "boolean", description: "メタ情報（evidence等）を含める", default: false },
+        q: { type: "string", description: "Search query string (partial match)" },
+        cursor: { type: "string", description: "Pagination cursor" },
+        include_meta: { type: "boolean", description: "Include metadata (evidence, etc.)", default: false },
       },
       required: ["scope", "allow"],
     },
   },
   {
     name: "pce.memory.boundary.validate",
-    description: "生成前に境界チェック／Redact-before-Send",
+    description: "Pre-generation boundary check / Redact-before-Send",
     inputSchema: {
       type: "object",
       properties: {
@@ -747,7 +883,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pce.memory.feedback",
-    description: "採用/棄却/陳腐化/重複のシグナルでCriticを更新",
+    description: "Update critic with signal (helpful/harmful/outdated/duplicate)",
     inputSchema: {
       type: "object",
       properties: {
@@ -760,44 +896,73 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pce.memory.state",
-    description: "現在の状態機械の状態を取得（Uninitialized/PolicyApplied/HasClaims/Ready）",
+    description: "Get current state machine status (Uninitialized/PolicyApplied/HasClaims/Ready)",
     inputSchema: {
       type: "object",
       properties: {
-        debug: { type: "boolean", description: "デバッグ用: runtime_stateの詳細を含める（デフォルト: false）" },
+        debug: { type: "boolean", description: "Debug mode: include runtime_state details (default: false)" },
       },
     },
   },
   // ========== Graph Memory Tools ==========
   {
     name: "pce.memory.upsert.entity",
-    description: "グラフメモリにEntityを登録（Actor/Artifact/Event/Concept）",
+    description: "Register an entity in graph memory (Actor/Artifact/Event/Concept)",
     inputSchema: {
       type: "object",
       properties: {
         id: { type: "string", description: "Entity ID" },
-        type: { type: "string", enum: ["Actor", "Artifact", "Event", "Concept"], description: "Entityタイプ" },
-        name: { type: "string", description: "Entity名" },
-        canonical_key: { type: "string", description: "正規キー（オプション、重複検索用）" },
-        attrs: { type: "object", description: "追加属性（オプション）" },
+        type: { type: "string", enum: ["Actor", "Artifact", "Event", "Concept"], description: "Entity type" },
+        name: { type: "string", description: "Entity name" },
+        canonical_key: { type: "string", description: "Canonical key (optional, for deduplication)" },
+        attrs: { type: "object", description: "Additional attributes (optional)" },
       },
       required: ["id", "type", "name"],
     },
   },
   {
     name: "pce.memory.upsert.relation",
-    description: "グラフメモリにEntity間のRelationを登録",
+    description: "Register a relation between entities in graph memory",
     inputSchema: {
       type: "object",
       properties: {
         id: { type: "string", description: "Relation ID" },
-        src_id: { type: "string", description: "ソースEntity ID" },
-        dst_id: { type: "string", description: "ターゲットEntity ID" },
-        type: { type: "string", description: "関係タイプ（例: KNOWS, USES, DEPENDS_ON）" },
-        props: { type: "object", description: "関係の追加プロパティ（オプション）" },
-        evidence_claim_id: { type: "string", description: "この関係のエビデンスとなるClaim ID（オプション）" },
+        src_id: { type: "string", description: "Source entity ID" },
+        dst_id: { type: "string", description: "Target entity ID" },
+        type: { type: "string", description: "Relation type (e.g., KNOWS, USES, DEPENDS_ON)" },
+        props: { type: "object", description: "Additional relation properties (optional)" },
+        evidence_claim_id: { type: "string", description: "Claim ID as evidence for this relation (optional)" },
       },
       required: ["id", "src_id", "dst_id", "type"],
+    },
+  },
+  {
+    name: "pce.memory.query.entity",
+    description: "Query entities from graph memory by ID, type, canonical_key, or claim_id",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Entity ID (exact match)" },
+        type: { type: "string", enum: ["Actor", "Artifact", "Event", "Concept"], description: "Entity type" },
+        canonical_key: { type: "string", description: "Canonical key (exact match)" },
+        claim_id: { type: "string", description: "Claim ID to find linked entities" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Max results (default: 50)" },
+      },
+    },
+  },
+  {
+    name: "pce.memory.query.relation",
+    description: "Query relations from graph memory by ID, src_id, dst_id, type, or evidence_claim_id",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Relation ID (exact match)" },
+        src_id: { type: "string", description: "Source entity ID" },
+        dst_id: { type: "string", description: "Target entity ID" },
+        type: { type: "string", description: "Relation type (e.g., TAGGED, KNOWS)" },
+        evidence_claim_id: { type: "string", description: "Evidence claim ID" },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Max results (default: 50)" },
+      },
     },
   },
 ];

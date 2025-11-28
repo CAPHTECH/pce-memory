@@ -101,3 +101,83 @@ export async function findEntityByCanonicalKey(canonicalKey: string): Promise<En
   const rows = reader.getRowObjects() as unknown as Entity[];
   return rows[0];
 }
+
+/**
+ * IDでEntityを取得
+ */
+export async function findEntityById(id: string): Promise<Entity | undefined> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    "SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1",
+    [id]
+  );
+  const rows = reader.getRowObjects() as unknown as Entity[];
+  return rows[0];
+}
+
+/**
+ * Entityクエリフィルター型
+ */
+export interface EntityQueryFilters {
+  id?: string;
+  type?: Entity["type"];
+  canonical_key?: string;
+  claim_id?: string;
+  limit?: number;
+}
+
+/**
+ * フィルターに基づいてEntityを検索（AND論理）
+ * 少なくとも1つのフィルターが必要
+ */
+export async function queryEntities(filters: EntityQueryFilters): Promise<Entity[]> {
+  const conn = await getConnection();
+  const limit = Math.min(filters.limit ?? 50, 100);
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  let paramIndex = 1;
+
+  // claim_idの場合はJOINが必要
+  const needsJoin = filters.claim_id !== undefined;
+
+  if (filters.id !== undefined) {
+    conditions.push(`e.id = $${paramIndex++}`);
+    params.push(filters.id);
+  }
+
+  if (filters.type !== undefined) {
+    conditions.push(`e.type = $${paramIndex++}`);
+    params.push(filters.type);
+  }
+
+  if (filters.canonical_key !== undefined) {
+    conditions.push(`e.canonical_key = $${paramIndex++}`);
+    params.push(filters.canonical_key);
+  }
+
+  if (filters.claim_id !== undefined) {
+    conditions.push(`ce.claim_id = $${paramIndex++}`);
+    params.push(filters.claim_id);
+  }
+
+  // クエリ構築
+  let sql: string;
+  if (needsJoin) {
+    sql = `SELECT e.id, e.type, e.name, e.canonical_key, e.attrs, e.created_at
+           FROM entities e
+           INNER JOIN claim_entities ce ON ce.entity_id = e.id`;
+  } else {
+    sql = `SELECT e.id, e.type, e.name, e.canonical_key, e.attrs, e.created_at FROM entities e`;
+  }
+
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(" AND ")}`;
+  }
+
+  sql += ` ORDER BY e.created_at DESC LIMIT $${paramIndex}`;
+  params.push(limit);
+
+  const reader = await conn.runAndReadAll(sql, params);
+  return reader.getRowObjects() as unknown as Entity[];
+}

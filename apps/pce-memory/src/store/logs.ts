@@ -37,11 +37,12 @@ export function setAuditLogPath(path: string | undefined): void {
 
 /**
  * DuckDBへの監査ログ追記（非同期）
+ * ON CONFLICT DO NOTHING: 同一IDのログは上書きせず無視（冪等性確保）
  */
 export async function appendLog(entry: AuditLog): Promise<void> {
   const conn = await getConnection();
   await conn.run(
-    "INSERT INTO logs (id, op, ok, req, trace, policy_version) VALUES ($1, $2, $3, $4, $5, $6)",
+    "INSERT INTO logs (id, op, ok, req, trace, policy_version) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
     [
       entry.id,
       entry.op,
