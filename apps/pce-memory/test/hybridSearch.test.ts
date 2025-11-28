@@ -482,78 +482,91 @@ describe('Edge cases', () => {
 
 describe('hybridSearch with EmbeddingService', () => {
   /**
-   * テストデータ挿入ヘルパー
-   * 各テスト内で直接呼び出し、テスト間の完全な独立性を確保
-   * リトライロジックでCI環境でのDuckDB一時エラーを処理
+   * CI環境でのDuckDB一時エラーに対応するリトライラッパー
+   * DB再初期化と指数バックオフを含む
    */
-  async function insertTestClaims(retries = 3): Promise<string[]> {
+  const runWithRetry = async (fn: () => Promise<void>, retries = 3) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const claimIds: string[] = [];
-        for (let i = 0; i < testClaims.length; i++) {
-          const { claim } = await upsertClaim(testClaims[i]);
-          claimIds.push(claim.id);
-          await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
-        }
-        return claimIds;
+        await fn();
+        return;
       } catch (error) {
         if (attempt === retries) throw error;
-        // リトライ前に少し待機
+        // リトライ前にDB再初期化
+        await resetDbAsync();
+        const freshPath = join(tmpdir(), `pce-embedding-test-${randomUUID()}.duckdb`);
+        process.env.PCE_DB = freshPath;
+        await initDb();
+        await initSchema();
         await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
       }
     }
-    return [];
+  };
+
+  /**
+   * テストデータ挿入ヘルパー
+   */
+  async function insertTestClaims(): Promise<string[]> {
+    const claimIds: string[] = [];
+    for (let i = 0; i < testClaims.length; i++) {
+      const { claim } = await upsertClaim(testClaims[i]);
+      claimIds.push(claim.id);
+      await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
+    }
+    return claimIds;
   }
 
   it('should use EmbeddingService for vector search when provided via config', async () => {
-    await insertTestClaims();
-    // モックEmbeddingServiceを設定（seed=1と同じ埋め込みを返す）
-    const mockService = createMockEmbeddingService(createDummyEmbedding(1));
+    await runWithRetry(async () => {
+      await insertTestClaims();
+      const mockService = createMockEmbeddingService(createDummyEmbedding(1));
 
-    const config: Partial<HybridSearchConfig> = {
-      embeddingService: mockService,
-    };
+      const config: Partial<HybridSearchConfig> = {
+        embeddingService: mockService,
+      };
 
-    const results = await hybridSearch(['project'], 10, 'test query', config);
-    // ベクトル検索が動作していれば結果が返る
-    expect(results.length).toBeGreaterThan(0);
+      const results = await hybridSearch(['project'], 10, 'test query', config);
+      expect(results.length).toBeGreaterThan(0);
+    });
   });
 
   it('should use global EmbeddingService when set', async () => {
-    await insertTestClaims();
-    // グローバルEmbeddingServiceを設定
-    const mockService = createMockEmbeddingService(createDummyEmbedding(1));
-    setEmbeddingService(mockService);
+    await runWithRetry(async () => {
+      await insertTestClaims();
+      const mockService = createMockEmbeddingService(createDummyEmbedding(1));
+      setEmbeddingService(mockService);
 
-    const results = await hybridSearch(['project'], 10, 'test query');
-    expect(results.length).toBeGreaterThan(0);
+      const results = await hybridSearch(['project'], 10, 'test query');
+      expect(results.length).toBeGreaterThan(0);
+    });
   });
 
   it('should fallback to text-only when EmbeddingService fails', async () => {
-    await insertTestClaims();
-    const failingService = createFailingEmbeddingService();
-    setEmbeddingService(failingService);
+    await runWithRetry(async () => {
+      await insertTestClaims();
+      const failingService = createFailingEmbeddingService();
+      setEmbeddingService(failingService);
 
-    // 埋め込み生成失敗時はText-onlyフォールバック
-    const results = await hybridSearch(['project'], 10, 'JavaScript');
-    expect(results.length).toBeGreaterThan(0);
-    expect(results.some((c) => c.text.includes('JavaScript'))).toBe(true);
+      const results = await hybridSearch(['project'], 10, 'JavaScript');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some((c) => c.text.includes('JavaScript'))).toBe(true);
+    });
   });
 
   it('should apply custom alpha and threshold from config', async () => {
-    await insertTestClaims();
-    const mockService = createMockEmbeddingService(createDummyEmbedding(1));
+    await runWithRetry(async () => {
+      await insertTestClaims();
+      const mockService = createMockEmbeddingService(createDummyEmbedding(1));
 
-    // 高い閾値を設定してフィルタリングをテスト
-    const config: Partial<HybridSearchConfig> = {
-      embeddingService: mockService,
-      alpha: 0.5,
-      threshold: 0.99, // 非常に高い閾値
-    };
+      const config: Partial<HybridSearchConfig> = {
+        embeddingService: mockService,
+        alpha: 0.5,
+        threshold: 0.99,
+      };
 
-    const results = await hybridSearch(['project'], 10, 'test query', config);
-    // 高い閾値により結果が少ないかゼロになる
-    expect(results.length).toBeLessThanOrEqual(1);
+      const results = await hybridSearch(['project'], 10, 'test query', config);
+      expect(results.length).toBeLessThanOrEqual(1);
+    });
   });
 });
 
