@@ -501,14 +501,19 @@ describe('hybridSearch with EmbeddingService', () => {
 // ========== 閾値境界値テスト ==========
 
 describe('Inv_C_ThresholdFiltering boundary values', () => {
-  beforeEach(async () => {
+  /**
+   * テストデータ挿入ヘルパー
+   * テスト内で直接呼び出すことで、各テストの完全な独立性を確保
+   */
+  async function insertTestData() {
     for (let i = 0; i < testClaims.length; i++) {
       const { claim } = await upsertClaim(testClaims[i]);
       await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
     }
-  });
+  }
 
   it('should filter results below threshold', async () => {
+    await insertTestData();
     const mockService = createMockEmbeddingService(createDummyEmbedding(1));
 
     // threshold=0.0で全て通過
