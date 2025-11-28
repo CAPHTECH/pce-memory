@@ -7,6 +7,64 @@ PCE Memory - MCP Server for Process-Context Engine
 PCE Memory is the official MCP server implementation of Process-Context Engine (PCE).
 It provides context memory, retrieval, and integration capabilities for agents and LLM applications.
 
+## MCP Configuration
+
+> **Note:** Replace `your-project` with your actual project name to keep databases separate per project.
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "pce-memory": {
+      "command": "npx",
+      "args": ["-y", "pce-memory"],
+      "env": {
+        "PCE_DB": "~/.pce/your-project.db"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+Add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "pce-memory": {
+      "command": "npx",
+      "args": ["-y", "pce-memory"],
+      "env": {
+        "PCE_DB": "~/.pce/your-project.db"
+      }
+    }
+  }
+}
+```
+
+### Cline / Roo Code
+
+Add to VS Code settings (`settings.json`):
+
+```json
+{
+  "cline.mcpServers": {
+    "pce-memory": {
+      "command": "npx",
+      "args": ["-y", "pce-memory"],
+      "env": {
+        "PCE_DB": "~/.pce/your-project.db"
+      }
+    }
+  }
+}
+```
+
 ## Features
 
 - **MCP Protocol Support**: Model Context Protocol (MCP) v1.0.4 compliant
@@ -18,32 +76,13 @@ It provides context memory, retrieval, and integration capabilities for agents a
 
 ## Quick Start
 
-### npx (Recommended)
-
 ```bash
-npx pce-memory --db ~/.pce/memory.db
-```
+# Run directly with npx
+npx pce-memory
 
-### Claude Code / Cline Configuration
-
-Place `.mcp.json` in your project root or `~/.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "pce-memory": {
-      "command": "npx",
-      "args": ["pce-memory", "--db", "~/.pce/memory.db"]
-    }
-  }
-}
-```
-
-### Global Installation
-
-```bash
+# Or install globally
 npm install -g pce-memory
-pce-memory --db ~/.pce/memory.db
+pce-memory
 ```
 
 ## Commands
