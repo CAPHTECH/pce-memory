@@ -9,13 +9,12 @@
  * 4. バージョン指定無効化
  * 5. 最大エントリ数制限
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import * as E from "fp-ts/Either";
 import {
   createInMemoryCache,
   getCacheStats,
   createTestCache,
-  type CacheConfig,
 } from "../src/cache.js";
 
 // ========== 基本操作テスト ==========

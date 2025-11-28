@@ -17,7 +17,6 @@ import {
   addResourceToCurrentScope,
   getLayerScopeSummary,
   resetLayerScopeState,
-  getLayerGraph,
   hasSystemCapability,
   checkDependencies,
   getCurrentLiveResources,

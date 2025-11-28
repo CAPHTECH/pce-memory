@@ -16,7 +16,6 @@ import {
   createOpenAIProvider,
 } from "../src/providers/remote.js";
 import {
-  initLocalProvider,
   resetLocalProvider,
   isInitialized,
 } from "../src/providers/local.js";

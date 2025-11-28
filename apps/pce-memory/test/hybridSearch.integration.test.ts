@@ -42,7 +42,7 @@ const createTestEmbeddingService = (): EmbeddingService => ({
 const queryVector = createNormalizedVector(5); // "alpha"相当
 
 // ヘルパー: ベクトルをDB用JSON文字列に変換
-const vecToJson = (vec: number[]): string => JSON.stringify(vec);
+const _vecToJson = (vec: number[]): string => JSON.stringify(vec);
 
 describe("Hybrid Search Integration (Real DuckDB)", () => {
   beforeEach(async () => {

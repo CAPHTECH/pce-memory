@@ -16,7 +16,6 @@ import type {
   EmbeddingProvider,
   EmbeddingCache,
   ProviderStatus,
-  CacheEntry,
   EmbedParams,
 } from "../src/types.js";
 import type { EmbeddingError, CacheError } from "../src/errors.js";
@@ -52,7 +51,7 @@ const createStubProvider = (options: {
   return {
     modelVersion,
     status,
-    embed: (text: string): TE.TaskEither<EmbeddingError, readonly number[]> =>
+    embed: (_text: string): TE.TaskEither<EmbeddingError, readonly number[]> =>
       shouldFail ? TE.left(failError) : TE.right(embedResult),
     embedBatch: (
       texts: readonly string[]

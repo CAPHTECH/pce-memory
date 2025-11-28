@@ -9,10 +9,9 @@
  * 現在のプラットフォームでのテストのみ実行
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import * as os from "os";
 import * as path from "path";
-import * as fs from "fs";
 
 import {
   getSocketPath,

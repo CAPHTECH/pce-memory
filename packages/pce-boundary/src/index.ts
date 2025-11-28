@@ -12,7 +12,7 @@ export interface BoundaryValidateResult {
   reason?: string;
 }
 
-function redact(payload: string, patterns: string[] = []): string {
+function _redact(payload: string, patterns: string[] = []): string {
   let result = payload;
   patterns.forEach((p) => {
     const re = new RegExp(p, "gi");
