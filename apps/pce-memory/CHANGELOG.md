@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-11-28
+
+### Fixed
+
+- TypeScript `exactOptionalPropertyTypes` compliance in Graph handlers
+- Added missing ErrorCode types (`UPSERT_ENTITY_FAILED`, `UPSERT_RELATION_FAILED`)
+- String length validation for Entity/Relation inputs (security hardening)
+
+### Added
+
+- STATE_ERROR and RATE_LIMIT test cases for Graph handlers (4 new tests)
+
 ## [0.2.0] - 2025-11-28
 
 ### Added

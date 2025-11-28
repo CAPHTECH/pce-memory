@@ -465,13 +465,22 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", `type must be one of: ${validTypes.join(", ")}`, reqId), trace_id: traceId }) }], isError: true };
     }
 
-    // Entity登録
+    // 文字列長バリデーション
+    try {
+      validateString("id", id, 256);
+      validateString("name", name, 1024);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", msg, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // Entity登録（exactOptionalPropertyTypes対応: undefinedを渡さない）
     const entity = await upsertEntity({
       id,
       type: type as "Actor" | "Artifact" | "Event" | "Concept",
       name,
-      canonical_key,
-      attrs,
+      ...(canonical_key !== undefined && { canonical_key }),
+      ...(attrs !== undefined && { attrs }),
     });
 
     await appendLog({ id: `log_${reqId}`, op: "upsert_entity", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });
@@ -527,14 +536,25 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
       return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", "id, src_id, dst_id, type are required", reqId), trace_id: traceId }) }], isError: true };
     }
 
-    // Relation登録
+    // 文字列長バリデーション
+    try {
+      validateString("id", id, 256);
+      validateString("src_id", src_id, 256);
+      validateString("dst_id", dst_id, 256);
+      validateString("type", type, 256);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { content: [{ type: "text", text: JSON.stringify({ ...err("VALIDATION_ERROR", msg, reqId), trace_id: traceId }) }], isError: true };
+    }
+
+    // Relation登録（exactOptionalPropertyTypes対応: undefinedを渡さない）
     const relation = await upsertRelation({
       id,
       src_id,
       dst_id,
       type,
-      props,
-      evidence_claim_id,
+      ...(props !== undefined && { props }),
+      ...(evidence_claim_id !== undefined && { evidence_claim_id }),
     });
 
     await appendLog({ id: `log_${reqId}`, op: "upsert_relation", ok: true, req: reqId, trace: traceId, policy_version: getPolicyVersion() });

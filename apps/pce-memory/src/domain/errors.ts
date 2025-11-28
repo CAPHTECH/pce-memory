@@ -7,6 +7,8 @@
 export type ErrorCode =
   | "POLICY_INVALID"
   | "UPSERT_FAILED"
+  | "UPSERT_ENTITY_FAILED"   // Graph Memory: Entity登録失敗
+  | "UPSERT_RELATION_FAILED" // Graph Memory: Relation登録失敗
   | "ACTIVATE_FAILED"
   | "BOUNDARY_ERROR"
   | "FEEDBACK_FAILED"

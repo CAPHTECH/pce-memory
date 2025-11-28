@@ -9,18 +9,38 @@ import { handleUpsertEntity, handleUpsertRelation } from "../src/core/handlers";
 import { applyPolicyOp, resetMemoryState } from "../src/state/memoryState";
 import * as E from "fp-ts/Either";
 
-beforeEach(async () => {
+/**
+ * 標準的なテストセットアップ: DB初期化 + PolicyApplied状態
+ */
+async function setupWithPolicy() {
   resetDb();
-  resetMemoryState(); // 状態機械もリセット
+  resetMemoryState();
   process.env.PCE_DB = ":memory:";
   process.env.PCE_RATE_CAP = "100";
   await initDb();
   await initSchema();
   await initRateState();
   await resetRates();
-  // ポリシー適用（PolicyApplied状態に遷移）
   const result = await applyPolicyOp()();
   expect(E.isRight(result)).toBe(true);
+}
+
+/**
+ * Uninitialized状態のセットアップ（ポリシー未適用）
+ */
+async function setupWithoutPolicy() {
+  resetDb();
+  resetMemoryState();
+  process.env.PCE_DB = ":memory:";
+  process.env.PCE_RATE_CAP = "100";
+  await initDb();
+  await initSchema();
+  await initRateState();
+  await resetRates();
+}
+
+beforeEach(async () => {
+  await setupWithPolicy();
 });
 
 describe("handleUpsertEntity", () => {
@@ -164,5 +184,96 @@ describe("handleUpsertRelation", () => {
 
     expect(firstResponse.id).toBe(secondResponse.id);
     expect(secondResponse.type).toBe("ORIGINAL"); // 変更されない
+  });
+});
+
+describe("State and Rate Limit handling", () => {
+  it("returns STATE_ERROR when policy is not applied for entity", async () => {
+    await setupWithoutPolicy();
+
+    const result = await handleUpsertEntity({
+      id: "ent_state_err",
+      type: "Actor",
+      name: "Test Actor",
+    });
+
+    expect(result.isError).toBe(true);
+    const response = JSON.parse(result.content[0]!.text);
+    expect(response.error.code).toBe("STATE_ERROR");
+  });
+
+  it("returns STATE_ERROR when policy is not applied for relation", async () => {
+    await setupWithoutPolicy();
+
+    const result = await handleUpsertRelation({
+      id: "rel_state_err",
+      src_id: "a",
+      dst_id: "b",
+      type: "RELATES_TO",
+    });
+
+    expect(result.isError).toBe(true);
+    const response = JSON.parse(result.content[0]!.text);
+    expect(response.error.code).toBe("STATE_ERROR");
+  });
+
+  it("returns RATE_LIMIT when rate limit exceeded for entity", async () => {
+    // レート上限を1に設定し、1回消費して制限に到達させる
+    const originalCap = process.env.PCE_RATE_CAP;
+    process.env.PCE_RATE_CAP = "1";
+    await initRateState();
+    await resetRates();
+
+    // 1回目は成功
+    await handleUpsertEntity({
+      id: "ent_first",
+      type: "Actor",
+      name: "First Actor",
+    });
+
+    // 2回目でレート制限
+    const result = await handleUpsertEntity({
+      id: "ent_rate_limit",
+      type: "Actor",
+      name: "Test Actor",
+    });
+
+    // 環境変数を元に戻す
+    process.env.PCE_RATE_CAP = originalCap;
+
+    expect(result.isError).toBe(true);
+    const response = JSON.parse(result.content[0]!.text);
+    expect(response.error.code).toBe("RATE_LIMIT");
+  });
+
+  it("returns RATE_LIMIT when rate limit exceeded for relation", async () => {
+    // レート上限を1に設定し、1回消費して制限に到達させる
+    const originalCap = process.env.PCE_RATE_CAP;
+    process.env.PCE_RATE_CAP = "1";
+    await initRateState();
+    await resetRates();
+
+    // 1回目は成功
+    await handleUpsertRelation({
+      id: "rel_first",
+      src_id: "a",
+      dst_id: "b",
+      type: "FIRST",
+    });
+
+    // 2回目でレート制限
+    const result = await handleUpsertRelation({
+      id: "rel_rate_limit",
+      src_id: "a",
+      dst_id: "b",
+      type: "RELATES_TO",
+    });
+
+    // 環境変数を元に戻す
+    process.env.PCE_RATE_CAP = originalCap;
+
+    expect(result.isError).toBe(true);
+    const response = JSON.parse(result.content[0]!.text);
+    expect(response.error.code).toBe("RATE_LIMIT");
   });
 });
