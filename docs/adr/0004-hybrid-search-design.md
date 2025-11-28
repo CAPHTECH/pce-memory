@@ -32,16 +32,17 @@ pce-memory v0.1 MVPの検索機能について、形式検証（TLA+モデル検
 
 ### TLA+モデル検査（hybrid_search_simple.tla）
 
-| 不変条件 | 設計A | 設計B | 設計C |
-|---------|-------|-------|-------|
-| ScopeConsistency | ✅ パス | ✅ パス | ✅ パス |
+| 不変条件           | 設計A   | 設計B   | 設計C   |
+| ------------------ | ------- | ------- | ------- |
+| ScopeConsistency   | ✅ パス | ✅ パス | ✅ パス |
 | ThresholdFiltering | ✅ パス | ✅ パス | ✅ パス |
-| MergeComplete | N/A | N/A | ✅ パス |
-| FusionCorrectness | N/A | N/A | ✅ パス |
-| CompleteCoverage | N/A | N/A | ✅ パス |
+| MergeComplete      | N/A     | N/A     | ✅ パス |
+| FusionCorrectness  | N/A     | N/A     | ✅ パス |
+| CompleteCoverage   | N/A     | N/A     | ✅ パス |
 | NoOutOfScopeClaims | ✅ パス | ✅ パス | ✅ パス |
 
 **検証規模:**
+
 - 44,236,064 状態生成
 - 3,516,352 個別状態探索
 - 探索深度: 9
@@ -66,14 +67,14 @@ Inv_A_MissesVectorOnly 違反:
 
 ### Alloy構造解析
 
-| アサーション | 設計A | 設計B | 設計C |
-|-------------|-------|-------|-------|
-| ScopeFilterComplete | ✅ UNSAT | ✅ UNSAT | ✅ UNSAT |
-| RankingConsistent | ✅ UNSAT | ✅ UNSAT | ✅ UNSAT |
-| MissesVectorOnlyClaims | ❌ SAT (反例) | N/A | N/A |
-| MissesTextOnlyClaims | N/A | ❌ SAT (反例) | N/A |
-| CoversTextOrVector | N/A | N/A | ✅ UNSAT |
-| FusionCorrect | N/A | N/A | ✅ UNSAT |
+| アサーション           | 設計A         | 設計B         | 設計C    |
+| ---------------------- | ------------- | ------------- | -------- |
+| ScopeFilterComplete    | ✅ UNSAT      | ✅ UNSAT      | ✅ UNSAT |
+| RankingConsistent      | ✅ UNSAT      | ✅ UNSAT      | ✅ UNSAT |
+| MissesVectorOnlyClaims | ❌ SAT (反例) | N/A           | N/A      |
+| MissesTextOnlyClaims   | N/A           | ❌ SAT (反例) | N/A      |
+| CoversTextOrVector     | N/A           | N/A           | ✅ UNSAT |
+| FusionCorrect          | N/A           | N/A           | ✅ UNSAT |
 
 ## 決定
 
@@ -103,11 +104,11 @@ CREATE MACRO hybrid_score(text_score, vec_score, alpha) AS
 
 ### パラメータ
 
-| パラメータ | 値 | 根拠 |
-|-----------|-----|------|
-| α (alpha) | 0.65 | ベクトル検索重視（意味理解優先）|
-| Threshold | 0.15 | 低ノイズフィルタ |
-| limit | 20 | Active Context適正サイズ |
+| パラメータ | 値   | 根拠                             |
+| ---------- | ---- | -------------------------------- |
+| α (alpha)  | 0.65 | ベクトル検索重視（意味理解優先） |
+| Threshold  | 0.15 | 低ノイズフィルタ                 |
+| limit      | 20   | Active Context適正サイズ         |
 
 ### 検索フロー
 
@@ -124,65 +125,65 @@ CREATE MACRO hybrid_score(text_score, vec_score, alpha) AS
 
 ### TLA+変数 → 実装モジュール対応
 
-| TLA+変数/アクション | 実装ファイル | 関数/メソッド | 備考 |
-|-------------------|-------------|--------------|------|
-| `claimScope` | `src/store/claims.ts:7` | `Claim.scope` | DBスキーマの`scope`カラム |
-| `claimTextRelevant` | `src/store/hybridSearch.ts` | `textSearch()` | ILIKE検索で判定 |
-| `claimVecRelevant` | `src/store/hybridSearch.ts` | `vectorSearch()` | cos_sim >= threshold |
-| `requestedScopes` | `src/store/hybridSearch.ts` | `scopes: string[]`引数 | 呼び出し元から受領 |
-| `C_TextSearch` | `src/store/hybridSearch.ts` | `textSearch()` | ✅ 実装済み |
-| `C_VecSearch` | `src/store/hybridSearch.ts` | `vectorSearch()` | ✅ 実装済み |
-| `C_Merge` | `src/store/hybridSearch.ts` | `hybridSearch()` | ✅ FULL OUTER JOIN |
-| `FusedScore()` | `src/db/schema.sql` | `hybrid_score`マクロ | ✅ 実装済み |
-| `AboveThreshold()` | `src/store/hybridSearch.ts` | WHERE句 | ✅ score >= threshold |
+| TLA+変数/アクション | 実装ファイル                | 関数/メソッド          | 備考                      |
+| ------------------- | --------------------------- | ---------------------- | ------------------------- |
+| `claimScope`        | `src/store/claims.ts:7`     | `Claim.scope`          | DBスキーマの`scope`カラム |
+| `claimTextRelevant` | `src/store/hybridSearch.ts` | `textSearch()`         | ILIKE検索で判定           |
+| `claimVecRelevant`  | `src/store/hybridSearch.ts` | `vectorSearch()`       | cos_sim >= threshold      |
+| `requestedScopes`   | `src/store/hybridSearch.ts` | `scopes: string[]`引数 | 呼び出し元から受領        |
+| `C_TextSearch`      | `src/store/hybridSearch.ts` | `textSearch()`         | ✅ 実装済み               |
+| `C_VecSearch`       | `src/store/hybridSearch.ts` | `vectorSearch()`       | ✅ 実装済み               |
+| `C_Merge`           | `src/store/hybridSearch.ts` | `hybridSearch()`       | ✅ FULL OUTER JOIN        |
+| `FusedScore()`      | `src/db/schema.sql`         | `hybrid_score`マクロ   | ✅ 実装済み               |
+| `AboveThreshold()`  | `src/store/hybridSearch.ts` | WHERE句                | ✅ score >= threshold     |
 
 ### TLA+不変条件 → 実装検証方法
 
-| TLA+不変条件 | 実装検証方法 | テストファイル |
-|-------------|-------------|---------------|
-| `Inv_C_ScopeConsistency` | SQLの`WHERE scope IN (...)` | `claims.test.ts` |
+| TLA+不変条件               | 実装検証方法                      | テストファイル         |
+| -------------------------- | --------------------------------- | ---------------------- |
+| `Inv_C_ScopeConsistency`   | SQLの`WHERE scope IN (...)`       | `claims.test.ts`       |
 | `Inv_C_ThresholdFiltering` | `WHERE hybrid_score >= threshold` | `hybridSearch.test.ts` |
-| `Inv_C_MergeComplete` | FULL OUTER JOINで両検索結果統合 | `hybridSearch.test.ts` |
-| `Inv_C_FusionCorrectness` | `hybrid_score`マクロ使用 | 単体テスト |
-| `Inv_C_CompleteCoverage` | 両検索の並列実行保証 | 統合テスト |
+| `Inv_C_MergeComplete`      | FULL OUTER JOINで両検索結果統合   | `hybridSearch.test.ts` |
+| `Inv_C_FusionCorrectness`  | `hybrid_score`マクロ使用          | 単体テスト             |
+| `Inv_C_CompleteCoverage`   | 両検索の並列実行保証              | 統合テスト             |
 
 ### 活性性質 → 実装保証
 
-| TLA+活性性質 | 実装保証方法 |
-|-------------|-------------|
-| `Liveness_EventuallyDone` | async/awaitによる完了保証 |
+| TLA+活性性質                         | 実装保証方法                |
+| ------------------------------------ | --------------------------- |
+| `Liveness_EventuallyDone`            | async/awaitによる完了保証   |
 | `Liveness_C_MergeEventuallyComplete` | Promise.all()による並列実行 |
 
 ## 残課題・リスク
 
 ### 実装状況（2025-11-26更新）
 
-| 項目 | 優先度 | 状態 | 備考 |
-|------|--------|------|------|
-| `hybridSearch.ts`モジュール | P0 | ✅ 完了 | 37テスト通過 |
-| `claim_vectors`テーブル | P0 | ✅ 完了 | schema.sql追加 |
-| `hybrid_score`マクロ | P0 | ✅ 完了 | schema.sql追加 |
-| `vectorSearch()`関数 | P0 | ✅ 完了 | hybridSearch.ts |
-| Active Context `r()`関数 | P1 | ✅ 完了 | index.ts:184 handleActivate統合 |
-| 再ランク `g()` 関数 | P2 | ✅ 完了 | rerank.ts + SQLマクロ（sigmoid, recency_decay, g_rerank） |
+| 項目                        | 優先度 | 状態    | 備考                                                      |
+| --------------------------- | ------ | ------- | --------------------------------------------------------- |
+| `hybridSearch.ts`モジュール | P0     | ✅ 完了 | 37テスト通過                                              |
+| `claim_vectors`テーブル     | P0     | ✅ 完了 | schema.sql追加                                            |
+| `hybrid_score`マクロ        | P0     | ✅ 完了 | schema.sql追加                                            |
+| `vectorSearch()`関数        | P0     | ✅ 完了 | hybridSearch.ts                                           |
+| Active Context `r()`関数    | P1     | ✅ 完了 | index.ts:184 handleActivate統合                           |
+| 再ランク `g()` 関数         | P2     | ✅ 完了 | rerank.ts + SQLマクロ（sigmoid, recency_decay, g_rerank） |
 
 ### 技術的リスク
 
-| リスク | 影響度 | 緩和策 |
-|--------|--------|--------|
-| 両検索の実行順序 | 中 | Promise.all()で並列化 |
-| 埋め込み生成失敗 | 中 | フォールバック（Text-onlyに退化） |
-| α=0.65の妥当性 | 低 | 設定可能パラメータ化、A/Bテスト |
-| スコア離散化の精度 | 低 | 連続スコアで実装 |
+| リスク             | 影響度 | 緩和策                            |
+| ------------------ | ------ | --------------------------------- |
+| 両検索の実行順序   | 中     | Promise.all()で並列化             |
+| 埋め込み生成失敗   | 中     | フォールバック（Text-onlyに退化） |
+| α=0.65の妥当性     | 低     | 設定可能パラメータ化、A/Bテスト   |
+| スコア離散化の精度 | 低     | 連続スコアで実装                  |
 
 ### 仮定と制約
 
-| 仮定 | 根拠 | 検証方法 |
-|------|------|----------|
-| 両検索が実行される | 実装で保証 | 統合テスト |
-| スコアは0-1範囲 | API仕様 | バリデーション |
-| スコープは有限集合 | DB制約 | スキーマ |
-| クエリ文字列は非空 | バリデーション | 入力検証 |
+| 仮定               | 根拠           | 検証方法       |
+| ------------------ | -------------- | -------------- |
+| 両検索が実行される | 実装で保証     | 統合テスト     |
+| スコアは0-1範囲    | API仕様        | バリデーション |
+| スコープは有限集合 | DB制約         | スキーマ       |
+| クエリ文字列は非空 | バリデーション | 入力検証       |
 
 ### 形式検証の限界
 

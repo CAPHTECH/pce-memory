@@ -17,16 +17,12 @@
  * @see docs/spec/tlaplus/hybrid_search_simple.tla
  */
 
-import { getConnection } from "../db/connection.js";
-import type { Claim } from "./claims.js";
-import type { EmbeddingService } from "@pce/embeddings";
-import * as E from "fp-ts/Either";
-import {
-  calculateGFromClaim,
-  type GFactorBreakdown,
-  type ScoreBreakdown,
-} from "./rerank.js";
-import { normalizeRowsTimestamps } from "../utils/serialization.js";
+import { getConnection } from '../db/connection.js';
+import type { Claim } from './claims.js';
+import type { EmbeddingService } from '@pce/embeddings';
+import * as E from 'fp-ts/Either';
+import { calculateGFromClaim, type GFactorBreakdown, type ScoreBreakdown } from './rerank.js';
+import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
 // ========== ADR-0004 パラメータ ==========
 
@@ -68,16 +64,14 @@ const MAX_EMBEDDING_MAGNITUDE = 10.0;
  */
 function validateEmbedding(embedding: readonly number[]): void {
   if (embedding.length === 0) {
-    throw new Error("Embedding vector must not be empty");
+    throw new Error('Embedding vector must not be empty');
   }
   if (embedding.length > MAX_EMBEDDING_DIM) {
-    throw new Error(
-      `Embedding dimension ${embedding.length} exceeds maximum ${MAX_EMBEDDING_DIM}`
-    );
+    throw new Error(`Embedding dimension ${embedding.length} exceeds maximum ${MAX_EMBEDDING_DIM}`);
   }
   for (let i = 0; i < embedding.length; i++) {
     const v = embedding[i];
-    if (typeof v !== "number" || !Number.isFinite(v)) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) {
       throw new Error(`Invalid embedding value at index ${i}: ${v}`);
     }
     if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {
@@ -95,7 +89,7 @@ function validateEmbedding(embedding: readonly number[]): void {
  */
 function escapeLikePattern(query: string): string {
   // DuckDBのLIKE: % と _ が特殊文字
-  return query.replace(/[%_\\]/g, "\\$&");
+  return query.replace(/[%_\\]/g, '\\$&');
 }
 
 /**
@@ -234,7 +228,7 @@ export async function textSearch(
   const normalizedLimit = normalizeLimit(limit);
 
   // スコープのプレースホルダー構築
-  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
   // LIKEパターンの特殊文字をエスケープ
   const escapedQuery = escapeLikePattern(query);
   const queryParam = `%${escapedQuery}%`;
@@ -304,18 +298,18 @@ export async function vectorSearch(
   const normalizedLimit = normalizeLimit(limit);
 
   // claim_vectorsが空の場合は空配列を返す
-  const countReader = await conn.runAndReadAll("SELECT COUNT(*) as cnt FROM claim_vectors");
+  const countReader = await conn.runAndReadAll('SELECT COUNT(*) as cnt FROM claim_vectors');
   const countRows = countReader.getRowObjects() as unknown as { cnt: number | bigint }[];
   if (!countRows[0] || Number(countRows[0].cnt) === 0) {
     return [];
   }
 
   // スコープのプレースホルダー構築
-  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
 
   // DuckDB Node APIは配列パラメータを直接サポートしないため、
   // 配列リテラル文字列として埋め込む（検証済みなので安全）
-  const embeddingLiteral = `[${[...queryEmbedding].join(",")}]`;
+  const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`;
 
   // cos_simマクロでベクトル類似度計算
   // TLA+ claimVecRelevant: cos_sim >= threshold で判定
@@ -429,7 +423,7 @@ async function getClaimStats(scopes: string[]): Promise<UtilityStats> {
   }
 
   const conn = await getConnection();
-  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
 
   const sql = `
     SELECT
@@ -461,7 +455,7 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
   }
 
   const conn = await getConnection();
-  const placeholders = claimIds.map((_, i) => `$${i + 1}`).join(",");
+  const placeholders = claimIds.map((_, i) => `$${i + 1}`).join(',');
 
   // recency計算にはrecency_anchorを使用（positive feedbackでのみ更新される）
   const sql = `
@@ -636,7 +630,7 @@ export async function hybridSearch(
   if (embeddingService) {
     const embedResult = await embeddingService.embed({
       text: query,
-      sensitivity: "internal",
+      sensitivity: 'internal',
     })();
 
     if (E.isRight(embedResult)) {
@@ -741,7 +735,7 @@ export async function hybridSearchWithScores(
   if (embeddingService) {
     const embedResult = await embeddingService.embed({
       text: query,
-      sensitivity: "internal",
+      sensitivity: 'internal',
     })();
 
     if (E.isRight(embedResult)) {
@@ -848,7 +842,8 @@ export async function hybridSearchPaginated(
   const results = filteredResults.slice(0, limit);
 
   // 次カーソル（最後のclaim_id）
-  const next_cursor = has_more && results.length > 0 ? results[results.length - 1]!.claim.id : undefined;
+  const next_cursor =
+    has_more && results.length > 0 ? results[results.length - 1]!.claim.id : undefined;
 
   return {
     results,
@@ -869,7 +864,7 @@ async function fallbackToTextOnly(scopes: string[], limit: number): Promise<Clai
   }
 
   const conn = await getConnection();
-  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
 
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
@@ -907,7 +902,7 @@ export async function saveClaimVector(
   const conn = await getConnection();
   // DuckDB Node APIは配列パラメータを直接サポートしないため、
   // 配列リテラル文字列として埋め込む（検証済みなので安全）
-  const embeddingLiteral = `[${embedding.join(",")}]`;
+  const embeddingLiteral = `[${embedding.join(',')}]`;
   await conn.run(
     `INSERT INTO claim_vectors (claim_id, embedding, model_version)
      VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)
@@ -926,7 +921,7 @@ export async function saveClaimVector(
 export async function getClaimVector(claimId: string): Promise<readonly number[] | undefined> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    "SELECT embedding FROM claim_vectors WHERE claim_id = $1",
+    'SELECT embedding FROM claim_vectors WHERE claim_id = $1',
     [claimId]
   );
   const rows = reader.getRowObjects();
@@ -936,7 +931,7 @@ export async function getClaimVector(claimId: string): Promise<readonly number[]
   }
 
   const row = rows[0] as Record<string, unknown>;
-  const embedding = row["embedding"];
+  const embedding = row['embedding'];
 
   if (embedding == null) {
     return undefined;
@@ -949,7 +944,7 @@ export async function getClaimVector(claimId: string): Promise<readonly number[]
 
   // DuckDB Node APIはDOUBLE[]配列をDuckDBListValueオブジェクトとして返す
   // DuckDBListValue: { items: number[] } 形式
-  if (typeof embedding === "object" && "items" in embedding) {
+  if (typeof embedding === 'object' && 'items' in embedding) {
     const listValue = embedding as { items: number[] };
     if (Array.isArray(listValue.items)) {
       return listValue.items;
@@ -971,5 +966,5 @@ export async function getClaimVector(claimId: string): Promise<readonly number[]
  */
 export async function deleteClaimVector(claimId: string): Promise<void> {
   const conn = await getConnection();
-  await conn.run("DELETE FROM claim_vectors WHERE claim_id = $1", [claimId]);
+  await conn.run('DELETE FROM claim_vectors WHERE claim_id = $1', [claimId]);
 }

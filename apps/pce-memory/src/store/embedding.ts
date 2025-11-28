@@ -5,12 +5,12 @@
  * pce-memory統合: インメモリキャッシュとDuckDB永続化を組み合わせ
  */
 
-import * as TE from "fp-ts/TaskEither";
-import { pipe } from "fp-ts/function";
-import { getConnection } from "../db/connection.js";
-import type { EmbeddingCache, CacheEntry } from "@pce/embeddings";
-import type { CacheError } from "@pce/embeddings";
-import { cacheReadError, cacheWriteError, CACHE_TTL_MS } from "@pce/embeddings";
+import * as TE from 'fp-ts/TaskEither';
+import { pipe } from 'fp-ts/function';
+import { getConnection } from '../db/connection.js';
+import type { EmbeddingCache, CacheEntry } from '@pce/embeddings';
+import type { CacheError } from '@pce/embeddings';
+import { cacheReadError, cacheWriteError, CACHE_TTL_MS } from '@pce/embeddings';
 
 /**
  * DuckDB永続化キャッシュ設定
@@ -39,8 +39,7 @@ export const createDuckDBCache = (config: DuckDBCacheConfig): EmbeddingCache => 
   /**
    * TTL期限切れチェック
    */
-  const isExpired = (createdAt: Date): boolean =>
-    Date.now() - createdAt.getTime() > ttlMs;
+  const isExpired = (createdAt: Date): boolean => Date.now() - createdAt.getTime() > ttlMs;
 
   return {
     get currentModelVersion() {
@@ -93,10 +92,7 @@ export const createDuckDBCache = (config: DuckDBCacheConfig): EmbeddingCache => 
         )
       ),
 
-    set: (
-      textHash: string,
-      embedding: readonly number[]
-    ): TE.TaskEither<CacheError, void> =>
+    set: (textHash: string, embedding: readonly number[]): TE.TaskEither<CacheError, void> =>
       pipe(
         TE.tryCatch(
           async () => {
@@ -121,10 +117,9 @@ export const createDuckDBCache = (config: DuckDBCacheConfig): EmbeddingCache => 
           async () => {
             const conn = await getConnection();
             // 現在のバージョンのエントリのみ削除（他バージョンは残す）
-            await conn.run(
-              `DELETE FROM embedding_cache WHERE model_version = $1`,
-              [currentModelVersion]
-            );
+            await conn.run(`DELETE FROM embedding_cache WHERE model_version = $1`, [
+              currentModelVersion,
+            ]);
           },
           (e) => cacheWriteError(e)
         )
@@ -139,10 +134,9 @@ export const createDuckDBCache = (config: DuckDBCacheConfig): EmbeddingCache => 
               // バージョン込みキー戦略により自動的にマッチしなくなるが、
               // ストレージ節約のため削除
               const conn = await getConnection();
-              await conn.run(
-                `DELETE FROM embedding_cache WHERE model_version = $1`,
-                [currentModelVersion]
-              );
+              await conn.run(`DELETE FROM embedding_cache WHERE model_version = $1`, [
+                currentModelVersion,
+              ]);
               currentModelVersion = newVersion;
             }
           },
@@ -155,10 +149,7 @@ export const createDuckDBCache = (config: DuckDBCacheConfig): EmbeddingCache => 
         TE.tryCatch(
           async () => {
             const conn = await getConnection();
-            await conn.run(
-              `DELETE FROM embedding_cache WHERE model_version = $1`,
-              [version]
-            );
+            await conn.run(`DELETE FROM embedding_cache WHERE model_version = $1`, [version]);
           },
           (e) => cacheWriteError(e)
         )
@@ -178,9 +169,7 @@ export interface CacheDBStats {
   readonly modelVersion: string;
 }
 
-export const getDuckDBCacheStats = async (
-  cache: EmbeddingCache
-): Promise<CacheDBStats> => {
+export const getDuckDBCacheStats = async (cache: EmbeddingCache): Promise<CacheDBStats> => {
   const conn = await getConnection();
 
   const currentReader = await conn.runAndReadAll(
@@ -191,9 +180,7 @@ export const getDuckDBCacheStats = async (
     cnt: number | bigint;
   }[];
 
-  const totalReader = await conn.runAndReadAll(
-    `SELECT COUNT(*) as cnt FROM embedding_cache`
-  );
+  const totalReader = await conn.runAndReadAll(`SELECT COUNT(*) as cnt FROM embedding_cache`);
   const totalRows = totalReader.getRowObjects() as unknown as {
     cnt: number | bigint;
   }[];

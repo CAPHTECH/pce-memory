@@ -18,13 +18,13 @@
 ### 0.2 依存ライブラリ
 
 ```typescript
-import * as E from 'fp-ts/Either'
-import * as TE from 'fp-ts/TaskEither'
-import * as RTE from 'fp-ts/ReaderTaskEither'
-import * as O from 'fp-ts/Option'
-import { pipe, flow } from 'fp-ts/function'
-import * as t from 'io-ts'
-import { Brand } from 'io-ts'
+import * as E from 'fp-ts/Either';
+import * as TE from 'fp-ts/TaskEither';
+import * as RTE from 'fp-ts/ReaderTaskEither';
+import * as O from 'fp-ts/Option';
+import { pipe, flow } from 'fp-ts/function';
+import * as t from 'io-ts';
+import { Brand } from 'io-ts';
 ```
 
 ---
@@ -36,144 +36,101 @@ import { Brand } from 'io-ts'
 ```typescript
 // ID types with runtime validation
 interface ClaimIdBrand {
-  readonly ClaimId: unique symbol
+  readonly ClaimId: unique symbol;
 }
-export type ClaimId = Brand<string, ClaimIdBrand>
+export type ClaimId = Brand<string, ClaimIdBrand>;
 
 interface ObservationIdBrand {
-  readonly ObservationId: unique symbol
+  readonly ObservationId: unique symbol;
 }
-export type ObservationId = Brand<string, ObservationIdBrand>
+export type ObservationId = Brand<string, ObservationIdBrand>;
 
 interface ActiveContextIdBrand {
-  readonly ActiveContextId: unique symbol
+  readonly ActiveContextId: unique symbol;
 }
-export type ActiveContextId = Brand<string, ActiveContextIdBrand>
+export type ActiveContextId = Brand<string, ActiveContextIdBrand>;
 
 interface EntityIdBrand {
-  readonly EntityId: unique symbol
+  readonly EntityId: unique symbol;
 }
-export type EntityId = Brand<string, EntityIdBrand>
+export type EntityId = Brand<string, EntityIdBrand>;
 
 interface RelationIdBrand {
-  readonly RelationId: unique symbol
+  readonly RelationId: unique symbol;
 }
-export type RelationId = Brand<string, RelationIdBrand>
+export type RelationId = Brand<string, RelationIdBrand>;
 
 interface PolicyVersionBrand {
-  readonly PolicyVersion: unique symbol
+  readonly PolicyVersion: unique symbol;
 }
-export type PolicyVersion = Brand<string, PolicyVersionBrand>
+export type PolicyVersion = Brand<string, PolicyVersionBrand>;
 
 interface EvidenceIdBrand {
-  readonly EvidenceId: unique symbol
+  readonly EvidenceId: unique symbol;
 }
-export type EvidenceId = Brand<string, EvidenceIdBrand>
+export type EvidenceId = Brand<string, EvidenceIdBrand>;
 
 interface FeedbackIdBrand {
-  readonly FeedbackId: unique symbol
+  readonly FeedbackId: unique symbol;
 }
-export type FeedbackId = Brand<string, FeedbackIdBrand>
+export type FeedbackId = Brand<string, FeedbackIdBrand>;
 
 // SemVer validation regex
-const semverRegex = /^\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/
+const semverRegex =
+  /^\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
 
 // ID constructors with validation (returning CoreError)
 export const ClaimId = {
-  codec: t.brand(
-    t.string,
-    (s): s is ClaimId => s.startsWith('clm_'),
-    'ClaimId'
-  ),
+  codec: t.brand(t.string, (s): s is ClaimId => s.startsWith('clm_'), 'ClaimId'),
   make: (s: string): E.Either<PCEError, ClaimId> =>
-    s.startsWith('clm_')
-      ? E.right(s as ClaimId)
-      : E.left(CoreError.invalidId('ClaimId', s))
-}
+    s.startsWith('clm_') ? E.right(s as ClaimId) : E.left(CoreError.invalidId('ClaimId', s)),
+};
 
 export const ObservationId = {
-  codec: t.brand(
-    t.string,
-    (s): s is ObservationId => s.startsWith('obs_'),
-    'ObservationId'
-  ),
+  codec: t.brand(t.string, (s): s is ObservationId => s.startsWith('obs_'), 'ObservationId'),
   make: (s: string): E.Either<PCEError, ObservationId> =>
     s.startsWith('obs_')
       ? E.right(s as ObservationId)
-      : E.left(CoreError.invalidId('ObservationId', s))
-}
+      : E.left(CoreError.invalidId('ObservationId', s)),
+};
 
 export const ActiveContextId = {
-  codec: t.brand(
-    t.string,
-    (s): s is ActiveContextId => s.startsWith('ac_'),
-    'ActiveContextId'
-  ),
+  codec: t.brand(t.string, (s): s is ActiveContextId => s.startsWith('ac_'), 'ActiveContextId'),
   make: (s: string): E.Either<PCEError, ActiveContextId> =>
     s.startsWith('ac_')
       ? E.right(s as ActiveContextId)
-      : E.left(CoreError.invalidId('ActiveContextId', s))
-}
+      : E.left(CoreError.invalidId('ActiveContextId', s)),
+};
 
 export const EntityId = {
-  codec: t.brand(
-    t.string,
-    (s): s is EntityId => s.startsWith('ent_'),
-    'EntityId'
-  ),
+  codec: t.brand(t.string, (s): s is EntityId => s.startsWith('ent_'), 'EntityId'),
   make: (s: string): E.Either<PCEError, EntityId> =>
-    s.startsWith('ent_')
-      ? E.right(s as EntityId)
-      : E.left(CoreError.invalidId('EntityId', s))
-}
+    s.startsWith('ent_') ? E.right(s as EntityId) : E.left(CoreError.invalidId('EntityId', s)),
+};
 
 export const RelationId = {
-  codec: t.brand(
-    t.string,
-    (s): s is RelationId => s.startsWith('rel_'),
-    'RelationId'
-  ),
+  codec: t.brand(t.string, (s): s is RelationId => s.startsWith('rel_'), 'RelationId'),
   make: (s: string): E.Either<PCEError, RelationId> =>
-    s.startsWith('rel_')
-      ? E.right(s as RelationId)
-      : E.left(CoreError.invalidId('RelationId', s))
-}
+    s.startsWith('rel_') ? E.right(s as RelationId) : E.left(CoreError.invalidId('RelationId', s)),
+};
 
 export const EvidenceId = {
-  codec: t.brand(
-    t.string,
-    (s): s is EvidenceId => s.startsWith('evd_'),
-    'EvidenceId'
-  ),
+  codec: t.brand(t.string, (s): s is EvidenceId => s.startsWith('evd_'), 'EvidenceId'),
   make: (s: string): E.Either<PCEError, EvidenceId> =>
-    s.startsWith('evd_')
-      ? E.right(s as EvidenceId)
-      : E.left(CoreError.invalidId('EvidenceId', s))
-}
+    s.startsWith('evd_') ? E.right(s as EvidenceId) : E.left(CoreError.invalidId('EvidenceId', s)),
+};
 
 export const FeedbackId = {
-  codec: t.brand(
-    t.string,
-    (s): s is FeedbackId => s.startsWith('fb_'),
-    'FeedbackId'
-  ),
+  codec: t.brand(t.string, (s): s is FeedbackId => s.startsWith('fb_'), 'FeedbackId'),
   make: (s: string): E.Either<PCEError, FeedbackId> =>
-    s.startsWith('fb_')
-      ? E.right(s as FeedbackId)
-      : E.left(CoreError.invalidId('FeedbackId', s))
-}
+    s.startsWith('fb_') ? E.right(s as FeedbackId) : E.left(CoreError.invalidId('FeedbackId', s)),
+};
 
 export const PolicyVersion = {
-  codec: t.brand(
-    t.string,
-    (s): s is PolicyVersion => semverRegex.test(s),
-    'PolicyVersion'
-  ),
+  codec: t.brand(t.string, (s): s is PolicyVersion => semverRegex.test(s), 'PolicyVersion'),
   make: (s: string): E.Either<PCEError, PolicyVersion> =>
-    semverRegex.test(s)
-      ? E.right(s as PolicyVersion)
-      : E.left(CoreError.invalidPolicyVersion(s))
-}
+    semverRegex.test(s) ? E.right(s as PolicyVersion) : E.left(CoreError.invalidPolicyVersion(s)),
+};
 ```
 
 ### 1.2 Enums (列挙型)
@@ -184,26 +141,26 @@ export const ClaimKind = t.keyof({
   fact: null,
   preference: null,
   task: null,
-  policy_hint: null
-})
-export type ClaimKind = t.TypeOf<typeof ClaimKind>
+  policy_hint: null,
+});
+export type ClaimKind = t.TypeOf<typeof ClaimKind>;
 
 // Scope (PCE の Pace Layering に対応)
 export const Scope = t.keyof({
-  session: null,    // micro - fast (秒〜日)
-  project: null,    // meso - medium (週〜月)
-  principle: null   // macro - slow (年〜十年)
-})
-export type Scope = t.TypeOf<typeof Scope>
+  session: null, // micro - fast (秒〜日)
+  project: null, // meso - medium (週〜月)
+  principle: null, // macro - slow (年〜十年)
+});
+export type Scope = t.TypeOf<typeof Scope>;
 
 // Boundary class (機密性分類)
 export const BoundaryClass = t.keyof({
   public: null,
   internal: null,
   pii: null,
-  secret: null
-})
-export type BoundaryClass = t.TypeOf<typeof BoundaryClass>
+  secret: null,
+});
+export type BoundaryClass = t.TypeOf<typeof BoundaryClass>;
 
 // Observation source type
 export const SourceType = t.keyof({
@@ -211,18 +168,18 @@ export const SourceType = t.keyof({
   tool: null,
   file: null,
   http: null,
-  system: null
-})
-export type SourceType = t.TypeOf<typeof SourceType>
+  system: null,
+});
+export type SourceType = t.TypeOf<typeof SourceType>;
 
 // Feedback signal
 export const FeedbackSignal = t.keyof({
   helpful: null,
   harmful: null,
   outdated: null,
-  duplicate: null
-})
-export type FeedbackSignal = t.TypeOf<typeof FeedbackSignal>
+  duplicate: null,
+});
+export type FeedbackSignal = t.TypeOf<typeof FeedbackSignal>;
 
 // Entity type (ANT vocabulary)
 export const EntityType = t.keyof({
@@ -230,9 +187,9 @@ export const EntityType = t.keyof({
   Artifact: null,
   Event: null,
   Concept: null,
-  Policy: null
-})
-export type EntityType = t.TypeOf<typeof EntityType>
+  Policy: null,
+});
+export type EntityType = t.TypeOf<typeof EntityType>;
 ```
 
 ### 1.3 Core Domain Types
@@ -240,22 +197,22 @@ export type EntityType = t.TypeOf<typeof EntityType>
 ```typescript
 // Provenance (由来・トレーサビリティ)
 export const Provenance = t.type({
-  at: t.string,  // ISO 8601 timestamp
+  at: t.string, // ISO 8601 timestamp
   actor: t.union([t.string, t.undefined]),
   git: t.union([
     t.type({
       commit: t.string,
       repo: t.string,
       url: t.union([t.string, t.undefined]),
-      files: t.union([t.array(t.string), t.undefined])
+      files: t.union([t.array(t.string), t.undefined]),
     }),
-    t.undefined
+    t.undefined,
   ]),
   url: t.union([t.string, t.undefined]),
   note: t.union([t.string, t.undefined]),
-  signed: t.union([t.boolean, t.undefined])
-})
-export type Provenance = t.TypeOf<typeof Provenance>
+  signed: t.union([t.boolean, t.undefined]),
+});
+export type Provenance = t.TypeOf<typeof Provenance>;
 
 // Observation (生観測)
 export const Observation = t.type({
@@ -265,9 +222,9 @@ export const Observation = t.type({
   content: t.string,
   actor: t.union([t.string, t.undefined]),
   tags: t.union([t.array(t.string), t.undefined]),
-  created_at: t.number  // UNIX epoch seconds (DuckDB TIMESTAMP 互換)
-})
-export type Observation = t.TypeOf<typeof Observation>
+  created_at: t.number, // UNIX epoch seconds (DuckDB TIMESTAMP 互換)
+});
+export type Observation = t.TypeOf<typeof Observation>;
 
 // Claim (抽出主張・検索対象)
 export const Claim = t.type({
@@ -276,16 +233,16 @@ export const Claim = t.type({
   kind: ClaimKind,
   scope: Scope,
   boundary_class: BoundaryClass,
-  origin_observation_id: ObservationId.codec,  // REQUIRED for Provenance
-  quality: t.number,      // [0.0, 1.0]
-  confidence: t.number,   // [0.0, 1.0]
-  utility: t.number,      // [-∞, +∞] (z-score or normalized)
-  recency: t.number,      // [0.0, 1.0] (computed from ts)
-  content_hash: t.union([t.string, t.undefined]),  // sha256:hex64
-  created_at: t.number,   // UNIX epoch seconds
-  updated_at: t.number    // UNIX epoch seconds
-})
-export type Claim = t.TypeOf<typeof Claim>
+  origin_observation_id: ObservationId.codec, // REQUIRED for Provenance
+  quality: t.number, // [0.0, 1.0]
+  confidence: t.number, // [0.0, 1.0]
+  utility: t.number, // [-∞, +∞] (z-score or normalized)
+  recency: t.number, // [0.0, 1.0] (computed from ts)
+  content_hash: t.union([t.string, t.undefined]), // sha256:hex64
+  created_at: t.number, // UNIX epoch seconds
+  updated_at: t.number, // UNIX epoch seconds
+});
+export type Claim = t.TypeOf<typeof Claim>;
 
 // DerivedClaim (派生主張 - Provenanceが間接的な場合)
 export const DerivedClaim = t.type({
@@ -295,57 +252,57 @@ export const DerivedClaim = t.type({
   scope: Scope,
   boundary_class: BoundaryClass,
   origin_observation_id: t.union([ObservationId.codec, t.undefined]),
-  derived_from: t.array(ClaimId.codec),  // Track derivation chain
+  derived_from: t.array(ClaimId.codec), // Track derivation chain
   quality: t.number,
   confidence: t.number,
   utility: t.number,
   recency: t.number,
   content_hash: t.union([t.string, t.undefined]),
   created_at: t.number,
-  updated_at: t.number
-})
-export type DerivedClaim = t.TypeOf<typeof DerivedClaim>
+  updated_at: t.number,
+});
+export type DerivedClaim = t.TypeOf<typeof DerivedClaim>;
 
 // Evidence (由来鎖)
 export const Evidence = t.type({
-  id: EvidenceId.codec,  // Branded type
+  id: EvidenceId.codec, // Branded type
   claim_id: ClaimId.codec,
   observation_id: t.union([ObservationId.codec, t.undefined]),
   method: t.keyof({ rule: null, llm: null, manual: null }),
-  note: t.union([t.string, t.undefined])
-})
-export type Evidence = t.TypeOf<typeof Evidence>
+  note: t.union([t.string, t.undefined]),
+});
+export type Evidence = t.TypeOf<typeof Evidence>;
 
 // Entity (グラフノード)
 export const Entity = t.type({
-  id: EntityId.codec,  // Branded type
+  id: EntityId.codec, // Branded type
   type: EntityType,
   name: t.string,
   canonical_key: t.union([t.string, t.undefined]),
-  attrs: t.union([t.record(t.string, t.unknown), t.undefined])
-})
-export type Entity = t.TypeOf<typeof Entity>
+  attrs: t.union([t.record(t.string, t.unknown), t.undefined]),
+});
+export type Entity = t.TypeOf<typeof Entity>;
 
 // Relation (グラフエッジ)
 export const Relation = t.type({
-  id: RelationId.codec,     // Branded type
-  src_id: EntityId.codec,   // Branded type
-  dst_id: EntityId.codec,   // Branded type
-  type: t.string,           // created|mentions|assigned_to|depends_on|...
+  id: RelationId.codec, // Branded type
+  src_id: EntityId.codec, // Branded type
+  dst_id: EntityId.codec, // Branded type
+  type: t.string, // created|mentions|assigned_to|depends_on|...
   props: t.union([t.record(t.string, t.unknown), t.undefined]),
-  evidence_claim_id: t.union([ClaimId.codec, t.undefined])
-})
-export type Relation = t.TypeOf<typeof Relation>
+  evidence_claim_id: t.union([ClaimId.codec, t.undefined]),
+});
+export type Relation = t.TypeOf<typeof Relation>;
 
 // Feedback (Critic 入力)
 export const Feedback = t.type({
-  id: FeedbackId.codec,  // Branded type
+  id: FeedbackId.codec, // Branded type
   claim_id: ClaimId.codec,
-  ts: t.number,  // UNIX epoch seconds
+  ts: t.number, // UNIX epoch seconds
   signal: FeedbackSignal,
-  score: t.union([t.number, t.undefined])  // [-1.0, 1.0]
-})
-export type Feedback = t.TypeOf<typeof Feedback>
+  score: t.union([t.number, t.undefined]), // [-1.0, 1.0]
+});
+export type Feedback = t.TypeOf<typeof Feedback>;
 
 // Active Context (短期・使い捨て)
 export const ActiveContext = t.type({
@@ -353,19 +310,19 @@ export const ActiveContext = t.type({
   window: t.union([t.string, t.undefined]),
   scope: Scope,
   provenance: t.union([t.array(Provenance), t.undefined]),
-  expires_at: t.number,  // UNIX epoch seconds
-  policy_version: PolicyVersion.codec  // Branded type
-})
-export type ActiveContext = t.TypeOf<typeof ActiveContext>
+  expires_at: t.number, // UNIX epoch seconds
+  policy_version: PolicyVersion.codec, // Branded type
+});
+export type ActiveContext = t.TypeOf<typeof ActiveContext>;
 
 // Active Context Item (AC に含まれる Claim)
 export const ActiveContextItem = t.type({
   ac_id: ActiveContextId.codec,
   claim_id: ClaimId.codec,
   rank: t.number,
-  score: t.union([t.number, t.undefined])
-})
-export type ActiveContextItem = t.TypeOf<typeof ActiveContextItem>
+  score: t.union([t.number, t.undefined]),
+});
+export type ActiveContextItem = t.TypeOf<typeof ActiveContextItem>;
 ```
 
 ### 1.4 Boundary & Policy Types
@@ -375,53 +332,73 @@ export type ActiveContextItem = t.TypeOf<typeof ActiveContextItem>
 export const InvariantDefinition = t.type({
   name: t.string,
   applies_to: t.array(t.string),
-  rule: t.string
-})
-export type InvariantDefinition = t.TypeOf<typeof InvariantDefinition>
+  rule: t.string,
+});
+export type InvariantDefinition = t.TypeOf<typeof InvariantDefinition>;
 
 // Boundary (境界)
 export const Boundary = t.type({
   scope: t.array(Scope),
-  allow: t.array(t.string),  // allow tags: "answer:task", "tool:*" など
+  allow: t.array(t.string), // allow tags: "answer:task", "tool:*" など
   boundary_classes: t.array(BoundaryClass),
-  invariants: t.array(InvariantDefinition)
-})
-export type Boundary = t.TypeOf<typeof Boundary>
+  invariants: t.array(InvariantDefinition),
+});
+export type Boundary = t.TypeOf<typeof Boundary>;
 
 // Policy (運用ポリシー - YAML からロード)
 export const Policy = t.type({
-  version: PolicyVersion.codec,  // Branded SemVer
-  scopes: t.record(t.string, t.type({
-    ttl: t.string,
-    max_tokens: t.union([t.number, t.undefined])
-  })),
-  boundary_classes: t.record(t.string, t.type({
-    allow: t.array(t.string),
-    redact: t.union([t.array(t.string), t.undefined]),
-    escalation: t.union([t.string, t.undefined])
-  })),
-  invariants: t.union([t.array(t.type({
-    name: t.string,
-    applies_to: t.array(t.string),
-    rule: t.string
-  })), t.undefined]),
-  retrieval: t.union([t.type({
-    hybrid: t.type({
-      alpha: t.number,       // [0.0, 1.0]
-      k_txt: t.number,
-      k_vec: t.number,
-      k_final: t.number
+  version: PolicyVersion.codec, // Branded SemVer
+  scopes: t.record(
+    t.string,
+    t.type({
+      ttl: t.string,
+      max_tokens: t.union([t.number, t.undefined]),
+    })
+  ),
+  boundary_classes: t.record(
+    t.string,
+    t.type({
+      allow: t.array(t.string),
+      redact: t.union([t.array(t.string), t.undefined]),
+      escalation: t.union([t.string, t.undefined]),
+    })
+  ),
+  invariants: t.union([
+    t.array(
+      t.type({
+        name: t.string,
+        applies_to: t.array(t.string),
+        rule: t.string,
+      })
+    ),
+    t.undefined,
+  ]),
+  retrieval: t.union([
+    t.type({
+      hybrid: t.type({
+        alpha: t.number, // [0.0, 1.0]
+        k_txt: t.number,
+        k_vec: t.number,
+        k_final: t.number,
+      }),
+      rerank: t.union([
+        t.type({
+          use_quality: t.boolean,
+          recency_half_life_days: t.number,
+          recency: t.union([
+            t.type({
+              half_life_days_by_kind: t.record(t.string, t.number),
+            }),
+            t.undefined,
+          ]),
+        }),
+        t.undefined,
+      ]),
     }),
-    rerank: t.union([t.type({
-      use_quality: t.boolean,
-      recency_half_life_days: t.number,
-      recency: t.union([t.type({
-        half_life_days_by_kind: t.record(t.string, t.number)
-      }), t.undefined])
-    }), t.undefined])
-  }), t.undefined])
-})
-export type Policy = t.TypeOf<typeof Policy>
+    t.undefined,
+  ]),
+});
+export type Policy = t.TypeOf<typeof Policy>;
 ```
 
 ---
@@ -433,81 +410,81 @@ export type Policy = t.TypeOf<typeof Policy>
 ```typescript
 // Base error interface
 export interface PCEError {
-  readonly _tag: string
-  readonly message: string
-  readonly details?: Record<string, unknown>
+  readonly _tag: string;
+  readonly message: string;
+  readonly details?: Record<string, unknown>;
 }
 
 // Boundary errors
 export interface BoundaryDeniedError extends PCEError {
-  readonly _tag: 'BoundaryDeniedError'
-  readonly boundary: Boundary
-  readonly reason: string
+  readonly _tag: 'BoundaryDeniedError';
+  readonly boundary: Boundary;
+  readonly reason: string;
 }
 
 export interface InvalidScopeError extends PCEError {
-  readonly _tag: 'InvalidScopeError'
-  readonly provided: string
-  readonly allowed: Scope[]
+  readonly _tag: 'InvalidScopeError';
+  readonly provided: string;
+  readonly allowed: Scope[];
 }
 
 export interface PolicyMissingError extends PCEError {
-  readonly _tag: 'PolicyMissingError'
-  readonly policy_version?: string
+  readonly _tag: 'PolicyMissingError';
+  readonly policy_version?: string;
 }
 
 export interface InvalidPolicyError extends PCEError {
-  readonly _tag: 'InvalidPolicyError'
-  readonly validation_errors: string[]
+  readonly _tag: 'InvalidPolicyError';
+  readonly validation_errors: string[];
 }
 
 // Data errors
 export interface DuplicateClaimError extends PCEError {
-  readonly _tag: 'DuplicateClaimError'
-  readonly content_hash: string
-  readonly existing_id: ClaimId
+  readonly _tag: 'DuplicateClaimError';
+  readonly content_hash: string;
+  readonly existing_id: ClaimId;
 }
 
 export interface UnknownClaimError extends PCEError {
-  readonly _tag: 'UnknownClaimError'
-  readonly claim_id: ClaimId
+  readonly _tag: 'UnknownClaimError';
+  readonly claim_id: ClaimId;
 }
 
 export interface InvalidBoundaryError extends PCEError {
-  readonly _tag: 'InvalidBoundaryError'
-  readonly reason: string
+  readonly _tag: 'InvalidBoundaryError';
+  readonly reason: string;
 }
 
 // ID validation errors
 export interface InvalidIdError extends PCEError {
-  readonly _tag: 'InvalidIdError'
-  readonly id_type: string
-  readonly provided: string
+  readonly _tag: 'InvalidIdError';
+  readonly id_type: string;
+  readonly provided: string;
 }
 
 export interface InvalidPolicyVersionError extends PCEError {
-  readonly _tag: 'InvalidPolicyVersionError'
-  readonly provided: string
+  readonly _tag: 'InvalidPolicyVersionError';
+  readonly provided: string;
 }
 
 // Search errors
 export interface SearchFailedError extends PCEError {
-  readonly _tag: 'SearchFailedError'
-  readonly query: string
-  readonly reason: string
+  readonly _tag: 'SearchFailedError';
+  readonly query: string;
+  readonly reason: string;
 }
 
 export interface EmbeddingFailedError extends PCEError {
-  readonly _tag: 'EmbeddingFailedError'
-  readonly text: string
-  readonly provider: string
+  readonly _tag: 'EmbeddingFailedError';
+  readonly text: string;
+  readonly provider: string;
 }
 
 // Database errors
 export interface DatabaseError extends PCEError {
-  readonly _tag: 'DatabaseError'
-  readonly operation: string
-  readonly sql?: string
+  readonly _tag: 'DatabaseError';
+  readonly operation: string;
+  readonly sql?: string;
 }
 
 // Union type for all errors
@@ -523,7 +500,7 @@ export type CoreError =
   | InvalidPolicyVersionError
   | SearchFailedError
   | EmbeddingFailedError
-  | DatabaseError
+  | DatabaseError;
 
 // Error constructors
 export const CoreError = {
@@ -531,83 +508,81 @@ export const CoreError = {
     _tag: 'BoundaryDeniedError',
     message: `Boundary denied: ${reason}`,
     boundary,
-    reason
+    reason,
   }),
 
   invalidScope: (provided: string, allowed: Scope[]): InvalidScopeError => ({
     _tag: 'InvalidScopeError',
     message: `Invalid scope: ${provided}. Allowed: ${allowed.join(', ')}`,
     provided,
-    allowed
+    allowed,
   }),
 
   policyMissing: (policy_version?: string): PolicyMissingError => ({
     _tag: 'PolicyMissingError',
-    message: policy_version
-      ? `Policy ${policy_version} not loaded`
-      : 'No policy loaded',
-    policy_version
+    message: policy_version ? `Policy ${policy_version} not loaded` : 'No policy loaded',
+    policy_version,
   }),
 
   duplicateClaim: (content_hash: string, existing_id: ClaimId): DuplicateClaimError => ({
     _tag: 'DuplicateClaimError',
     message: `Duplicate claim with hash ${content_hash}`,
     content_hash,
-    existing_id
+    existing_id,
   }),
 
   unknownClaim: (claim_id: ClaimId): UnknownClaimError => ({
     _tag: 'UnknownClaimError',
     message: `Claim ${claim_id} not found`,
-    claim_id
+    claim_id,
   }),
 
   searchFailed: (query: string, reason: string): SearchFailedError => ({
     _tag: 'SearchFailedError',
     message: `Search failed: ${reason}`,
     query,
-    reason
+    reason,
   }),
 
   embeddingFailed: (text: string, provider: string): EmbeddingFailedError => ({
     _tag: 'EmbeddingFailedError',
     message: `Embedding failed for provider ${provider}`,
     text,
-    provider
+    provider,
   }),
 
   database: (operation: string, sql?: string): DatabaseError => ({
     _tag: 'DatabaseError',
     message: `Database error during ${operation}`,
     operation,
-    sql
+    sql,
   }),
 
   invalidId: (id_type: string, provided: string): InvalidIdError => ({
     _tag: 'InvalidIdError',
     message: `Invalid ${id_type}: ${provided}`,
     id_type,
-    provided
+    provided,
   }),
 
   invalidPolicyVersion: (provided: string): InvalidPolicyVersionError => ({
     _tag: 'InvalidPolicyVersionError',
     message: `Invalid policy version: ${provided}. Must be valid SemVer`,
-    provided
+    provided,
   }),
 
   invalidPolicy: (validation_errors: string[]): InvalidPolicyError => ({
     _tag: 'InvalidPolicyError',
     message: `Invalid policy: ${validation_errors.join(', ')}`,
-    validation_errors
+    validation_errors,
   }),
 
   invalidBoundary: (reason: string): InvalidBoundaryError => ({
     _tag: 'InvalidBoundaryError',
     message: `Invalid boundary: ${reason}`,
-    reason
-  })
-}
+    reason,
+  }),
+};
 ```
 
 ---
@@ -619,51 +594,51 @@ export const CoreError = {
 ```typescript
 // Database connection interface
 export interface Database {
-  readonly query: <T>(sql: string, params?: unknown[]) => TE.TaskEither<DatabaseError, T[]>
-  readonly execute: (sql: string, params?: unknown[]) => TE.TaskEither<DatabaseError, void>
-  readonly transaction: <T>(fn: () => TE.TaskEither<CoreError, T>) => TE.TaskEither<CoreError, T>
+  readonly query: <T>(sql: string, params?: unknown[]) => TE.TaskEither<DatabaseError, T[]>;
+  readonly execute: (sql: string, params?: unknown[]) => TE.TaskEither<DatabaseError, void>;
+  readonly transaction: <T>(fn: () => TE.TaskEither<CoreError, T>) => TE.TaskEither<CoreError, T>;
 }
 
 // Embedding provider interface
 export interface EmbeddingProvider {
-  readonly embed: (text: string) => TE.TaskEither<EmbeddingFailedError, number[]>
-  readonly embedBatch: (texts: string[]) => TE.TaskEither<EmbeddingFailedError, number[][]>
+  readonly embed: (text: string) => TE.TaskEither<EmbeddingFailedError, number[]>;
+  readonly embedBatch: (texts: string[]) => TE.TaskEither<EmbeddingFailedError, number[][]>;
 }
 
 // Policy store interface
 export interface PolicyStore {
-  readonly getCurrent: () => TE.TaskEither<PolicyMissingError, Policy>
-  readonly getVersion: (version: PolicyVersion) => TE.TaskEither<PolicyMissingError, Policy>
-  readonly apply: (yaml: string) => TE.TaskEither<InvalidPolicyError, PolicyVersion>
+  readonly getCurrent: () => TE.TaskEither<PolicyMissingError, Policy>;
+  readonly getVersion: (version: PolicyVersion) => TE.TaskEither<PolicyMissingError, Policy>;
+  readonly apply: (yaml: string) => TE.TaskEither<InvalidPolicyError, PolicyVersion>;
 }
 
 // Boundary invariant runtime evaluator
 export interface BoundaryInvariant {
-  readonly name: string
-  readonly appliesTo: Scope[]
-  readonly evaluate: (claims: Claim[]) => TE.TaskEither<CoreError, boolean>
+  readonly name: string;
+  readonly appliesTo: Scope[];
+  readonly evaluate: (claims: Claim[]) => TE.TaskEither<CoreError, boolean>;
 }
 
 export interface InvariantEvaluator {
-  readonly compile: (def: InvariantDefinition) => E.Either<CoreError, BoundaryInvariant>
+  readonly compile: (def: InvariantDefinition) => E.Either<CoreError, BoundaryInvariant>;
   readonly evaluateAll: (
     invariants: BoundaryInvariant[],
     claims: Claim[]
-  ) => TE.TaskEither<CoreError, boolean>
+  ) => TE.TaskEither<CoreError, boolean>;
 }
 
 // Core module dependencies
 export interface CoreDeps {
-  readonly db: Database
-  readonly embedding: EmbeddingProvider
-  readonly policyStore: PolicyStore
-  readonly invariantEvaluator: InvariantEvaluator
+  readonly db: Database;
+  readonly embedding: EmbeddingProvider;
+  readonly policyStore: PolicyStore;
+  readonly invariantEvaluator: InvariantEvaluator;
 }
 ```
 
 ### 3.2 Extractor (Observation → Claim[])
 
-```typescript
+````typescript
 /**
  * Extractor: Observation から Claim を抽出する
  *
@@ -688,25 +663,25 @@ export interface CoreDeps {
 export type Extractor = (
   observation: Observation,
   boundary: Boundary
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, Claim[]>
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, Claim[]>;
 
 // Extractor helper types
 export interface ExtractionResult {
-  readonly claims: Claim[]
-  readonly evidences: Evidence[]
-  readonly entities: Entity[]
-  readonly relations: Relation[]
+  readonly claims: Claim[];
+  readonly evidences: Evidence[];
+  readonly entities: Entity[];
+  readonly relations: Relation[];
 }
 
 export type ExtractorWithGraph = (
   observation: Observation,
   boundary: Boundary
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, ExtractionResult>
-```
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, ExtractionResult>;
+````
 
 ### 3.3 Integrator (Claim[] → LCP 統合)
 
-```typescript
+````typescript
 /**
  * Integrator: Claim を LCP (Latent Context Pool) に統合する
  *
@@ -733,13 +708,13 @@ export type Integrator = (
   claims: Claim[],
   boundary: Boundary,
   policy: Policy
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, void>
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, void>;
 
 // Integration options
 export interface IntegrationOptions {
-  readonly merge_strategy: 'replace' | 'merge' | 'keep_newest'
-  readonly validate_invariants: boolean
-  readonly update_graph: boolean
+  readonly merge_strategy: 'replace' | 'merge' | 'keep_newest';
+  readonly validate_invariants: boolean;
+  readonly update_graph: boolean;
 }
 
 export type IntegratorWithOptions = (
@@ -747,56 +722,57 @@ export type IntegratorWithOptions = (
   boundary: Boundary,
   policy: Policy,
   options: IntegrationOptions
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, void>
-```
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, void>;
+````
 
 ### 3.4 Retriever (r function: Query → AC)
 
-```typescript
+````typescript
 /**
  * Query for retrieval
  */
 export interface Query {
-  readonly q: string                    // テキストクエリ
-  readonly scope?: Scope[]              // 検索対象スコープ
-  readonly allow?: string[]             // allow tags
-  readonly top_k?: number               // 最終結果数（既定 12）
-  readonly include_meta?: boolean       // スコア詳細を含めるか
+  readonly q: string; // テキストクエリ
+  readonly scope?: Scope[]; // 検索対象スコープ
+  readonly allow?: string[]; // allow tags
+  readonly top_k?: number; // 最終結果数（既定 12）
+  readonly include_meta?: boolean; // スコア詳細を含めるか
 }
 
 /**
  * Scored claim with ranking details
  */
 export interface ScoredClaim {
-  readonly claim: Claim
-  readonly score: number                // 最終スコア (S * g)
-  readonly scores?: {                   // スコア内訳（include_meta=true 時）
-    readonly text: number               // S_text
-    readonly vector: number             // S_vec
-    readonly combined: number           // S = α*S_vec + (1-α)*S_text
-    readonly utility: number
-    readonly confidence: number
-    readonly quality: number
-    readonly recency: number
-    readonly g: number                  // 再ランク係数
-  }
-  readonly evidences: Evidence[]
-  readonly reason?: string              // ランク根拠（デバッグ用）
+  readonly claim: Claim;
+  readonly score: number; // 最終スコア (S * g)
+  readonly scores?: {
+    // スコア内訳（include_meta=true 時）
+    readonly text: number; // S_text
+    readonly vector: number; // S_vec
+    readonly combined: number; // S = α*S_vec + (1-α)*S_text
+    readonly utility: number;
+    readonly confidence: number;
+    readonly quality: number;
+    readonly recency: number;
+    readonly g: number; // 再ランク係数
+  };
+  readonly evidences: Evidence[];
+  readonly reason?: string; // ランク根拠（デバッグ用）
 }
 
 /**
  * Active Context result
  */
 export interface ActivationResult {
-  readonly active_context: ActiveContext
-  readonly items: ScoredClaim[]
+  readonly active_context: ActiveContext;
+  readonly items: ScoredClaim[];
   readonly scoring_params: {
-    readonly alpha: number
-    readonly k_txt: number
-    readonly k_vec: number
-    readonly k_final: number
-    readonly recency_half_life_days: number
-  }
+    readonly alpha: number;
+    readonly k_txt: number;
+    readonly k_vec: number;
+    readonly k_final: number;
+    readonly recency_half_life_days: number;
+  };
 }
 
 /**
@@ -826,7 +802,7 @@ export type Retriever = (
   query: Query,
   boundary: Boundary,
   policy: Policy
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, ActivationResult>
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, ActivationResult>;
 
 // Search function (internal to Retriever)
 // Returns CoreError for consistent error handling in pipe composition
@@ -834,27 +810,27 @@ export type SearchFunction = (
   query: string,
   scope: Scope[],
   k: number
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, ScoredClaim[]>
-```
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, ScoredClaim[]>;
+````
 
 ### 3.5 Critic (Feedback → 指標更新)
 
-```typescript
+````typescript
 /**
  * Critic update result
  */
 export interface CriticUpdateResult {
-  readonly claim_id: ClaimId
+  readonly claim_id: ClaimId;
   readonly previous: {
-    readonly utility: number
-    readonly confidence: number
-    readonly recency: number
-  }
+    readonly utility: number;
+    readonly confidence: number;
+    readonly recency: number;
+  };
   readonly updated: {
-    readonly utility: number
-    readonly confidence: number
-    readonly recency: number
-  }
+    readonly utility: number;
+    readonly confidence: number;
+    readonly recency: number;
+  };
 }
 
 /**
@@ -884,19 +860,17 @@ export interface CriticUpdateResult {
 export type Critic = (
   feedback: Feedback,
   policy: Policy
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, CriticUpdateResult>
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, CriticUpdateResult>;
 
 // Batch critic for multiple feedbacks
 export type BatchCritic = (
   feedbacks: Feedback[],
   policy: Policy
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, CriticUpdateResult[]>
+) => RTE.ReaderTaskEither<CoreDeps, CoreError, CriticUpdateResult[]>;
 
 // Decay function (定期実行)
-export type DecayFunction = (
-  policy: Policy
-) => RTE.ReaderTaskEither<CoreDeps, CoreError, void>
-```
+export type DecayFunction = (policy: Policy) => RTE.ReaderTaskEither<CoreDeps, CoreError, void>;
+````
 
 ---
 
@@ -909,10 +883,10 @@ export type DecayFunction = (
  * Boundary validation result
  */
 export interface BoundaryValidationResult {
-  readonly allowed: boolean
-  readonly reason?: string
-  readonly redacted?: string
-  readonly policy_version: PolicyVersion
+  readonly allowed: boolean;
+  readonly reason?: string;
+  readonly redacted?: string;
+  readonly policy_version: PolicyVersion;
 }
 
 /**
@@ -922,7 +896,7 @@ export type BoundaryValidator = (
   payload: string,
   boundary: Boundary,
   policy: Policy
-) => TE.TaskEither<BoundaryDeniedError, BoundaryValidationResult>
+) => TE.TaskEither<BoundaryDeniedError, BoundaryValidationResult>;
 ```
 
 ### 4.2 Content Hash
@@ -937,7 +911,7 @@ export type BoundaryValidator = (
  * - Trim leading/trailing whitespace
  * - Compress consecutive whitespace
  */
-export type ContentHasher = (text: string) => string
+export type ContentHasher = (text: string) => string;
 ```
 
 ### 4.3 Scoring Functions
@@ -946,42 +920,32 @@ export type ContentHasher = (text: string) => string
 /**
  * Normalize text score
  */
-export type TextScoreNormalizer = (
-  bm25_scores: number[]
-) => number[]
+export type TextScoreNormalizer = (bm25_scores: number[]) => number[];
 
 /**
  * Normalize vector score (cos similarity to [0,1])
  */
 export type VectorScoreNormalizer = (
-  cos_sim: number  // [-1, 1]
-) => number        // [0, 1]
+  cos_sim: number // [-1, 1]
+) => number; // [0, 1]
 
 /**
  * Hybrid fusion (S = α*S_vec + (1-α)*S_text)
  */
-export type HybridFusion = (
-  s_text: number,
-  s_vec: number,
-  alpha: number
-) => number
+export type HybridFusion = (s_text: number, s_vec: number, alpha: number) => number;
 
 /**
  * Rerank function g(utility, confidence, recency)
  */
-export type RerankFunction = (
-  utility: number,
-  confidence: number,
-  recency: number
-) => number
+export type RerankFunction = (utility: number, confidence: number, recency: number) => number;
 
 /**
  * Recency decay (exponential with half-life)
  */
 export type RecencyDecay = (
-  ts: number,          // UNIX epoch seconds
+  ts: number, // UNIX epoch seconds
   half_life_days: number
-) => number            // [0, 1]
+) => number; // [0, 1]
 ```
 
 ---

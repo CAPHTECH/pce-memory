@@ -5,16 +5,12 @@
  * OpenAI Embeddings API互換のエンドポイントをサポート
  */
 
-import * as TE from "fp-ts/TaskEither";
-import { pipe } from "fp-ts/function";
-import type { EmbeddingProvider, ProviderStatus, RemoteProviderConfig } from "../types.js";
-import { MAX_BATCH_SIZE } from "../types.js";
-import type { EmbeddingError } from "../errors.js";
-import {
-  remoteApiError,
-  batchSizeExceededError,
-  providerUnavailableError,
-} from "../errors.js";
+import * as TE from 'fp-ts/TaskEither';
+import { pipe } from 'fp-ts/function';
+import type { EmbeddingProvider, ProviderStatus, RemoteProviderConfig } from '../types.js';
+import { MAX_BATCH_SIZE } from '../types.js';
+import type { EmbeddingError } from '../errors.js';
+import { remoteApiError, batchSizeExceededError, providerUnavailableError } from '../errors.js';
 
 // ========== 型定義 ==========
 
@@ -22,9 +18,9 @@ import {
  * OpenAI Embeddings API レスポンス形式
  */
 interface EmbeddingsResponse {
-  object: "list";
+  object: 'list';
   data: Array<{
-    object: "embedding";
+    object: 'embedding';
     index: number;
     embedding: number[];
   }>;
@@ -65,8 +61,8 @@ const validateEndpoint = (endpoint: string): void => {
   }
 
   // プロトコル検証: HTTPSのみ許可（開発時のlocalhost/127.0.0.1は例外）
-  const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
-  if (url.protocol !== "https:" && !isLocalhost) {
+  const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (url.protocol !== 'https:' && !isLocalhost) {
     throw new Error(
       `Insecure endpoint protocol: ${url.protocol}. Only HTTPS is allowed (localhost exempt for development).`
     );
@@ -76,20 +72,18 @@ const validateEndpoint = (endpoint: string): void => {
   // プライベートIP範囲: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
   const hostname = url.hostname;
   const privateIpPatterns = [
-    /^10\./,                          // 10.0.0.0/8
-    /^172\.(1[6-9]|2[0-9]|3[01])\./,  // 172.16.0.0/12
-    /^192\.168\./,                    // 192.168.0.0/16
-    /^169\.254\./,                    // リンクローカル
-    /^0\./,                           // 0.0.0.0/8
+    /^10\./, // 10.0.0.0/8
+    /^172\.(1[6-9]|2[0-9]|3[01])\./, // 172.16.0.0/12
+    /^192\.168\./, // 192.168.0.0/16
+    /^169\.254\./, // リンクローカル
+    /^0\./, // 0.0.0.0/8
   ];
 
   // localhost以外でプライベートIPへのアクセスを禁止
   if (!isLocalhost) {
     for (const pattern of privateIpPatterns) {
       if (pattern.test(hostname)) {
-        throw new Error(
-          `Access to internal network address is not allowed: ${hostname}`
-        );
+        throw new Error(`Access to internal network address is not allowed: ${hostname}`);
       }
     }
   }
@@ -104,10 +98,10 @@ const validateEndpoint = (endpoint: string): void => {
  */
 const validateEmbeddingDimensions = (embedding: number[]): void => {
   if (!Array.isArray(embedding)) {
-    throw new Error("Invalid embedding: expected array");
+    throw new Error('Invalid embedding: expected array');
   }
   if (embedding.length === 0) {
-    throw new Error("Invalid embedding: empty array");
+    throw new Error('Invalid embedding: empty array');
   }
   // 極端に大きいベクトル（メモリ膨張攻撃防止）は拒否
   // MAX_ALLOWED_DIMENSIONS: OpenAI text-embedding-3-large の上限に合わせる
@@ -137,9 +131,7 @@ const validateEmbeddingDimensions = (embedding: number[]): void => {
  * @returns EmbeddingProvider
  * @throws エンドポイントが安全でない場合
  */
-export const createRemoteProvider = (
-  config: RemoteProviderOptions
-): EmbeddingProvider => {
+export const createRemoteProvider = (config: RemoteProviderOptions): EmbeddingProvider => {
   const {
     endpoint,
     apiKey,
@@ -152,28 +144,26 @@ export const createRemoteProvider = (
   // エンドポイントのセキュリティ検証（SSRF/APIキー流出防止）
   validateEndpoint(endpoint);
 
-  let status: ProviderStatus = "available";
+  let status: ProviderStatus = 'available';
 
   /**
    * API呼び出し
    */
-  const callApi = async (
-    input: string | readonly string[]
-  ): Promise<EmbeddingsResponse> => {
+  const callApi = async (input: string | readonly string[]): Promise<EmbeddingsResponse> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(`${endpoint}/embeddings`, {
-        method: "POST",
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           input,
           model,
-          encoding_format: "float",
+          encoding_format: 'float',
         }),
         signal: controller.signal,
       });
@@ -183,18 +173,18 @@ export const createRemoteProvider = (
       if (!response.ok) {
         // レート制限の場合はdegradedに
         if (response.status === 429) {
-          status = "degraded";
+          status = 'degraded';
         } else if (response.status >= 500) {
-          status = "unavailable";
+          status = 'unavailable';
         }
         throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
 
-      status = "available";
+      status = 'available';
       return (await response.json()) as EmbeddingsResponse;
     } catch (e) {
       clearTimeout(timeoutId);
-      if (e instanceof Error && e.name === "AbortError") {
+      if (e instanceof Error && e.name === 'AbortError') {
         throw new Error(`Request timed out after ${timeoutMs}ms`);
       }
       throw e;
@@ -222,7 +212,7 @@ export const createRemoteProvider = (
       }
     }
 
-    throw lastError ?? new Error("Unknown error");
+    throw lastError ?? new Error('Unknown error');
   };
 
   return {
@@ -241,17 +231,13 @@ export const createRemoteProvider = (
             const response = await callApiWithRetry(text);
             const first = response.data[0];
             if (!first) {
-              throw new Error("Empty response from embedding API");
+              throw new Error('Empty response from embedding API');
             }
             // 次元検証（メモリ膨張攻撃防止）
             validateEmbeddingDimensions(first.embedding);
             return first.embedding;
           },
-          (e) =>
-            remoteApiError(
-              e instanceof Error ? e.message : String(e),
-              e
-            )
+          (e) => remoteApiError(e instanceof Error ? e.message : String(e), e)
         )
       ),
 
@@ -278,11 +264,7 @@ export const createRemoteProvider = (
             sorted.forEach((d) => validateEmbeddingDimensions(d.embedding));
             return sorted.map((d) => d.embedding);
           },
-          (e) =>
-            remoteApiError(
-              e instanceof Error ? e.message : String(e),
-              e
-            )
+          (e) => remoteApiError(e instanceof Error ? e.message : String(e), e)
         )
       );
     },
@@ -294,10 +276,10 @@ export const createRemoteProvider = (
  */
 export const createOpenAIProvider = (
   apiKey: string,
-  model = "text-embedding-3-small"
+  model = 'text-embedding-3-small'
 ): EmbeddingProvider =>
   createRemoteProvider({
-    endpoint: "https://api.openai.com/v1",
+    endpoint: 'https://api.openai.com/v1',
     apiKey,
     model,
   });
@@ -320,12 +302,12 @@ export const createAzureOpenAIProvider = (
  * 利用不可のスタブプロバイダー（テスト用）
  */
 export const createUnavailableProvider = (): EmbeddingProvider => ({
-  modelVersion: "unavailable",
-  status: "unavailable",
+  modelVersion: 'unavailable',
+  status: 'unavailable',
 
   embed: (): TE.TaskEither<EmbeddingError, readonly number[]> =>
-    TE.left(providerUnavailableError("Provider is unavailable")),
+    TE.left(providerUnavailableError('Provider is unavailable')),
 
   embedBatch: (): TE.TaskEither<EmbeddingError, readonly (readonly number[])[]> =>
-    TE.left(providerUnavailableError("Provider is unavailable")),
+    TE.left(providerUnavailableError('Provider is unavailable')),
 });

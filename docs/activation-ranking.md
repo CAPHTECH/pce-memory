@@ -38,7 +38,9 @@
 8. **AC 構成・保存**
    - `active_contexts` に AC を作成、`active_context_items` に `rank, score_final` を保存。
    - `events(topic='activate')` に `request_id/trace_id/policy_version/α/k_*` をログ。
+
 - **最終採用条件**：`score_final ≥ 0.15` を満たす候補のみ AC に採用（満たさない場合は `reason="below_threshold"` を付与し `events` に記録）。
+
 9. **説明メタの付与**（任意）
    - 各候補に `s_text, s_vec, S, g_breakdown, reason` を同梱（デバッグ・監査用）。
 
@@ -47,12 +49,14 @@
 ## 2. スコア正規化
 
 **Text 正規化**
+
 - **FTS あり**：
   - 各候補の bm25 スコアを `S_text = (bm25 - bm25_min) / max(bm25_max - bm25_min, ε)` に写像。
 - **FTS なし**：
   - ILIKE の順位 `rank∈{1..k_txt}` を `S_text = 1 / (1 + rank)` に変換。
 
 **Vector 正規化**
+
 - **cos 類似** `sim ∈ [-1, 1]` を `S_vec = (sim + 1) / 2`（`norm_cos` マクロ）に写像。
 - **VSS 距離**を採用する場合は `sim = 1 - dist` とみなし、上式へ。
 
@@ -72,12 +76,13 @@
 - 候補が片側のみのとき：欠落側を 0 とし、存在側のスコアをそのまま使用
 
 **policy 設定例**
+
 ```yaml
 retrieval:
   hybrid:
-    alpha: 0.65      # [0.3, 0.9]
-    k_txt: 48        # k_final の 3〜5倍
-    k_vec: 96        # k_final の 6〜10倍（VSS は 1.5〜2.0倍）
+    alpha: 0.65 # [0.3, 0.9]
+    k_txt: 48 # k_final の 3〜5倍
+    k_vec: 96 # k_final の 6〜10倍（VSS は 1.5〜2.0倍）
     k_final: 12
     recency_half_life_days: 30
 ```
@@ -106,10 +111,11 @@ retrieval:
 - 上界下界：各項は `[0,1]` にクリップ（数値安定性のため `ε=1e-6` を使用）。
 
 **Feedback→指標更新（運用ルール）**
+
 - `helpful(+1)`: `utility += 0.10`, `confidence += 0.05`
 - `harmful(+1)`: `utility -= 0.20`, `confidence -= 0.10`
-- `outdated`:     `confidence -= 0.20`
-- `duplicate`:    代表にマージ、旧レコードの `utility` を減衰
+- `outdated`: `confidence -= 0.20`
+- `duplicate`: 代表にマージ、旧レコードの `utility` を減衰
 - デイケイ：`utility` 30日半減、`quality` 120日半減（`events(topic='critic')`へ）
 
 ##### quality の取り扱い（任意）
@@ -200,6 +206,7 @@ LEFT JOIN vec ON vec.id=ids.id;
 > また `events(topic='activate')` には `s_text/s_vec/S/g/score_final` の統計（avg/p50/p90）も併記する。
 
 **レスポンス例（抜粋）**
+
 ```json
 {
   "active_context_id": "ac_9x",
@@ -208,7 +215,12 @@ LEFT JOIN vec ON vec.id=ids.id;
       "id": "clm_7k",
       "text": "解約APIは POST /subscriptions/{id}/cancel …",
       "score_final": 0.82,
-      "features": {"s_text":0.55, "s_vec":0.91, "S":0.76, "g":{"util":0.86,"conf":0.72,"rec":0.93}},
+      "features": {
+        "s_text": 0.55,
+        "s_vec": 0.91,
+        "S": 0.76,
+        "g": { "util": 0.86, "conf": 0.72, "rec": 0.93 }
+      },
       "reason": "FTS:rank=2, cos=0.92, recent=12d, utility↑, confidence中"
     }
   ],
@@ -233,6 +245,7 @@ LEFT JOIN vec ON vec.id=ids.id;
 4. L0/L1/L2/L3/Hybrid を実行し、**Recall@k / nDCG@k / p50,p90** を記録
 
 **合格ライン（例）**
+
 - Recall@12 ≥ **0.70**、nDCG@12 ≥ **0.45**
 - activate p90 ≤ **1500ms**（L2+L1）
 - `events(topic='search_fallback') / events(topic='search') ≤ 1%`
@@ -263,6 +276,7 @@ LEFT JOIN vec ON vec.id=ids.id;
 ---
 
 ## 参照
+
 - `schema.md` — DuckDB スキーマ（TIMESTAMP, cos_sim, AC/LCP）
 - `search_extensions_duckdb.md` — FTS/VSS 導入とハイブリッド戦略
 - `boundary-policy.md` — 境界/不変量/precedence ルール

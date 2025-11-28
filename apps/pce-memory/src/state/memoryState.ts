@@ -7,16 +7,16 @@
  * - TaskEither操作の直列化キュー
  * - DB永続化との統合
  */
-import * as TE from "fp-ts/TaskEither";
-import * as E from "fp-ts/Either";
-import type { BoundaryPolicy } from "@pce/policy-schemas";
-import { defaultPolicy } from "@pce/policy-schemas";
-import { PCEMemory, canUpsert, canActivate, canFeedback } from "../domain/stateMachine.js";
-import type { PCEState, RuntimeState, RuntimeStateType } from "../domain/stateMachine.js";
-import type { DomainError } from "../domain/errors.js";
-import { domainError } from "../domain/errors.js";
-import { savePolicy, loadLatestPolicy } from "../store/policy.js";
-import { countClaims } from "../store/claims.js";
+import * as TE from 'fp-ts/TaskEither';
+import * as E from 'fp-ts/Either';
+import type { BoundaryPolicy } from '@pce/policy-schemas';
+import { defaultPolicy } from '@pce/policy-schemas';
+import { PCEMemory, canUpsert, canActivate, canFeedback } from '../domain/stateMachine.js';
+import type { PCEState, RuntimeState, RuntimeStateType } from '../domain/stateMachine.js';
+import type { DomainError } from '../domain/errors.js';
+import { domainError } from '../domain/errors.js';
+import { savePolicy, loadLatestPolicy } from '../store/policy.js';
+import { countClaims } from '../store/claims.js';
 
 // ========== モジュールスコープ状態 ==========
 
@@ -58,12 +58,21 @@ export function canDoUpsert(): boolean {
 
 /** activate可能かチェック（Ready状態からも可） */
 export function canDoActivate(): boolean {
-  return canActivate(currentMachine.runtimeState) || currentMachine.runtimeState.type === "Ready";
+  return canActivate(currentMachine.runtimeState) || currentMachine.runtimeState.type === 'Ready';
 }
 
 /** feedback可能かチェック */
 export function canDoFeedback(): boolean {
   return canFeedback(currentMachine.runtimeState);
+}
+
+/**
+ * 読み取り操作可能かチェック
+ * Query操作はPolicyApplied以降で実行可能（upsertと同じ条件）
+ * セマンティックな明確さのため別名として提供
+ */
+export function canDoQuery(): boolean {
+  return canUpsert(currentMachine.runtimeState);
 }
 
 /** claim数を取得 */
@@ -85,7 +94,10 @@ export function getActiveContextId(): string | undefined {
 function enqueue<A>(op: () => Promise<A>): Promise<A> {
   const result = operationQueue.then(op);
   // エラーが発生しても次の操作は実行可能にする
-  operationQueue = result.then(() => {}, () => {});
+  operationQueue = result.then(
+    () => {},
+    () => {}
+  );
   return result;
 }
 
@@ -93,90 +105,105 @@ function enqueue<A>(op: () => Promise<A>): Promise<A> {
  * 初期化: DBから状態とポリシーを復元
  * サーバー起動時に1回だけ呼び出す
  */
-export function initMemoryState(): TE.TaskEither<DomainError, { state: RuntimeStateType; policyVersion: string }> {
-  return () => enqueue(async () => {
-    // DBからポリシーをロード
-    const policyResult = await loadLatestPolicy()();
-    if (E.isLeft(policyResult)) {
-      return policyResult;
-    }
+export function initMemoryState(): TE.TaskEither<
+  DomainError,
+  { state: RuntimeStateType; policyVersion: string }
+> {
+  return () =>
+    enqueue(async () => {
+      // DBからポリシーをロード
+      const policyResult = await loadLatestPolicy()();
+      if (E.isLeft(policyResult)) {
+        return policyResult;
+      }
 
-    const policyRecord = policyResult.right;
-    const version = policyRecord?.version ?? defaultPolicy.version ?? "0.1";
-    const policy = policyRecord?.config_json ?? defaultPolicy.boundary;
+      const policyRecord = policyResult.right;
+      const version = policyRecord?.version ?? defaultPolicy.version ?? '0.1';
+      const policy = policyRecord?.config_json ?? defaultPolicy.boundary;
 
-    // DBからclaim数を取得
-    const claimCount = await countClaims();
+      // DBからclaim数を取得
+      const claimCount = await countClaims();
 
-    // 状態を復元
-    if (claimCount > 0) {
-      currentMachine = PCEMemory.restore({
-        type: "HasClaims",
+      // 状態を復元
+      if (claimCount > 0) {
+        currentMachine = PCEMemory.restore({
+          type: 'HasClaims',
+          policyVersion: version,
+          claimCount,
+        });
+      } else if (policyRecord) {
+        // ポリシーが保存済みならPolicyApplied状態
+        currentMachine = PCEMemory.restore({
+          type: 'PolicyApplied',
+          policyVersion: version,
+        });
+      } else {
+        // 初回起動: Uninitialized状態のまま
+        currentMachine = PCEMemory.create();
+      }
+
+      currentPolicy = policy;
+
+      return E.right({
+        state: currentMachine.getStateType(),
         policyVersion: version,
-        claimCount,
       });
-    } else if (policyRecord) {
-      // ポリシーが保存済みならPolicyApplied状態
-      currentMachine = PCEMemory.restore({
-        type: "PolicyApplied",
-        policyVersion: version,
-      });
-    } else {
-      // 初回起動: Uninitialized状態のまま
-      currentMachine = PCEMemory.create();
-    }
-
-    currentPolicy = policy;
-
-    return E.right({
-      state: currentMachine.getStateType(),
-      policyVersion: version,
     });
-  });
 }
 
 /**
  * ポリシー適用: Uninitialized → PolicyApplied
  * DB永続化を含む
  */
-export function applyPolicyOp(yaml?: string): TE.TaskEither<DomainError, { policy_version: string; state: RuntimeStateType }> {
-  return () => enqueue(async () => {
-    // 状態検証
-    if (currentMachine.runtimeState.type !== "Uninitialized") {
-      return E.left(domainError(
-        "STATE_ERROR",
-        `Invalid state: expected Uninitialized, got ${currentMachine.runtimeState.type}`
-      ));
-    }
+export function applyPolicyOp(
+  yaml?: string
+): TE.TaskEither<DomainError, { policy_version: string; state: RuntimeStateType }> {
+  return () =>
+    enqueue(async () => {
+      // 状態検証
+      if (currentMachine.runtimeState.type !== 'Uninitialized') {
+        return E.left(
+          domainError(
+            'STATE_ERROR',
+            `Invalid state: expected Uninitialized, got ${currentMachine.runtimeState.type}`
+          )
+        );
+      }
 
-    // ポリシーパース
-    const { parsePolicy } = await import("@pce/policy-schemas");
-    const doc = yaml ? parsePolicy(yaml) : { ok: true, value: defaultPolicy };
-    if (!doc.ok || !doc.value) {
-      return E.left(domainError("POLICY_INVALID", doc.errors?.join(",") ?? "policy parse failed"));
-    }
+      // ポリシーパース
+      const { parsePolicy } = await import('@pce/policy-schemas');
+      const doc = yaml ? parsePolicy(yaml) : { ok: true, value: defaultPolicy };
+      if (!doc.ok || !doc.value) {
+        return E.left(
+          domainError('POLICY_INVALID', doc.errors?.join(',') ?? 'policy parse failed')
+        );
+      }
 
-    const parsedPolicy = doc.value;
-    const yamlContent = yaml ?? "";
+      const parsedPolicy = doc.value;
+      const yamlContent = yaml ?? '';
 
-    // DBに保存
-    const saveResult = await savePolicy(parsedPolicy.version, yamlContent, parsedPolicy.boundary)();
-    if (E.isLeft(saveResult)) {
-      return saveResult;
-    }
+      // DBに保存
+      const saveResult = await savePolicy(
+        parsedPolicy.version,
+        yamlContent,
+        parsedPolicy.boundary
+      )();
+      if (E.isLeft(saveResult)) {
+        return saveResult;
+      }
 
-    // 状態更新
-    currentPolicy = parsedPolicy.boundary;
-    currentMachine = PCEMemory.restore({
-      type: "PolicyApplied",
-      policyVersion: parsedPolicy.version,
+      // 状態更新
+      currentPolicy = parsedPolicy.boundary;
+      currentMachine = PCEMemory.restore({
+        type: 'PolicyApplied',
+        policyVersion: parsedPolicy.version,
+      });
+
+      return E.right({
+        policy_version: parsedPolicy.version,
+        state: currentMachine.getStateType(),
+      });
     });
-
-    return E.right({
-      policy_version: parsedPolicy.version,
-      state: currentMachine.getStateType(),
-    });
-  });
 }
 
 /**
@@ -187,7 +214,7 @@ export function transitionToHasClaims(isNew: boolean): void {
   const currentCount = currentMachine.getClaimCount();
   const newClaimCount = isNew ? currentCount + 1 : Math.max(currentCount, 1);
   currentMachine = PCEMemory.restore({
-    type: "HasClaims",
+    type: 'HasClaims',
     policyVersion: currentMachine.getPolicyVersion(),
     claimCount: newClaimCount,
   });
@@ -199,7 +226,7 @@ export function transitionToHasClaims(isNew: boolean): void {
  */
 export function transitionToReady(activeContextId: string): void {
   currentMachine = PCEMemory.restore({
-    type: "Ready",
+    type: 'Ready',
     policyVersion: currentMachine.getPolicyVersion(),
     activeContextId,
   });

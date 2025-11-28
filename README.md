@@ -94,13 +94,13 @@ pnpm clean
 
 PCE Memoryは以下のMCPツールを提供します：
 
-| Tool | Description |
-|------|-------------|
-| `pce.memory.observe` | 観察を記録 (Observation → Claims) |
-| `pce.memory.activate` | Active Contextを構成 (Query → AC) |
-| `pce.memory.search` | 検索のみ (AC作成なし) |
+| Tool                  | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `pce.memory.observe`  | 観察を記録 (Observation → Claims)               |
+| `pce.memory.activate` | Active Contextを構成 (Query → AC)               |
+| `pce.memory.search`   | 検索のみ (AC作成なし)                           |
 | `pce.memory.feedback` | フィードバックを送信 (helpful/harmful/outdated) |
-| `pce.memory.status` | 統計情報を取得 |
+| `pce.memory.status`   | 統計情報を取得                                  |
 
 詳細は [docs/mcp-tools.md](docs/mcp-tools.md) を参照してください。
 
@@ -154,12 +154,12 @@ pnpm test:watch
 
 ### Code Quality Gates
 
-| Gate | Threshold |
-|------|-----------|
-| Static Analysis | 0 errors |
-| Coverage | ≥ 80% |
-| Cyclomatic Complexity | ≤ 10 |
-| Mutation Score | ≥ 60% (optional) |
+| Gate                  | Threshold        |
+| --------------------- | ---------------- |
+| Static Analysis       | 0 errors         |
+| Coverage              | ≥ 80%            |
+| Cyclomatic Complexity | ≤ 10             |
+| Mutation Score        | ≥ 60% (optional) |
 
 ### Commit Convention
 
@@ -197,6 +197,7 @@ MIT License - see [LICENSE](LICENSE) for details
 ## Acknowledgments
 
 Built with ❤️ by CAPHTECH, following Law-Driven Engineering principles and inspired by:
+
 - Ernst Cassirer's Philosophy of Symbolic Forms
 - Actor-Network Theory (ANT)
 - Buddhist concepts of dependent origination (縁起)

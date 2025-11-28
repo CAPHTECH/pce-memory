@@ -6,27 +6,27 @@
 
 ### 設計軸1: キャッシュキー戦略
 
-| 設計 | 概要 | 特徴 |
-|------|------|------|
-| A: バージョン込みキー | textHash + modelVersion | 古いバージョンは自動除外 |
-| B: テキストのみキー | textHash only | シンプルだが古いエントリ返却リスク |
-| C: キャッシュなし | - | 安全だがパフォーマンス低下 |
+| 設計                  | 概要                    | 特徴                               |
+| --------------------- | ----------------------- | ---------------------------------- |
+| A: バージョン込みキー | textHash + modelVersion | 古いバージョンは自動除外           |
+| B: テキストのみキー   | textHash only           | シンプルだが古いエントリ返却リスク |
+| C: キャッシュなし     | -                       | 安全だがパフォーマンス低下         |
 
 ### 設計軸2: フェイルオーバー戦略
 
-| 設計 | 概要 | 特徴 |
-|------|------|------|
-| A: 即時フェイルオーバー | primary失敗→即fallback | 高可用性 |
-| B: リトライ後フェイルオーバー | N回リトライ→fallback | レイテンシ増加 |
-| C: エラーのみ | fallbackなし | 単一障害点 |
+| 設計                          | 概要                   | 特徴           |
+| ----------------------------- | ---------------------- | -------------- |
+| A: 即時フェイルオーバー       | primary失敗→即fallback | 高可用性       |
+| B: リトライ後フェイルオーバー | N回リトライ→fallback   | レイテンシ増加 |
+| C: エラーのみ                 | fallbackなし           | 単一障害点     |
 
 ### 設計軸3: Redact順序
 
-| 設計 | 概要 | 特徴 |
-|------|------|------|
-| A: Redact-before-Embed | 先にredact、後でembed | 機密情報漏洩防止 |
-| B: Embed-then-Redact | 先にembed、後でredact | ベクトル空間に情報残存 |
-| C: 選択可能 | リクエストごとに指定 | 誤選択リスク |
+| 設計                   | 概要                  | 特徴                   |
+| ---------------------- | --------------------- | ---------------------- |
+| A: Redact-before-Embed | 先にredact、後でembed | 機密情報漏洩防止       |
+| B: Embed-then-Redact   | 先にembed、後でredact | ベクトル空間に情報残存 |
+| C: 選択可能            | リクエストごとに指定  | 誤選択リスク           |
 
 ## Alloy検証結果（期待値）
 
@@ -50,10 +50,10 @@ RedactC_Safe                SAT   ← 反例発見（EmbedFirst選択時に漏�
 
 #### キャッシュキー戦略
 
-| アサーション | 結果 | 論理的根拠 |
-|------------|------|-----------|
-| CacheA_NoStale | **UNSAT（成立）** | ルックアップ条件に`result.version = cache.currentVersion`を含むため、古いバージョンは返されない |
-| CacheB_NoStale | **SAT（違反）** | ルックアップがtextHashのみで検索するため、キャッシュに古いversionのエントリがあれば返される反例が存在 |
+| アサーション   | 結果              | 論理的根拠                                                                                            |
+| -------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
+| CacheA_NoStale | **UNSAT（成立）** | ルックアップ条件に`result.version = cache.currentVersion`を含むため、古いバージョンは返されない       |
+| CacheB_NoStale | **SAT（違反）**   | ルックアップがtextHashのみで検索するため、キャッシュに古いversionのエントリがあれば返される反例が存在 |
 
 ```alloy
 -- 設計Bの反例シナリオ:
@@ -64,11 +64,11 @@ RedactC_Safe                SAT   ← 反例発見（EmbedFirst選択時に漏�
 
 #### フェイルオーバー戦略
 
-| アサーション | 結果 | 論理的根拠 |
-|------------|------|-----------|
-| FailoverA_RequestCompletion | **UNSAT（成立）** | primary/fallbackのどちらかがavailableなら必ずsuccess=True |
-| FailoverB_RequestCompletion | **SAT（違反）** | retryCount < maxRetriesの状態でprimary unavailableだと、fallback availableでもsuccess=False |
-| FailoverC_RequestCompletion | **SAT（違反）** | primary unavailableだとfallbackがないためsuccess=False（even if fallback would be available in other designs） |
+| アサーション                | 結果              | 論理的根拠                                                                                                     |
+| --------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| FailoverA_RequestCompletion | **UNSAT（成立）** | primary/fallbackのどちらかがavailableなら必ずsuccess=True                                                      |
+| FailoverB_RequestCompletion | **SAT（違反）**   | retryCount < maxRetriesの状態でprimary unavailableだと、fallback availableでもsuccess=False                    |
+| FailoverC_RequestCompletion | **SAT（違反）**   | primary unavailableだとfallbackがないためsuccess=False（even if fallback would be available in other designs） |
 
 ```alloy
 -- 設計Bの反例シナリオ:
@@ -80,11 +80,11 @@ RedactC_Safe                SAT   ← 反例発見（EmbedFirst選択時に漏�
 
 #### Redact順序
 
-| アサーション | 結果 | 論理的根拠 |
-|------------|------|-----------|
-| RedactA_Safe | **UNSAT（成立）** | Confidential → redacted=True が強制され、redacted=True → hasSensitiveInfo=False |
-| RedactB_Safe | **SAT（違反）** | Confidential → hasSensitiveInfo=True が常に成立（埋め込み時点で情報がエンコードされる） |
-| RedactC_Safe | **SAT（違反）** | EmbedFirst選択時はRedactBと同じ動作で漏洩 |
+| アサーション | 結果              | 論理的根拠                                                                              |
+| ------------ | ----------------- | --------------------------------------------------------------------------------------- |
+| RedactA_Safe | **UNSAT（成立）** | Confidential → redacted=True が強制され、redacted=True → hasSensitiveInfo=False         |
+| RedactB_Safe | **SAT（違反）**   | Confidential → hasSensitiveInfo=True が常に成立（埋め込み時点で情報がエンコードされる） |
+| RedactC_Safe | **SAT（違反）**   | EmbedFirst選択時はRedactBと同じ動作で漏洩                                               |
 
 ```alloy
 -- 設計Bの反例シナリオ:
@@ -131,11 +131,11 @@ RedactC_Safe                SAT   ← 反例発見（EmbedFirst選択時に漏�
 
 形式検証の結果に基づき、以下の設計を採用:
 
-| 設計軸 | 採用設計 | 根拠 |
-|--------|---------|------|
-| キャッシュキー戦略 | **A: バージョン込みキー** | 古いバージョンのエントリが返されないことを形式的に保証 |
-| フェイルオーバー戦略 | **A: 即時フェイルオーバー** | 可用性を形式的に保証（どちらかが利用可能なら成功） |
-| Redact順序 | **A: Redact-before-Embed** | 機密情報が漏洩しないことを形式的に保証 |
+| 設計軸               | 採用設計                    | 根拠                                                   |
+| -------------------- | --------------------------- | ------------------------------------------------------ |
+| キャッシュキー戦略   | **A: バージョン込みキー**   | 古いバージョンのエントリが返されないことを形式的に保証 |
+| フェイルオーバー戦略 | **A: 即時フェイルオーバー** | 可用性を形式的に保証（どちらかが利用可能なら成功）     |
+| Redact順序           | **A: Redact-before-Embed**  | 機密情報が漏洩しないことを形式的に保証                 |
 
 ## TLA+検証結果
 
@@ -149,13 +149,14 @@ Model checking completed. No error has been found.
 
 **検証した不変条件**:
 
-| 不変条件 | 結果 | 意味 |
-|---------|------|------|
-| Inv_CacheVersionConsistency | ✅ 成立 | キャッシュ内エントリは現在のモデルバージョンのみ |
-| Inv_UniqueRequestId | ✅ 成立 | リクエストIDは一意 |
-| Inv_NoProcessingWithoutProvider | ✅ 成立 | プロバイダーなしで処理開始しない |
+| 不変条件                        | 結果    | 意味                                             |
+| ------------------------------- | ------- | ------------------------------------------------ |
+| Inv_CacheVersionConsistency     | ✅ 成立 | キャッシュ内エントリは現在のモデルバージョンのみ |
+| Inv_UniqueRequestId             | ✅ 成立 | リクエストIDは一意                               |
+| Inv_NoProcessingWithoutProvider | ✅ 成立 | プロバイダーなしで処理開始しない                 |
 
 **TLA+で発見・修正したバグ**:
+
 - `RequestIdUsed`がバッチキューと処理中バッチをチェックしていなかった
 - 修正: `batchQueue`と`currentBatch`のチェックを追加
 
@@ -179,10 +180,10 @@ State 4: プライマリ障害発生
 
 **TLA+設計比較結果**:
 
-| 設計 | Inv_A_CanComplete | Inv_C_CanComplete | 採用 |
-|-----|-------------------|-------------------|------|
-| A: 即時フェイルオーバー | ✅ 成立 | - | ✅ 採用 |
-| C: フェイルオーバーなし | - | ❌ 反例発見 | ❌ 不採用 |
+| 設計                    | Inv_A_CanComplete | Inv_C_CanComplete | 採用      |
+| ----------------------- | ----------------- | ----------------- | --------- |
+| A: 即時フェイルオーバー | ✅ 成立           | -                 | ✅ 採用   |
+| C: フェイルオーバーなし | -                 | ❌ 反例発見       | ❌ 不採用 |
 
 ## 参考資料
 

@@ -6,13 +6,13 @@
  * @see kiri/src/client/start-daemon.ts
  */
 
-import { spawn } from "child_process";
-import * as fs from "fs/promises";
-import * as net from "net";
-import * as path from "path";
-import { fileURLToPath } from "url";
+import { spawn } from 'child_process';
+import * as fs from 'fs/promises';
+import * as net from 'net';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
-import { getSocketPath } from "../shared/socket.js";
+import { getSocketPath } from '../shared/socket.js';
 
 /**
  * デーモン起動オプション
@@ -35,12 +35,12 @@ export async function isDaemonRunning(databasePath: string): Promise<boolean> {
 
   try {
     // PIDファイルが存在するかチェック
-    const pidStr = await fs.readFile(pidFilePath, "utf-8");
+    const pidStr = await fs.readFile(pidFilePath, 'utf-8');
     const pid = parseInt(pidStr.trim(), 10);
 
     // 不正なPID値のチェック
     if (isNaN(pid) || pid <= 0) {
-      console.error("[StartDaemon] Invalid PID in PID file, treating as stale");
+      console.error('[StartDaemon] Invalid PID in PID file, treating as stale');
       return false;
     }
 
@@ -48,7 +48,7 @@ export async function isDaemonRunning(databasePath: string): Promise<boolean> {
     try {
       process.kill(pid, 0);
     } catch {
-      console.error("[StartDaemon] Stale PID file detected");
+      console.error('[StartDaemon] Stale PID file detected');
       return false;
     }
 
@@ -59,26 +59,26 @@ export async function isDaemonRunning(databasePath: string): Promise<boolean> {
       const healthCheck = await new Promise<boolean>((resolve, reject) => {
         const timeout = setTimeout(() => {
           socket.destroy();
-          reject(new Error("Health check timeout"));
+          reject(new Error('Health check timeout'));
         }, 2000);
 
         let responseReceived = false;
 
-        socket.on("connect", () => {
+        socket.on('connect', () => {
           const pingRequest = {
-            jsonrpc: "2.0",
+            jsonrpc: '2.0',
             id: 1,
-            method: "ping",
+            method: 'ping',
           };
-          socket.write(JSON.stringify(pingRequest) + "\n");
+          socket.write(JSON.stringify(pingRequest) + '\n');
         });
 
-        socket.on("data", (data) => {
+        socket.on('data', (data) => {
           if (responseReceived) return;
 
           try {
             const response = JSON.parse(data.toString().trim());
-            if (response.result && response.result.status === "ok") {
+            if (response.result && response.result.status === 'ok') {
               responseReceived = true;
               clearTimeout(timeout);
               socket.end();
@@ -86,16 +86,16 @@ export async function isDaemonRunning(databasePath: string): Promise<boolean> {
             } else {
               clearTimeout(timeout);
               socket.destroy();
-              reject(new Error("Invalid ping response"));
+              reject(new Error('Invalid ping response'));
             }
           } catch {
             clearTimeout(timeout);
             socket.destroy();
-            reject(new Error("Failed to parse health check response"));
+            reject(new Error('Failed to parse health check response'));
           }
         });
 
-        socket.on("error", (err) => {
+        socket.on('error', (err) => {
           clearTimeout(timeout);
           reject(err);
         });
@@ -109,7 +109,7 @@ export async function isDaemonRunning(databasePath: string): Promise<boolean> {
       return false;
     }
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return false;
     }
     throw err;
@@ -124,12 +124,12 @@ export async function stopDaemon(databasePath: string): Promise<void> {
   const startupLockPath = `${databasePath}.daemon.starting`;
 
   try {
-    const pidStr = await fs.readFile(pidFilePath, "utf-8");
+    const pidStr = await fs.readFile(pidFilePath, 'utf-8');
     const pid = parseInt(pidStr.trim(), 10);
 
     // 不正なPID値のチェック
     if (isNaN(pid) || pid <= 0) {
-      console.error("[StopDaemon] Invalid PID in PID file, cleaning up files");
+      console.error('[StopDaemon] Invalid PID in PID file, cleaning up files');
       await fs.unlink(pidFilePath).catch(() => {});
       await fs.unlink(startupLockPath).catch(() => {});
       return;
@@ -138,14 +138,14 @@ export async function stopDaemon(databasePath: string): Promise<void> {
     try {
       process.kill(pid, 0);
     } catch {
-      console.error("[StopDaemon] Process not found, cleaning up files");
+      console.error('[StopDaemon] Process not found, cleaning up files');
       await fs.unlink(pidFilePath).catch(() => {});
       await fs.unlink(startupLockPath).catch(() => {});
       return;
     }
 
     console.error(`[StopDaemon] Stopping daemon (PID: ${pid})...`);
-    process.kill(pid, "SIGTERM");
+    process.kill(pid, 'SIGTERM');
 
     // 最大5秒待機
     for (let i = 0; i < 50; i++) {
@@ -153,7 +153,7 @@ export async function stopDaemon(databasePath: string): Promise<void> {
       try {
         process.kill(pid, 0);
       } catch {
-        console.error("[StopDaemon] Daemon stopped gracefully");
+        console.error('[StopDaemon] Daemon stopped gracefully');
         await fs.unlink(pidFilePath).catch(() => {});
         await fs.unlink(startupLockPath).catch(() => {});
         return;
@@ -161,12 +161,12 @@ export async function stopDaemon(databasePath: string): Promise<void> {
     }
 
     // タイムアウト → 強制終了
-    console.error("[StopDaemon] Force killing daemon...");
-    process.kill(pid, "SIGKILL");
+    console.error('[StopDaemon] Force killing daemon...');
+    process.kill(pid, 'SIGKILL');
     await fs.unlink(pidFilePath).catch(() => {});
     await fs.unlink(startupLockPath).catch(() => {});
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return;
     }
     throw err;
@@ -189,13 +189,13 @@ export async function startDaemon(options: StartDaemonOptions): Promise<void> {
   // デーモン実行ファイルのパスを解決
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  const daemonScriptPath = path.resolve(__dirname, "../daemon/daemon.js");
+  const daemonScriptPath = path.resolve(__dirname, '../daemon/daemon.js');
 
   // デーモン起動引数
-  const args = ["--db", databasePath, "--socket-path", socketPath];
+  const args = ['--db', databasePath, '--socket-path', socketPath];
 
   if (idleTimeoutMinutes !== undefined) {
-    args.push("--daemon-timeout", String(idleTimeoutMinutes));
+    args.push('--daemon-timeout', String(idleTimeoutMinutes));
   }
 
   // データベースの親ディレクトリを自動作成
@@ -204,12 +204,12 @@ export async function startDaemon(options: StartDaemonOptions): Promise<void> {
 
   // デーモンログファイル
   const logFilePath = `${databasePath}.daemon.log`;
-  const logFile = await fs.open(logFilePath, "a");
+  const logFile = await fs.open(logFilePath, 'a');
 
   // デタッチモードでデーモンを起動
   const daemon = spawn(process.execPath, [daemonScriptPath, ...args], {
     detached: true,
-    stdio: ["ignore", logFile.fd, logFile.fd],
+    stdio: ['ignore', logFile.fd, logFile.fd],
   });
 
   daemon.unref();
@@ -228,22 +228,22 @@ export async function startDaemon(options: StartDaemonOptions): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
           socket.destroy();
-          reject(new Error("Socket connection timeout"));
+          reject(new Error('Socket connection timeout'));
         }, pollIntervalMs);
 
-        socket.on("connect", () => {
+        socket.on('connect', () => {
           clearTimeout(timeout);
           socket.end();
           resolve();
         });
 
-        socket.on("error", (err) => {
+        socket.on('error', (err) => {
           clearTimeout(timeout);
           reject(err);
         });
       });
 
-      console.error("[StartDaemon] Daemon is ready");
+      console.error('[StartDaemon] Daemon is ready');
       await logFile.close();
       return;
     } catch {

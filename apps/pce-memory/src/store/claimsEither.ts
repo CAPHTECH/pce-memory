@@ -3,11 +3,11 @@
  * V1 Conservative設計: Either<DomainError, T>を返す
  * TLA+ Upsertに対応
  */
-import * as TE from "fp-ts/TaskEither";
-import { pipe } from "fp-ts/function";
-import { getConnection } from "../db/connection.js";
-import type { DomainError } from "../domain/errors.js";
-import { dbError } from "../domain/errors.js";
+import * as TE from 'fp-ts/TaskEither';
+import { pipe } from 'fp-ts/function';
+import { getConnection } from '../db/connection.js';
+import type { DomainError } from '../domain/errors.js';
+import { dbError } from '../domain/errors.js';
 
 export interface Claim {
   id: string;
@@ -21,14 +21,12 @@ export interface Claim {
 /**
  * Claim取得（Either版）
  */
-export const findClaimByIdE = (
-  id: string
-): TE.TaskEither<DomainError, Claim | undefined> => {
+export const findClaimByIdE = (id: string): TE.TaskEither<DomainError, Claim | undefined> => {
   return TE.tryCatch(
     async () => {
       const conn = await getConnection();
       const reader = await conn.runAndReadAll(
-        "SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE id = $1",
+        'SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE id = $1',
         [id]
       );
       const rows = reader.getRowObjects() as unknown as Claim[];
@@ -48,7 +46,7 @@ export const findClaimByHashE = (
     async () => {
       const conn = await getConnection();
       const reader = await conn.runAndReadAll(
-        "SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE content_hash = $1",
+        'SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE content_hash = $1',
         [contentHash]
       );
       const rows = reader.getRowObjects() as unknown as Claim[];
@@ -66,9 +64,7 @@ export const findClaimByHashE = (
  *
  * 注: 現在の実装では重複チェックはcontent_hashベース
  */
-export const upsertClaimE = (
-  c: Omit<Claim, "id">
-): TE.TaskEither<DomainError, Claim> => {
+export const upsertClaimE = (c: Omit<Claim, 'id'>): TE.TaskEither<DomainError, Claim> => {
   return pipe(
     findClaimByHashE(c.content_hash),
     TE.chain((existing) => {
@@ -83,7 +79,7 @@ export const upsertClaimE = (
           const conn = await getConnection();
           const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
           await conn.run(
-            "INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash) VALUES ($1, $2, $3, $4, $5, $6)",
+            'INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash) VALUES ($1, $2, $3, $4, $5, $6)',
             [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash]
           );
           return { id, ...c };
@@ -107,7 +103,7 @@ export const listClaimsByScopeE = (
       const conn = await getConnection();
       const hasQuery = q && q.trim().length > 0;
 
-      const placeholders = scopes.map((_, i) => `$${i + 1}`).join(",");
+      const placeholders = scopes.map((_, i) => `$${i + 1}`).join(',');
       const sql = hasQuery
         ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, coalesce(cr.score, 0) as score
            FROM claims c
@@ -133,9 +129,7 @@ export const listClaimsByScopeE = (
 /**
  * Claim存在確認（Either版）
  */
-export const claimExistsE = (
-  id: string
-): TE.TaskEither<DomainError, boolean> => {
+export const claimExistsE = (id: string): TE.TaskEither<DomainError, boolean> => {
   return pipe(
     findClaimByIdE(id),
     TE.map((claim) => claim !== undefined)

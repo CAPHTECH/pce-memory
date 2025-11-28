@@ -87,11 +87,11 @@ pce-memory
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `pce-memory` | MCP client (auto-starts daemon) |
-| `pce-daemon` | Standalone daemon process |
-| `pce-memory-stdio` | Direct stdio mode (no daemon) |
+| Command            | Description                     |
+| ------------------ | ------------------------------- |
+| `pce-memory`       | MCP client (auto-starts daemon) |
+| `pce-daemon`       | Standalone daemon process       |
+| `pce-memory-stdio` | Direct stdio mode (no daemon)   |
 
 ## MCP Tools
 
@@ -192,11 +192,11 @@ PolicyApplied
 
 ## Pace Layering (Scope)
 
-| Scope | Change Rate | Use Case |
-|-------|-------------|----------|
-| `session` | Fast | Session-specific temporary information |
-| `project` | Medium | Project-specific patterns and decisions |
-| `principle` | Slow | Universal principles and best practices |
+| Scope       | Change Rate | Use Case                                |
+| ----------- | ----------- | --------------------------------------- |
+| `session`   | Fast        | Session-specific temporary information  |
+| `project`   | Medium      | Project-specific patterns and decisions |
+| `principle` | Slow        | Universal principles and best practices |
 
 ## Requirements
 

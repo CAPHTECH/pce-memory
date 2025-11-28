@@ -10,25 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.4
+
+      - name: Setup mise
+        uses: jdx/mise-action@v2
+
       - name: Install deps (root only)
         run: pnpm install --frozen-lockfile
+
       - name: Run TLA+
         run: pnpm formal:tla
         env:
           TLA_CFG: pce_memory.small.cfg
           TLA_EMBED_CFG: pce_embedding.small.cfg
+
       - name: Run Alloy
         run: pnpm formal:alloy
+
       - name: Check ADR-Spec sync
         run: pnpm formal:sync-check
+
       - name: Run unit tests
-        run: pnpm test -- --runInBand
+        run: pnpm test

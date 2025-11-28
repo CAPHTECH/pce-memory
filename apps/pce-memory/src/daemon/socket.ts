@@ -7,18 +7,18 @@
  * @see kiri/src/daemon/socket.ts
  */
 
-import * as fs from "fs/promises";
-import * as net from "net";
-import * as os from "os";
-import * as readline from "readline";
+import * as fs from 'fs/promises';
+import * as net from 'net';
+import * as os from 'os';
+import * as readline from 'readline';
 
-import { acquireLock, releaseLock } from "../shared/lockfile.js";
+import { acquireLock, releaseLock } from '../shared/lockfile.js';
 
 /**
  * JSON-RPCリクエスト型
  */
 export interface JsonRpcRequest {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   id?: string | number | null;
   method: string;
   params?: Record<string, unknown>;
@@ -28,7 +28,7 @@ export interface JsonRpcRequest {
  * JSON-RPCレスポンス型
  */
 export interface JsonRpcResponse {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   id: string | number | null;
   result?: unknown;
   error?: {
@@ -60,7 +60,7 @@ export async function createSocketServer(
   options: SocketServerOptions
 ): Promise<() => Promise<void>> {
   const { socketPath, onRequest, onError } = options;
-  const isWindows = os.platform() === "win32";
+  const isWindows = os.platform() === 'win32';
 
   // 排他ロックでデーモン重複起動を防止
   const lockfilePath = `${socketPath}.lock`;
@@ -79,7 +79,7 @@ export async function createSocketServer(
     try {
       await fs.unlink(socketPath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw err;
       }
     }
@@ -95,18 +95,14 @@ export async function createSocketServer(
       resolve();
     });
 
-    server.on("error", (err: NodeJS.ErrnoException) => {
-      if (err.code === "EADDRINUSE") {
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
         const msg = isWindows
           ? `Named pipe already in use: ${socketPath}. Another daemon may be running.`
           : `Socket file in use: ${socketPath}. Another daemon may be running.`;
         reject(new Error(msg));
-      } else if (err.code === "EACCES") {
-        reject(
-          new Error(
-            `Permission denied for socket: ${socketPath}. Check permissions.`
-          )
-        );
+      } else if (err.code === 'EACCES') {
+        reject(new Error(`Permission denied for socket: ${socketPath}. Check permissions.`));
       } else {
         reject(new Error(`Failed to listen on ${socketPath}: ${err.message}`));
       }
@@ -152,7 +148,7 @@ function handleClientConnection(
     crlfDelay: Infinity,
   });
 
-  rl.on("line", async (line) => {
+  rl.on('line', async (line) => {
     let request: JsonRpcRequest | null = null;
     try {
       request = JSON.parse(line) as JsonRpcRequest;
@@ -163,25 +159,25 @@ function handleClientConnection(
       }
 
       const errorResponse: JsonRpcResponse = {
-        jsonrpc: "2.0",
+        jsonrpc: '2.0',
         id: null,
         error: {
           code: -32700,
-          message: "Parse error: Invalid JSON received.",
+          message: 'Parse error: Invalid JSON received.',
         },
       };
-      socket.write(JSON.stringify(errorResponse) + "\n");
+      socket.write(JSON.stringify(errorResponse) + '\n');
       return;
     }
 
     try {
       const result = await onRequest(request);
       if (result) {
-        const hasResponseId = typeof request.id === "string" || typeof request.id === "number";
+        const hasResponseId = typeof request.id === 'string' || typeof request.id === 'number';
         if (!hasResponseId) {
           return; // notification（idなし）にはレスポンス不要
         }
-        socket.write(JSON.stringify(result) + "\n");
+        socket.write(JSON.stringify(result) + '\n');
       }
     } catch (err) {
       const error = err as Error;
@@ -190,30 +186,30 @@ function handleClientConnection(
       }
 
       const hasResponseId =
-        request && (typeof request.id === "string" || typeof request.id === "number");
+        request && (typeof request.id === 'string' || typeof request.id === 'number');
       if (!hasResponseId) {
         return;
       }
 
       const errorResponse: JsonRpcResponse = {
-        jsonrpc: "2.0",
+        jsonrpc: '2.0',
         id: request.id ?? null,
         error: {
           code: -32603,
           message: `Internal error: ${error.message}`,
         },
       };
-      socket.write(JSON.stringify(errorResponse) + "\n");
+      socket.write(JSON.stringify(errorResponse) + '\n');
     }
   });
 
-  socket.on("error", (err) => {
+  socket.on('error', (err) => {
     if (onError) {
       onError(err);
     }
   });
 
-  socket.on("end", () => {
+  socket.on('end', () => {
     rl.close();
   });
 }

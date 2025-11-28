@@ -14,10 +14,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:pbt": "vitest run --grep='Property:'",
+    "test:coverage": "vitest run --coverage",
+    "test:pbt": "vitest run -t 'Property:'",
     "typecheck": "pnpm -r run typecheck",
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
     "formal:tla": "bash scripts/formal/run_tla.sh",
@@ -30,6 +31,7 @@
     "@types/node": "^22.10.5",
     "@typescript-eslint/eslint-plugin": "^8.19.1",
     "@typescript-eslint/parser": "^8.19.1",
+    "@vitest/coverage-v8": "^4.0.8",
     "@vitest/ui": "^4.0.8",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -43,7 +45,8 @@
   },
   "pnpm": {
     "overrides": {
-      "duckdb": "1.4.1-r.5"
+      "duckdb": "1.4.1-r.5",
+      "@vitest/coverage-v8": "4.0.8"
     },
     "peerDependencyRules": {
       "allowedVersions": {

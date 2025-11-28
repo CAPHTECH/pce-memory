@@ -19,22 +19,22 @@ PCE-Memoryシステムの設計について、形式検証（TLA+モデル検査
 
 #### TLA+モデル検査
 
-| バリアント | 結果 | 発見 |
-|-----------|------|------|
-| V1 | 全不変条件パス | エラー処理保証が堅牢 |
-| V2 | **LayerAcyclic違反** | 自己依存バグ発見 |
-| V3 | **Liveness違反** | 公平性制約欠如 |
-| V4 | V2バグ継承 | 複雑性コスト高 |
+| バリアント | 結果                 | 発見                 |
+| ---------- | -------------------- | -------------------- |
+| V1         | 全不変条件パス       | エラー処理保証が堅牢 |
+| V2         | **LayerAcyclic違反** | 自己依存バグ発見     |
+| V3         | **Liveness違反**     | 公平性制約欠如       |
+| V4         | V2バグ継承           | 複雑性コスト高       |
 
 #### Alloy構造解析
 
-| モデル | アサーション | 結果 |
-|--------|-------------|------|
-| Either (B) | NoStateChangeOnError | UNSAT（成立）|
-| Effect (C) | RequirementsSatisfied | UNSAT（成立）|
-| Bracketed (RB) | NoLeakFinal | SAT（反例発見）|
-| Scoped (RC) | NoLeakOnExit | SAT（反例発見）|
-| Layer (DC) | AdheresToWiring | UNSAT（成立）|
+| モデル         | アサーション          | 結果            |
+| -------------- | --------------------- | --------------- |
+| Either (B)     | NoStateChangeOnError  | UNSAT（成立）   |
+| Effect (C)     | RequirementsSatisfied | UNSAT（成立）   |
+| Bracketed (RB) | NoLeakFinal           | SAT（反例発見） |
+| Scoped (RC)    | NoLeakOnExit          | SAT（反例発見） |
+| Layer (DC)     | AdheresToWiring       | UNSAT（成立）   |
 
 ### 発見されたバグと問題
 
@@ -101,12 +101,12 @@ interface LayerGraph {
 
 ### 保証される性質
 
-| 性質 | 保証 |
-|------|------|
-| エラー全体性 | `lastResult ∈ {Left, Right}` |
-| 状態一貫性 | `Left → 状態不変` |
-| Layer非循環性 | `∀l1,l2: l1 ∈ requires(l2) ⇒ l2 ∉ requires(l1)` |
-| リソース安全性 | `scope終了 → リソース解放` |
+| 性質           | 保証                                            |
+| -------------- | ----------------------------------------------- |
+| エラー全体性   | `lastResult ∈ {Left, Right}`                    |
+| 状態一貫性     | `Left → 状態不変`                               |
+| Layer非循環性  | `∀l1,l2: l1 ∈ requires(l2) ⇒ l2 ∉ requires(l1)` |
+| リソース安全性 | `scope終了 → リソース解放`                      |
 
 ### 検証成果物
 

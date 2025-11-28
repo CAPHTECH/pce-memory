@@ -8,26 +8,26 @@
  * @see kiri/src/shared/utils/socket.ts
  */
 
-import * as crypto from "crypto";
-import { mkdirSync } from "node:fs";
-import * as os from "os";
-import * as path from "path";
+import * as crypto from 'crypto';
+import { mkdirSync } from 'node:fs';
+import * as os from 'os';
+import * as path from 'path';
 
 /** macOS 104-byte制限に安全マージンを残す */
 const UNIX_SOCKET_PATH_MAX = 96;
 
 /** ソケット/パイプ名のプレフィックス */
-const SOCKET_PREFIX = "pce";
+const SOCKET_PREFIX = 'pce';
 
 /** ソケットディレクトリの環境変数名 */
-const SOCKET_DIR_ENV = "PCE_SOCKET_DIR";
+const SOCKET_DIR_ENV = 'PCE_SOCKET_DIR';
 
 /**
  * ファイル名をサニタイズ
  */
 function sanitizeBaseName(fileName: string): string {
-  const sanitized = fileName.replace(/[^a-zA-Z0-9]/g, "-");
-  return sanitized.length > 0 ? sanitized.toLowerCase() : "db";
+  const sanitized = fileName.replace(/[^a-zA-Z0-9]/g, '-');
+  return sanitized.length > 0 ? sanitized.toLowerCase() : 'db';
 }
 
 /**
@@ -50,7 +50,7 @@ function ensureSocketDir(dirPath: string): void {
  */
 function buildFallbackUnixSocketPath(databasePath: string, ensureDir: boolean): string {
   const fallbackDir = process.env[SOCKET_DIR_ENV] || os.tmpdir();
-  const hash = crypto.createHash("sha256").update(databasePath).digest("hex");
+  const hash = crypto.createHash('sha256').update(databasePath).digest('hex');
   const baseName = sanitizeBaseName(path.basename(databasePath));
 
   const candidates = [
@@ -60,7 +60,7 @@ function buildFallbackUnixSocketPath(databasePath: string, ensureDir: boolean): 
   ];
 
   for (const candidate of candidates) {
-    if (Buffer.byteLength(candidate, "utf8") <= UNIX_SOCKET_PATH_MAX) {
+    if (Buffer.byteLength(candidate, 'utf8') <= UNIX_SOCKET_PATH_MAX) {
       if (ensureDir) {
         ensureSocketDir(path.dirname(candidate));
       }
@@ -92,17 +92,17 @@ function buildFallbackUnixSocketPath(databasePath: string, ensureDir: boolean): 
 export function getSocketPath(databasePath: string, options?: { ensureDir?: boolean }): string {
   const ensureDir = options?.ensureDir ?? false;
 
-  if (os.platform() === "win32") {
+  if (os.platform() === 'win32') {
     // Windows: 名前付きパイプを使用
-    const hash = crypto.createHash("sha256").update(databasePath).digest("hex");
-    const prefix = process.env["PCE_PIPE_PREFIX"] || SOCKET_PREFIX;
+    const hash = crypto.createHash('sha256').update(databasePath).digest('hex');
+    const prefix = process.env['PCE_PIPE_PREFIX'] || SOCKET_PREFIX;
     const pipeName = `${prefix}-${hash.substring(0, 16)}`;
     return `\\\\.\\pipe\\${pipeName}`;
   }
 
   // Unix系: データベースパスに.sockを追加
   const defaultSocketPath = `${databasePath}.sock`;
-  if (Buffer.byteLength(defaultSocketPath, "utf8") <= UNIX_SOCKET_PATH_MAX) {
+  if (Buffer.byteLength(defaultSocketPath, 'utf8') <= UNIX_SOCKET_PATH_MAX) {
     if (ensureDir) {
       ensureSocketDir(path.dirname(defaultSocketPath));
     }
@@ -120,11 +120,11 @@ export function getSocketPath(databasePath: string, options?: { ensureDir?: bool
  * @returns データベースパス（Unix系の場合）またはnull（Windows/不明な形式）
  */
 export function getDatabasePathFromSocket(socketPath: string): string | null {
-  if (os.platform() === "win32") {
+  if (os.platform() === 'win32') {
     return null;
   }
 
-  if (socketPath.endsWith(".sock")) {
+  if (socketPath.endsWith('.sock')) {
     return socketPath.slice(0, -5);
   }
 
@@ -139,16 +139,16 @@ export function getSocketPathDebugInfo(databasePath: string): string {
   const platform = os.platform();
   const defaultUnixSocket = `${databasePath}.sock`;
 
-  const pathModule = platform === "win32" ? path.win32 : path.posix;
+  const pathModule = platform === 'win32' ? path.win32 : path.posix;
   const dbDir = pathModule.dirname(databasePath);
   const dbBase = pathModule.basename(databasePath);
 
-  if (platform === "win32") {
+  if (platform === 'win32') {
     return [
       `Database: ${dbBase} (${dbDir})`,
       `Socket: ${socketPath} (Windows named pipe)`,
       `Note: Pipe name is derived from database path hash for uniqueness`,
-    ].join("\n");
+    ].join('\n');
   } else {
     const lines = [
       `Database: ${dbBase} (${dbDir})`,
@@ -162,6 +162,6 @@ export function getSocketPathDebugInfo(databasePath: string): string {
       );
     }
 
-    return lines.join("\n");
+    return lines.join('\n');
   }
 }

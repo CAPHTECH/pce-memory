@@ -8,13 +8,13 @@
 
 ## 0. 用語と原則
 
-- **境界（Boundary; B）**：用途・機密・不変量で *許可/編集/拒否* を決める閾。  
-- **不変量（Invariants; I(B)）**：関係が変動しても保持すべき制約（例：破壊的変更禁止）。  
-- **用途タグ（allow）**：`answer:task`, `tool:*`, `tool:contact-lookup` 等。  
-- **境界クラス（boundary_class）**：`public | internal | pii | secret`。  
-- **スコープ（scope）**：`session（速）| project（中）| principle（遅）`。  
-- **Redact-before-Send**：外部 API 送出前に PII/Secret をマスク。  
-- **Fail-closed**：境界/ポリシー未成立時は拒否で応答。  
+- **境界（Boundary; B）**：用途・機密・不変量で _許可/編集/拒否_ を決める閾。
+- **不変量（Invariants; I(B)）**：関係が変動しても保持すべき制約（例：破壊的変更禁止）。
+- **用途タグ（allow）**：`answer:task`, `tool:*`, `tool:contact-lookup` 等。
+- **境界クラス（boundary_class）**：`public | internal | pii | secret`。
+- **スコープ（scope）**：`session（速）| project（中）| principle（遅）`。
+- **Redact-before-Send**：外部 API 送出前に PII/Secret をマスク。
+- **Fail-closed**：境界/ポリシー未成立時は拒否で応答。
 - **Provenance-by-Default**：想起・更新・適用の全過程に由来と policy_version を付帯。
 
 ---
@@ -23,19 +23,19 @@
 
 ### 1.1 Retrieval / Activation
 
-- `pce.memory.search` / `pce.memory.activate` は **前置フィルタ**で `scope/allow/boundary_class` を照合。  
-- AC 生成関数 `r(q, C^L, B, policy, critic)` は、許可範囲内の断片のみを候補にする。  
+- `pce.memory.search` / `pce.memory.activate` は **前置フィルタ**で `scope/allow/boundary_class` を照合。
+- AC 生成関数 `r(q, C^L, B, policy, critic)` は、許可範囲内の断片のみを候補にする。
 - 返却は **read-only**、出典（evidences）と `policy_version` を必須。
 
 ### 1.2 Generation 前後
 
-- 生成 **前**：`pce.memory.boundary.validate(payload, allow?, scope?)` を必ず呼ぶ。  
+- 生成 **前**：`pce.memory.boundary.validate(payload, allow?, scope?)` を必ず呼ぶ。
 - 生成 **後**：必要に応じて再度 `validate`、許可外の語や PII/Secret を自動 Redact。
 
 ### 1.3 Write（Upsert / Distill / Rollback）
 
-- `pce.memory.upsert` は `boundary_class` 必須。`secret` は原則拒否（例外は人手レビュー）。  
-- **Distill（蒸留）**：AC→LCP 昇格時は I(B) を再検証し、由来を必須添付。  
+- `pce.memory.upsert` は `boundary_class` 必須。`secret` は原則拒否（例外は人手レビュー）。
+- **Distill（蒸留）**：AC→LCP 昇格時は I(B) を再検証し、由来を必須添付。
 - **Rollback（沈降）**：越境/誤り検知時に LCP の安全側へ巻戻す（監査ログと連動）。
 
 ### 1.4 エスカレーション（human_review）
@@ -55,42 +55,42 @@ meta:
   owner: platform-team@example.com
   updated_at: 2025-11-11T00:00:00Z
 scopes:
-  session:   { ttl: "7d",    max_tokens: 20000 }
-  project:   { ttl: "120d",  max_tokens: 50000 }
-  principle: { ttl: "inf",   max_tokens: 100000 }
+  session: { ttl: '7d', max_tokens: 20000 }
+  project: { ttl: '120d', max_tokens: 50000 }
+  principle: { ttl: 'inf', max_tokens: 100000 }
 boundary_classes:
   public:
-    allow: ["*"]
+    allow: ['*']
   internal:
-    allow: ["answer:task","tool:*"]
+    allow: ['answer:task', 'tool:*']
   pii:
-    allow: ["tool:contact-lookup"]
-    redact: ["name","email","phone"]
-    escalation: "human_review"
+    allow: ['tool:contact-lookup']
+    redact: ['name', 'email', 'phone']
+    escalation: 'human_review'
   secret:
     allow: []
-    escalation: "deny"
+    escalation: 'deny'
 invariants:
   - name: no_destructive_change
-    applies_to: ["principle","project"]
-    rule: "api.breaking_change == false"
+    applies_to: ['principle', 'project']
+    rule: 'api.breaking_change == false'
   - name: pii_not_in_prompt
-    applies_to: ["session","project","principle"]
-    rule: "prompt.contains_pii == false"
+    applies_to: ['session', 'project', 'principle']
+    rule: 'prompt.contains_pii == false'
 redact_policies:
   default:
     rules:
-      - { name: email,  find: "(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", replace: "[email]" }
-      - { name: phone,  find: "\\+?\\d[\\d\\-\\s]{7,}\\d",                    replace: "[phone]" }
-      - { name: secret, find: "(?i)sk-[a-z0-9]{10,}",                         replace: "[secret]" }
+      - { name: email, find: "(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", replace: '[email]' }
+      - { name: phone, find: "\\+?\\d[\\d\\-\\s]{7,}\\d", replace: '[phone]' }
+      - { name: secret, find: '(?i)sk-[a-z0-9]{10,}', replace: '[secret]' }
 retrieval:
   hybrid:
-    alpha: 0.65          # [0.3, 0.9] 推奨レンジ
-    k_txt: 48            # k_final の 3〜5倍
-    k_vec: 96            # k_final の 6〜10倍（VSS は 1.5〜2.0倍）
+    alpha: 0.65 # [0.3, 0.9] 推奨レンジ
+    k_txt: 48 # k_final の 3〜5倍
+    k_vec: 96 # k_final の 6〜10倍（VSS は 1.5〜2.0倍）
     k_final: 12
   rerank:
-    use_quality: false   # true で g に quality を掛け合わせ
+    use_quality: false # true で g に quality を掛け合わせ
     recency_half_life_days: 30
     recency:
       half_life_days_by_kind:
@@ -102,7 +102,7 @@ retrieval:
 
 ### 2.1 版管理と互換
 
-- `version` は SemVer。破壊変更は MAJOR 増加時のみ。  
+- `version` は SemVer。破壊変更は MAJOR 増加時のみ。
 - `policy.apply` には `dry_run/validate_only/expected_version/signature/approver` を推奨。
 
 ### 2.a retrieval パラメータ（ハイブリッド/再ランク）
@@ -149,8 +149,8 @@ pre_B(s, C, P) ∧ I(B)  ⇒  D = f(s, C, P) ⊧ post_B(D) ∧ I(B)
 
 **Hoare 風：**
 
-- Gating：`{ s ∈ S ∧ I(B) } gate(B) { s' ∈ S' ∧ I(B) }`  
-- Translation：`{ (s, C) ∧ I(B) } translate(B) { (s*, C*) ∧ I(B) }`  
+- Gating：`{ s ∈ S ∧ I(B) } gate(B) { s' ∈ S' ∧ I(B) }`
+- Translation：`{ (s, C) ∧ I(B) } translate(B) { (s*, C*) ∧ I(B) }`
 - Mediation：`{ conflict(C) } mediate(B) { consensus(C') ∧ evidence(inscription) }`
 
 ---
@@ -162,60 +162,81 @@ pre_B(s, C, P) ∧ I(B)  ⇒  D = f(s, C, P) ⊧ post_B(D) ∧ I(B)
 ```yaml
 version: 0.1
 boundary_classes:
-  public:   { allow: ["*"] }
-  internal: { allow: ["answer:task","tool:*"] }
-  pii:      { allow: ["tool:contact-lookup"], redact: ["email","phone"], escalation: "human_review" }
-  secret:   { allow: [], escalation: "deny" }
+  public: { allow: ['*'] }
+  internal: { allow: ['answer:task', 'tool:*'] }
+  pii: { allow: ['tool:contact-lookup'], redact: ['email', 'phone'], escalation: 'human_review' }
+  secret: { allow: [], escalation: 'deny' }
 invariants:
-  - { name: "pii_not_in_prompt", applies_to: ["*"], rule: "prompt.contains_pii == false" }
+  - { name: 'pii_not_in_prompt', applies_to: ['*'], rule: 'prompt.contains_pii == false' }
 ```
 
 ### 4.2 チーム（team）
 
 ```yaml
 version: 0.1
-scopes: { session: {ttl: "7d"}, project: {ttl: "120d"}, principle: {ttl: "inf"} }
+scopes: { session: { ttl: '7d' }, project: { ttl: '120d' }, principle: { ttl: 'inf' } }
 boundary_classes:
-  public:   { allow: ["*"] }
-  internal: { allow: ["answer:task","tool:*"] }
-  pii:      { allow: ["tool:contact-lookup"], redact: ["email","phone"], escalation: "human_review" }
-  secret:   { allow: [], escalation: "deny" }
+  public: { allow: ['*'] }
+  internal: { allow: ['answer:task', 'tool:*'] }
+  pii: { allow: ['tool:contact-lookup'], redact: ['email', 'phone'], escalation: 'human_review' }
+  secret: { allow: [], escalation: 'deny' }
 invariants:
-  - { name: "no_destructive_change", applies_to: ["project","principle"], rule: "api.breaking_change == false" }
-  - { name: "pii_not_in_prompt",     applies_to: ["*"],                    rule: "prompt.contains_pii == false" }
+  - {
+      name: 'no_destructive_change',
+      applies_to: ['project', 'principle'],
+      rule: 'api.breaking_change == false',
+    }
+  - { name: 'pii_not_in_prompt', applies_to: ['*'], rule: 'prompt.contains_pii == false' }
 ```
 
 ### 4.3 組織（org）
 
 ```yaml
 version: 1.0
-meta: { owner: "sec-gov@example.com" }
-scopes: { session: {ttl: "7d"}, project: {ttl: "180d"}, principle: {ttl: "inf"} }
+meta: { owner: 'sec-gov@example.com' }
+scopes: { session: { ttl: '7d' }, project: { ttl: '180d' }, principle: { ttl: 'inf' } }
 boundary_classes:
-  public:   { allow: ["*"] }
-  internal: { allow: ["answer:task","tool:*"] }
-  pii:      { allow: ["tool:contact-lookup"], redact: ["email","phone","address"], escalation: "human_review" }
-  secret:   { allow: [], escalation: "deny" }
+  public: { allow: ['*'] }
+  internal: { allow: ['answer:task', 'tool:*'] }
+  pii:
+    {
+      allow: ['tool:contact-lookup'],
+      redact: ['email', 'phone', 'address'],
+      escalation: 'human_review',
+    }
+  secret: { allow: [], escalation: 'deny' }
 invariants:
-  - { name: "prod_data_masked", applies_to: ["*"], rule: "dataset.origin != 'prod' || data.masked == true" }
-  - { name: "no_destructive_change", applies_to: ["project","principle"], rule: "api.breaking_change == false" }
-  - { name: "ip_whitelist_only", applies_to: ["session","project"], rule: "network.egress in allowlist" }
+  - {
+      name: 'prod_data_masked',
+      applies_to: ['*'],
+      rule: "dataset.origin != 'prod' || data.masked == true",
+    }
+  - {
+      name: 'no_destructive_change',
+      applies_to: ['project', 'principle'],
+      rule: 'api.breaking_change == false',
+    }
+  - {
+      name: 'ip_whitelist_only',
+      applies_to: ['session', 'project'],
+      rule: 'network.egress in allowlist',
+    }
 redact_policies:
   default:
     rules:
-      - { name: email, find: "(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", replace: "[email]" }
-      - { name: secret, find: "(?i)sk-[a-z0-9]{10,}", replace: "[secret]" }
+      - { name: email, find: "(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", replace: '[email]' }
+      - { name: secret, find: '(?i)sk-[a-z0-9]{10,}', replace: '[secret]' }
 ```
 
 ---
 
 ## 5. MCP ツールと境界
 
-- **validate**：`pce.memory.boundary.validate(payload, allow?, scope?)`  
+- **validate**：`pce.memory.boundary.validate(payload, allow?, scope?)`
   - `allowed: boolean`, `redacted?: string`, `reason`, `policy_version`
-- **activate/search**：`scope/allow` を必須化。候補は境界内の断片のみ。  
+- **activate/search**：`scope/allow` を必須化。候補は境界内の断片のみ。
   - `retrieval.*` パラメータ（hybrid/rerank）は `activate`/`search` 内のスコアリングに適用される（`activation-ranking.md` 参照）。
-- **upsert**：`boundary_class` 必須、`secret` は原則拒否、`pii` は redact 済みを要求。  
+- **upsert**：`boundary_class` 必須、`secret` は原則拒否、`pii` は redact 済みを要求。
 - **policy.apply**：`dry_run/validate_only/expected_version` で競合回避（GitOps 推奨）。
 
 ### 5.x LCP/AC の寿命と再利用
@@ -227,21 +248,21 @@ redact_policies:
 
 ## 6. Pace Layering と昇格/沈降
 
-| 層 | 例 | 更新テンポ | 役割 |
-|---|---|---|---|
-| micro | 会話・注意 | 速（秒〜日） | 実験・発見・変異 |
-| meso  | 手続・規約 | 中（週〜月） | 蒸留・標準化・普及 |
-| macro | 制度・規範 | 遅（年〜十年） | 保全・安全・責任 |
+| 層    | 例         | 更新テンポ     | 役割               |
+| ----- | ---------- | -------------- | ------------------ |
+| micro | 会話・注意 | 速（秒〜日）   | 実験・発見・変異   |
+| meso  | 手続・規約 | 中（週〜月）   | 蒸留・標準化・普及 |
+| macro | 制度・規範 | 遅（年〜十年） | 保全・安全・責任   |
 
-- **昇格（distill）**：AC 成果 → レビュー 2 名・由来必須・I(B) 満足 → LCP へ。  
+- **昇格（distill）**：AC 成果 → レビュー 2 名・由来必須・I(B) 満足 → LCP へ。
 - **沈降（rollback）**：越境や事故時に LCP を安全側へ戻す（append-only ログと連動）。
 
 ---
 
 ## 7. 運用（ガバナンスと監査）
 
-- **変更管理**：`policy.apply` は PR（reviewers ≥ 2）→ 署名 → 反映。  
-- **監査ログ**：append-only / WORM 推奨。`request_id/trace_id/policy_version` を常時記録。  
+- **変更管理**：`policy.apply` は PR（reviewers ≥ 2）→ 署名 → 反映。
+- **監査ログ**：append-only / WORM 推奨。`request_id/trace_id/policy_version` を常時記録。
 - **SLO（例）**：Boundary 準拠率 ≥ 99.9%、Rollback MTTR ≤ 24h、蒸留半減期 30 日以内。
 
 ### 7.x 監査ログ（必須項目）
@@ -261,11 +282,11 @@ redact_policies:
 - 入力：`payload="APIに破壊的変更", scope=principle, invariant=no_destructive_change`
   - 期待：`allowed=false, reason="I(B) violation"`
 
-- [ ] `validate` が `allowed=false` を返す境界違反ケース  
-- [ ] Redact 正規表現で PII/Secret を確実に置換  
-- [ ] `upsert` の `pii/secret` 入力の拒否/例外経路  
-- [ ] Distill/rollback の人手レビュー/ログ一貫性  
-- [ ] `activate/search` の allow/scope での絞り込み  
+- [ ] `validate` が `allowed=false` を返す境界違反ケース
+- [ ] Redact 正規表現で PII/Secret を確実に置換
+- [ ] `upsert` の `pii/secret` 入力の拒否/例外経路
+- [ ] Distill/rollback の人手レビュー/ログ一貫性
+- [ ] `activate/search` の allow/scope での絞り込み
 - [ ] 期限切れ AC（410 Gone）の挙動
 
 ---
@@ -274,15 +295,16 @@ redact_policies:
 
 ```json
 {
-  "type":"object","additionalProperties":false,
-  "properties":{
-    "version":{"type":"string","pattern":"^\\d+\\.\\d+\\.\\d+.*$"},
-    "scopes":{"type":"object"},
-    "boundary_classes":{"type":"object"},
-    "invariants":{"type":"array","items":{"type":"object"}},
-    "redact_policies":{"type":"object"}
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+.*$" },
+    "scopes": { "type": "object" },
+    "boundary_classes": { "type": "object" },
+    "invariants": { "type": "array", "items": { "type": "object" } },
+    "redact_policies": { "type": "object" }
   },
-  "required":["version","boundary_classes"]
+  "required": ["version", "boundary_classes"]
 }
 ```
 
@@ -290,46 +312,62 @@ redact_policies:
 
 ```json
 {
-  "type":"object","additionalProperties":false,
-  "properties":{
-    "version":{"type":"string","pattern":"^\\d+\\.\\d+\\.\\d+.*$"},
-    "scopes":{"type":"object","additionalProperties":false,
-      "properties":{
-        "session":{"type":"object","properties":{"ttl":{"type":"string"}}},
-        "project":{"type":"object","properties":{"ttl":{"type":"string"}}},
-        "principle":{"type":"object","properties":{"ttl":{"type":"string"}}}
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+.*$" },
+    "scopes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": { "type": "object", "properties": { "ttl": { "type": "string" } } },
+        "project": { "type": "object", "properties": { "ttl": { "type": "string" } } },
+        "principle": { "type": "object", "properties": { "ttl": { "type": "string" } } }
       }
     },
-    "boundary_classes":{"type":"object","additionalProperties":false},
-    "invariants":{"type":"array","items":{
-      "type":"object","additionalProperties":false,
-      "properties":{"name":{"type":"string"},"applies_to":{"type":"array","items":{"type":"string"}},"rule":{"type":"string"}},
-      "required":["name","rule"]
-    }},
-    "redact_policies":{"type":"object"},
-    "retrieval":{
-      "type":"object","additionalProperties":false,
-      "properties":{
-        "hybrid":{
-          "type":"object","additionalProperties":false,
-          "properties":{
-            "alpha":{"type":"number","minimum":0.0,"maximum":1.0},
-            "k_txt":{"type":"integer","minimum":1},
-            "k_vec":{"type":"integer","minimum":1},
-            "k_final":{"type":"integer","minimum":1}
-          },
-          "required":["alpha","k_txt","k_vec","k_final"]
+    "boundary_classes": { "type": "object", "additionalProperties": false },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "applies_to": { "type": "array", "items": { "type": "string" } },
+          "rule": { "type": "string" }
         },
-        "rerank":{
-          "type":"object","additionalProperties":false,
-          "properties":{
-            "use_quality":{"type":"boolean"},
-            "recency_half_life_days":{"type":"number","minimum":1},
-            "recency":{
-              "type":"object","additionalProperties":false,
-              "properties":{
-                "half_life_days_by_lind":{
-                  "type":"object","additionalProperties":{"type":"number","minimum":1}
+        "required": ["name", "rule"]
+      }
+    },
+    "redact_policies": { "type": "object" },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hybrid": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "alpha": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "k_txt": { "type": "integer", "minimum": 1 },
+            "k_vec": { "type": "integer", "minimum": 1 },
+            "k_final": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["alpha", "k_txt", "k_vec", "k_final"]
+        },
+        "rerank": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "use_quality": { "type": "boolean" },
+            "recency_half_life_days": { "type": "number", "minimum": 1 },
+            "recency": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "half_life_days_by_lind": {
+                  "type": "object",
+                  "additionalProperties": { "type": "number", "minimum": 1 }
                 }
               }
             }
@@ -338,7 +376,7 @@ redact_policies:
       }
     }
   },
-  "required":["version","boundary_classes"]
+  "required": ["version", "boundary_classes"]
 }
 ```
 
@@ -346,6 +384,6 @@ redact_policies:
 
 ## 10. 参考
 
-- PCE: Boundary / Invariants / Distill / Rollback（pce.ja.md, pce-model.ja.md）  
-- MCP Tools: `boundary.validate`, `policy.apply`, `search/activate`, `upsert`（mcp-tools.md）  
+- PCE: Boundary / Invariants / Distill / Rollback（pce.ja.md, pce-model.ja.md）
+- MCP Tools: `boundary.validate`, `policy.apply`, `search/activate`, `upsert`（mcp-tools.md）
 - Trust & Safety: Redact-before-Send / Fail-closed（pce-memory-vision.ja.md）

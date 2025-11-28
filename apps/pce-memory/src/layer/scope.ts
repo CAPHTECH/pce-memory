@@ -3,9 +3,9 @@
  * V2 Effect設計: リソースのスコープベース管理
  * TLA+ EnterScope, ExitScope, UniqueOwnershipに対応
  */
-import * as E from "fp-ts/Either";
-import type { DomainError } from "../domain/errors.js";
-import { scopeNotActiveError, domainError } from "../domain/errors.js";
+import * as E from 'fp-ts/Either';
+import type { DomainError } from '../domain/errors.js';
+import { scopeNotActiveError, domainError } from '../domain/errors.js';
 
 // ScopeId型
 export type ScopeId = string;
@@ -30,7 +30,7 @@ export const enterScope = (
   scopeId: ScopeId
 ): E.Either<DomainError, ScopeState> => {
   if (state.activeScopes.has(scopeId)) {
-    return E.left(domainError("VALIDATION_ERROR", `scope already active: ${scopeId}`));
+    return E.left(domainError('VALIDATION_ERROR', `scope already active: ${scopeId}`));
   }
 
   const newActiveScopes = new Set(state.activeScopes);
@@ -90,7 +90,7 @@ export const addResourceToScope = (
     if (otherScopeId !== scopeId && resources.has(resourceId)) {
       return E.left(
         domainError(
-          "VALIDATION_ERROR",
+          'VALIDATION_ERROR',
           `resource "${resourceId}" already owned by scope "${otherScopeId}"`
         )
       );

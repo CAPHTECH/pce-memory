@@ -8,11 +8,11 @@
  * - TTL: 24時間（設定可能）
  */
 
-import * as TE from "fp-ts/TaskEither";
-import type { EmbeddingCache, CacheEntry } from "./types.js";
-import { CACHE_TTL_MS } from "./types.js";
-import type { CacheError } from "./errors.js";
-import { cacheReadError, cacheWriteError } from "./errors.js";
+import * as TE from 'fp-ts/TaskEither';
+import type { EmbeddingCache, CacheEntry } from './types.js';
+import { CACHE_TTL_MS } from './types.js';
+import type { CacheError } from './errors.js';
+import { cacheReadError, cacheWriteError } from './errors.js';
 
 /**
  * キャッシュ設定
@@ -57,14 +57,12 @@ export const createInMemoryCache = (config: CacheConfig): InMemoryCacheWithInter
    * バージョン込みキーを生成
    * TLA+ Inv_CacheVersionConsistency を型レベルで強制
    */
-  const makeKey = (textHash: string, version: string): string =>
-    `${textHash}:${version}`;
+  const makeKey = (textHash: string, version: string): string => `${textHash}:${version}`;
 
   /**
    * TTL期限切れチェック
    */
-  const isExpired = (entry: CacheEntry): boolean =>
-    Date.now() - entry.createdAt > ttlMs;
+  const isExpired = (entry: CacheEntry): boolean => Date.now() - entry.createdAt > ttlMs;
 
   /**
    * LRU風の古いエントリ削除（maxEntries超過時）
@@ -73,9 +71,7 @@ export const createInMemoryCache = (config: CacheConfig): InMemoryCacheWithInter
     if (entries.size <= maxEntries) return;
 
     // createdAt順でソートして古いものを削除
-    const sorted = [...entries.entries()].sort(
-      ([, a], [, b]) => a.createdAt - b.createdAt
-    );
+    const sorted = [...entries.entries()].sort(([, a], [, b]) => a.createdAt - b.createdAt);
     const toDelete = sorted.slice(0, entries.size - maxEntries);
     toDelete.forEach(([key]) => entries.delete(key));
   };
@@ -197,7 +193,7 @@ export interface CacheStats {
  * createInMemoryCacheの戻り値かどうかをチェック
  */
 const hasInternals = (cache: EmbeddingCache): cache is InMemoryCacheWithInternals =>
-  "_getEntries" in cache && typeof (cache as InMemoryCacheWithInternals)._getEntries === "function";
+  '_getEntries' in cache && typeof (cache as InMemoryCacheWithInternals)._getEntries === 'function';
 
 /**
  * キャッシュ統計情報を取得するヘルパー
@@ -236,5 +232,5 @@ export const getCacheStats = (cache: EmbeddingCache): CacheStats => {
  * テスト用: キャッシュをリセット
  * (テストでのみ使用)
  */
-export const createTestCache = (modelVersion = "test-v1"): EmbeddingCache =>
+export const createTestCache = (modelVersion = 'test-v1'): EmbeddingCache =>
   createInMemoryCache({ initialModelVersion: modelVersion, ttlMs: 60000 });

@@ -47,20 +47,24 @@
 以下の情報を `pce.memory.upsert` で記録してください：
 
 ### kind: fact（事実）
+
 - アーキテクチャ決定（「認証にはJWTを使用」）
 - 技術的制約（「DuckDBはFOREIGN KEY CASCADEをサポートしない」）
 - API仕様（「POST /cancel は非同期で202を返す」）
 
 ### kind: preference（好み）
+
 - コーディングスタイル（「関数型パターンを好む」）
 - ツール選択（「テストにはVitestを使用」）
-- 命名規則（「ハンドラは handle* プレフィックス」）
+- 命名規則（「ハンドラは handle\* プレフィックス」）
 
 ### kind: task（タスク）
+
 - 進行中の作業（「認証機能を実装中」）
 - TODO項目（「エラーハンドリングを追加する必要がある」）
 
 ### kind: policy_hint（ポリシーヒント）
+
 - セキュリティ要件（「PII は internal 以上で保護」）
 - 運用ルール（「本番DBへの直接アクセス禁止」）
 
@@ -84,22 +88,22 @@
 
 ## scope の使い分け
 
-| scope | 用途 | 例 |
-|-------|------|-----|
-| `session` | 今回の会話限定 | 「このファイルを編集中」「デバッグ中の仮説」 |
-| `project` | プロジェクト固有 | 「JWTで認証」「Vitestでテスト」「REST API設計」 |
-| `principle` | 普遍的原則 | 「TDDで開発」「SOLID原則を遵守」 |
+| scope       | 用途             | 例                                              |
+| ----------- | ---------------- | ----------------------------------------------- |
+| `session`   | 今回の会話限定   | 「このファイルを編集中」「デバッグ中の仮説」    |
+| `project`   | プロジェクト固有 | 「JWTで認証」「Vitestでテスト」「REST API設計」 |
+| `principle` | 普遍的原則       | 「TDDで開発」「SOLID原則を遵守」                |
 
 ---
 
 ## boundary_class の使い分け
 
-| class | 用途 | 例 |
-|-------|------|-----|
-| `public` | 公開可能 | OSSライブラリの使い方、一般的な技術情報 |
-| `internal` | 社内限定 | 内部API仕様、アーキテクチャ決定 |
-| `pii` | 個人情報含む | ユーザー名、メールアドレスを含む文脈 |
-| `secret` | 機密情報 | APIキー、認証情報（※記録しないことを推奨） |
+| class      | 用途         | 例                                         |
+| ---------- | ------------ | ------------------------------------------ |
+| `public`   | 公開可能     | OSSライブラリの使い方、一般的な技術情報    |
+| `internal` | 社内限定     | 内部API仕様、アーキテクチャ決定            |
+| `pii`      | 個人情報含む | ユーザー名、メールアドレスを含む文脈       |
+| `secret`   | 機密情報     | APIキー、認証情報（※記録しないことを推奨） |
 
 ---
 
@@ -107,12 +111,12 @@
 
 activateで取得した知識が役立ったかを `pce.memory.feedback` で報告してください：
 
-| signal | いつ送るか |
-|--------|-----------|
-| `helpful` | 提案/知識が採用された、問題解決に貢献した |
-| `harmful` | 提案が誤っていた、バグの原因になった |
-| `outdated` | 情報が古くなっていた、現状と異なる |
-| `duplicate` | 同じ内容が既に別のClaimで存在する |
+| signal      | いつ送るか                                |
+| ----------- | ----------------------------------------- |
+| `helpful`   | 提案/知識が採用された、問題解決に貢献した |
+| `harmful`   | 提案が誤っていた、バグの原因になった      |
+| `outdated`  | 情報が古くなっていた、現状と異なる        |
+| `duplicate` | 同じ内容が既に別のClaimで存在する         |
 
 ```json
 // 例: 知識が役立った
@@ -228,9 +232,7 @@ Agent:
   "boundary_class": "internal",
   "content_hash": "sha256:...",
   "provenance": { "at": "2025-11-28T00:00:00Z" },
-  "entities": [
-    { "id": "tag_typescript", "type": "Concept", "name": "TypeScript" }
-  ],
+  "entities": [{ "id": "tag_typescript", "type": "Concept", "name": "TypeScript" }],
   "relations": [
     { "id": "rel_001", "src_id": "$claim_id", "dst_id": "tag_typescript", "type": "TAGGED" }
   ]

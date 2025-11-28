@@ -21,10 +21,10 @@ interface DuckDBTimestamp {
  */
 function isDuckDBTimestamp(value: unknown): value is DuckDBTimestamp {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
-    "micros" in value &&
-    typeof (value as DuckDBTimestamp).micros === "bigint"
+    'micros' in value &&
+    typeof (value as DuckDBTimestamp).micros === 'bigint'
   );
 }
 
@@ -39,10 +39,10 @@ interface ConvertedDuckDBTimestamp {
 
 function isConvertedDuckDBTimestamp(value: unknown): value is ConvertedDuckDBTimestamp {
   return (
-    typeof value === "object" &&
+    typeof value === 'object' &&
     value !== null &&
-    "micros" in value &&
-    typeof (value as ConvertedDuckDBTimestamp).micros === "string" &&
+    'micros' in value &&
+    typeof (value as ConvertedDuckDBTimestamp).micros === 'string' &&
     Object.keys(value as object).length === 1
   );
 }
@@ -60,7 +60,7 @@ export function normalizeTimestamp(value: unknown): string | unknown {
     return new Date(Number(value.micros / 1000n)).toISOString();
   }
   // 旧形式: BigInt直接
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     // DuckDBはマイクロ秒単位で返すため、ミリ秒に変換
     return new Date(Number(value / 1000n)).toISOString();
   }
@@ -74,14 +74,14 @@ export function normalizeTimestamp(value: unknown): string | unknown {
  * タイムスタンプフィールドのデフォルトリスト
  */
 const DEFAULT_TIMESTAMP_FIELDS = [
-  "created_at",
-  "updated_at",
-  "recency_anchor",
-  "at",
-  "ts",
-  "ts_eff",
-  "recorded_at",
-  "last_reset",
+  'created_at',
+  'updated_at',
+  'recency_anchor',
+  'at',
+  'ts',
+  'ts_eff',
+  'recorded_at',
+  'last_reset',
 ];
 
 /**
@@ -95,7 +95,7 @@ export function normalizeRowTimestamps<T>(
   row: T,
   timestampFields: string[] = DEFAULT_TIMESTAMP_FIELDS
 ): T {
-  if (row === null || row === undefined || typeof row !== "object") {
+  if (row === null || row === undefined || typeof row !== 'object') {
     return row;
   }
   const normalized = { ...row } as Record<string, unknown>;
@@ -147,7 +147,7 @@ export function bigIntReplacer(_key: string, value: unknown): unknown {
     return value.micros;
   }
 
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     // DuckDBのタイムスタンプはマイクロ秒単位
     // 妥当な日付範囲（2000-01-01 〜 2100-01-01）のマイクロ秒値
     // 2000-01-01: 946684800000000 (約9.5e14)

@@ -1,5 +1,5 @@
-import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
-import { SCHEMA_SQL } from "./schema.js";
+import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
+import { SCHEMA_SQL } from './schema.js';
 
 let instance: DuckDBInstance | null = null;
 let cachedConnection: DuckDBConnection | null = null;
@@ -10,7 +10,7 @@ let cachedConnection: DuckDBConnection | null = null;
  */
 export async function initDb(): Promise<DuckDBInstance> {
   if (instance) return instance;
-  const dbPath = process.env["PCE_DB"] ?? ":memory:";
+  const dbPath = process.env['PCE_DB'] ?? ':memory:';
   instance = await DuckDBInstance.create(dbPath);
   return instance;
 }
@@ -21,7 +21,7 @@ export async function initDb(): Promise<DuckDBInstance> {
  */
 export function getDb(): DuckDBInstance {
   if (!instance) {
-    throw new Error("Database not initialized. Call initDb() first.");
+    throw new Error('Database not initialized. Call initDb() first.');
   }
   return instance;
 }
@@ -29,10 +29,23 @@ export function getDb(): DuckDBInstance {
 /**
  * コネクションを取得（非同期）
  * 単一コネクションを再利用してリーク防止
+ * 無効なコネクションは自動的に再作成
  */
 export async function getConnection(): Promise<DuckDBConnection> {
   if (cachedConnection) {
-    return cachedConnection;
+    try {
+      // コネクションが有効かを簡単なクエリで確認
+      await cachedConnection.runAndReadAll('SELECT 1');
+      return cachedConnection;
+    } catch {
+      // コネクションが無効な場合は再作成
+      try {
+        cachedConnection.closeSync();
+      } catch {
+        // クローズエラーは無視
+      }
+      cachedConnection = null;
+    }
   }
   cachedConnection = await getDb().connect();
   return cachedConnection;
@@ -43,7 +56,7 @@ export async function getConnection(): Promise<DuckDBConnection> {
  */
 export async function initSchema() {
   const conn = await getConnection();
-  const statements = SCHEMA_SQL.split(";")
+  const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())
     .filter(Boolean);
   for (const stmt of statements) {
@@ -52,9 +65,29 @@ export async function initSchema() {
 }
 
 /**
- * テスト用: DB をリセット
+ * テスト用: DB をリセット（非同期版を推奨）
+ * 互換性のため同期版も維持
  */
 export function resetDb(): void {
+  // 注意: この関数はコネクションを適切にクローズしない
+  // 可能であれば resetDbAsync() を使用すること
+  cachedConnection = null;
+  instance = null;
+}
+
+/**
+ * テスト用: DB をリセット（非同期）
+ * コネクションを適切にクローズしてからリセット
+ */
+export async function resetDbAsync(): Promise<void> {
+  if (cachedConnection) {
+    try {
+      // DuckDB Node APIはcloseSync()を使用
+      cachedConnection.closeSync();
+    } catch {
+      // クローズエラーは無視（既にクローズされている可能性）
+    }
+  }
   cachedConnection = null;
   instance = null;
 }

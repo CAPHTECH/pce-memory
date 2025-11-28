@@ -7,7 +7,7 @@
  * @see kiri/src/daemon/lifecycle.ts
  */
 
-import * as fs from "fs/promises";
+import * as fs from 'fs/promises';
 
 /**
  * デーモンライフサイクル管理クラス
@@ -60,11 +60,11 @@ export class DaemonLifecycle {
   async acquireStartupLock(): Promise<boolean> {
     try {
       await fs.writeFile(this.startupLockPath, String(process.pid), {
-        flag: "wx", // 排他的作成
+        flag: 'wx', // 排他的作成
       });
       return true;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
         return false;
       }
       throw err;
@@ -78,7 +78,7 @@ export class DaemonLifecycle {
     try {
       await fs.unlink(this.startupLockPath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error(`[Daemon] Failed to release startup lock: ${err}`);
       }
     }
@@ -88,7 +88,7 @@ export class DaemonLifecycle {
    * PIDファイルを作成
    */
   async createPidFile(): Promise<void> {
-    await fs.writeFile(this.pidFilePath, String(process.pid), "utf-8");
+    await fs.writeFile(this.pidFilePath, String(process.pid), 'utf-8');
   }
 
   /**
@@ -98,7 +98,7 @@ export class DaemonLifecycle {
     try {
       await fs.unlink(this.pidFilePath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error(`[Daemon] Failed to remove PID file: ${err}`);
       }
     }
@@ -111,7 +111,7 @@ export class DaemonLifecycle {
    */
   async checkRunning(): Promise<number | null> {
     try {
-      const pidStr = await fs.readFile(this.pidFilePath, "utf-8");
+      const pidStr = await fs.readFile(this.pidFilePath, 'utf-8');
       const pid = parseInt(pidStr.trim(), 10);
 
       try {
@@ -122,7 +122,7 @@ export class DaemonLifecycle {
         return null;
       }
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;
       }
       throw err;
@@ -219,8 +219,8 @@ export class DaemonLifecycle {
       process.exit(0);
     };
 
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   }
 
   /**
@@ -251,7 +251,7 @@ export class DaemonLifecycle {
 
       await fs.rename(this.logFilePath, `${this.logFilePath}.1`);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error(`[Daemon] Failed to rotate log file: ${err}`);
       }
     }
@@ -268,7 +268,7 @@ export class DaemonLifecycle {
     const timestamp = new Date().toISOString();
     const logMessage = `${timestamp} ${message}\n`;
     try {
-      await fs.appendFile(this.logFilePath, logMessage, "utf-8");
+      await fs.appendFile(this.logFilePath, logMessage, 'utf-8');
     } catch (err) {
       console.error(`[Daemon] Failed to write to log file: ${err}`);
     }

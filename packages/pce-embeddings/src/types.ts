@@ -3,16 +3,16 @@
  * ADR-0003/TLA+ pce_embedding.tla仕様に準拠
  */
 
-import * as TE from "fp-ts/TaskEither";
-import type { EmbeddingError, CacheError } from "./errors.js";
+import * as TE from 'fp-ts/TaskEither';
+import type { EmbeddingError, CacheError } from './errors.js';
 
 // ========== TLA+ CONSTANTS ==========
 
 /** TLA+: ProviderStatus == {"available", "unavailable", "degraded"} */
-export type ProviderStatus = "available" | "unavailable" | "degraded";
+export type ProviderStatus = 'available' | 'unavailable' | 'degraded';
 
 /** Alloy: SensitivityLevel -> Public, Internal, Confidential */
-export type SensitivityLevel = "public" | "internal" | "confidential";
+export type SensitivityLevel = 'public' | 'internal' | 'confidential';
 
 /** ADR-0003: バッチサイズ上限 */
 export const MAX_BATCH_SIZE = 32;
@@ -60,7 +60,9 @@ export interface EmbeddingProvider {
    * バッチ埋め込み生成（最大32件）
    * ADR-0003: MaxBatchSize = 32
    */
-  embedBatch(texts: readonly string[]): TE.TaskEither<EmbeddingError, readonly (readonly number[])[]>;
+  embedBatch(
+    texts: readonly string[]
+  ): TE.TaskEither<EmbeddingError, readonly (readonly number[])[]>;
 }
 
 // ========== EmbeddingCache Interface ==========
@@ -87,7 +89,11 @@ export interface EmbeddingCache {
    * @param embedding 埋め込みベクトル
    * @param modelVersion 埋め込み生成に使用したモデルバージョン（型安全なバージョン追跡）
    */
-  set(textHash: string, embedding: readonly number[], modelVersion: string): TE.TaskEither<CacheError, void>;
+  set(
+    textHash: string,
+    embedding: readonly number[],
+    modelVersion: string
+  ): TE.TaskEither<CacheError, void>;
 
   /**
    * 全エントリ無効化

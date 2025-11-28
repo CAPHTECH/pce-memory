@@ -6,7 +6,10 @@ export default defineConfig({
     alias: {
       // ワークスペースパッケージのエイリアス設定
       '@pce/boundary': resolve(__dirname, 'packages/pce-boundary/src/index.ts'),
-      '@pce/policy-schemas/src/defaults': resolve(__dirname, 'packages/pce-policy-schemas/src/defaults.ts'),
+      '@pce/policy-schemas/src/defaults': resolve(
+        __dirname,
+        'packages/pce-policy-schemas/src/defaults.ts'
+      ),
       '@pce/policy-schemas': resolve(__dirname, 'packages/pce-policy-schemas/src/index.ts'),
       '@pce/embeddings': resolve(__dirname, 'packages/pce-embeddings/src/index.ts'),
       '@pce/sdk-ts': resolve(__dirname, 'packages/pce-sdk-ts/src/index.ts'),
@@ -56,8 +59,19 @@ export default defineConfig({
     hookTimeout: 30000,
 
     // 並列実行設定
-    threads: true,
-    maxThreads: 4,
+    // テスト間のDuckDB状態分離を確保するためforks poolを使用
+    // singleForkでシーケンシャル実行し、フレーキーテストを防止
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+        isolate: true,
+      },
+    },
+    // ファイル内のテストも順次実行
+    sequence: {
+      concurrent: false,
+    },
 
     // レポーター設定
     reporters: ['default', 'json', 'html'],

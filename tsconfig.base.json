@@ -52,10 +52,5 @@
     // fp-ts specific
     "moduleDetection": "force"
   },
-  "exclude": [
-    "**/node_modules",
-    "**/dist",
-    "**/.turbo",
-    "**/coverage"
-  ]
+  "exclude": ["**/node_modules", "**/dist", "**/.turbo", "**/coverage"]
 }

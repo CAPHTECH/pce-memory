@@ -7,25 +7,25 @@
  *                                    ↑   ↓
  *                                    └───┘ (追加upsert)
  */
-import * as TE from "fp-ts/TaskEither";
-import * as E from "fp-ts/Either";
-import { pipe } from "fp-ts/function";
-import type { DomainError } from "./errors.js";
-import { domainError } from "./errors.js";
+import * as TE from 'fp-ts/TaskEither';
+import * as E from 'fp-ts/Either';
+import { pipe } from 'fp-ts/function';
+import type { DomainError } from './errors.js';
+import { domainError } from './errors.js';
 
 // ========== Phantom Types（コンパイル時の状態表現）==========
 
 /** 初期状態: ポリシー未適用 */
-export type Uninitialized = { readonly _tag: "Uninitialized" };
+export type Uninitialized = { readonly _tag: 'Uninitialized' };
 
 /** ポリシー適用済み: upsert可能 */
-export type PolicyApplied = { readonly _tag: "PolicyApplied" };
+export type PolicyApplied = { readonly _tag: 'PolicyApplied' };
 
 /** Claims登録済み: activate可能 */
-export type HasClaims = { readonly _tag: "HasClaims" };
+export type HasClaims = { readonly _tag: 'HasClaims' };
 
 /** アクティブコンテキスト作成済み: feedback可能 */
-export type Ready = { readonly _tag: "Ready" };
+export type Ready = { readonly _tag: 'Ready' };
 
 /** 全状態の型 */
 export type PCEState = Uninitialized | PolicyApplied | HasClaims | Ready;
@@ -37,14 +37,14 @@ type CanUpsert = PolicyApplied | HasClaims | Ready;
 // ========== Runtime State（実行時の状態データ）==========
 
 /** 実行時状態の判別型 */
-export type RuntimeStateType = "Uninitialized" | "PolicyApplied" | "HasClaims" | "Ready";
+export type RuntimeStateType = 'Uninitialized' | 'PolicyApplied' | 'HasClaims' | 'Ready';
 
 /** 実行時状態データ（永続化対象） */
 export type RuntimeState =
-  | { readonly type: "Uninitialized" }
-  | { readonly type: "PolicyApplied"; readonly policyVersion: string }
-  | { readonly type: "HasClaims"; readonly policyVersion: string; readonly claimCount: number }
-  | { readonly type: "Ready"; readonly policyVersion: string; readonly activeContextId: string };
+  | { readonly type: 'Uninitialized' }
+  | { readonly type: 'PolicyApplied'; readonly policyVersion: string }
+  | { readonly type: 'HasClaims'; readonly policyVersion: string; readonly claimCount: number }
+  | { readonly type: 'Ready'; readonly policyVersion: string; readonly activeContextId: string };
 
 // ========== 入出力型 ==========
 
@@ -85,7 +85,7 @@ export interface ActivateResult {
 
 export interface FeedbackInput {
   claim_id: string;
-  signal: "helpful" | "harmful" | "outdated" | "duplicate";
+  signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
   score?: number;
 }
 
@@ -109,15 +109,13 @@ export class PCEMemory<S extends PCEState> {
   // Phantom Type: 型レベルでのみ存在し、実行時にはメモリを消費しない
   declare protected readonly _phantom: S;
 
-  private constructor(
-    public readonly runtimeState: RuntimeState
-  ) {}
+  private constructor(public readonly runtimeState: RuntimeState) {}
 
   // ========== ファクトリ ==========
 
   /** 初期状態を作成 */
   static create(): PCEMemory<Uninitialized> {
-    return new PCEMemory({ type: "Uninitialized" });
+    return new PCEMemory({ type: 'Uninitialized' });
   }
 
   /** 実行時状態から復元（外部呼び出し用） */
@@ -140,7 +138,7 @@ export class PCEMemory<S extends PCEState> {
       TE.fromEither(applyFn(input.yaml)),
       TE.map((version) => ({
         machine: new PCEMemory<PolicyApplied>({
-          type: "PolicyApplied",
+          type: 'PolicyApplied',
           policyVersion: version,
         }),
         result: { policyVersion: version },
@@ -172,7 +170,7 @@ export class PCEMemory<S extends PCEState> {
         const nextCount = isNew ? currentCount + 1 : Math.max(currentCount, 1);
         return {
           machine: new PCEMemory<HasClaims>({
-            type: "HasClaims",
+            type: 'HasClaims',
             policyVersion,
             claimCount: nextCount,
           }),
@@ -189,7 +187,9 @@ export class PCEMemory<S extends PCEState> {
   activate(
     this: PCEMemory<HasClaims>,
     input: ActivateInput,
-    activateFn: (input: ActivateInput) => TE.TaskEither<DomainError, { id: string; claims: unknown[] }>
+    activateFn: (
+      input: ActivateInput
+    ) => TE.TaskEither<DomainError, { id: string; claims: unknown[] }>
   ): TE.TaskEither<DomainError, { machine: PCEMemory<Ready>; result: ActivateResult }> {
     const policyVersion = this.getPolicyVersion();
 
@@ -197,7 +197,7 @@ export class PCEMemory<S extends PCEState> {
       activateFn(input),
       TE.map((ac) => ({
         machine: new PCEMemory<Ready>({
-          type: "Ready",
+          type: 'Ready',
           policyVersion,
           activeContextId: ac.id,
         }),
@@ -221,7 +221,11 @@ export class PCEMemory<S extends PCEState> {
       feedbackFn(input),
       TE.map((fb) => ({
         machine: new PCEMemory<Ready>({
-          ...this.runtimeState as { type: "Ready"; policyVersion: string; activeContextId: string },
+          ...(this.runtimeState as {
+            type: 'Ready';
+            policyVersion: string;
+            activeContextId: string;
+          }),
         }),
         result: { id: fb.id, policyVersion },
       }))
@@ -237,15 +241,15 @@ export class PCEMemory<S extends PCEState> {
 
   /** ポリシーバージョンを取得 */
   getPolicyVersion(): string {
-    if (this.runtimeState.type === "Uninitialized") {
-      return "0.0";
+    if (this.runtimeState.type === 'Uninitialized') {
+      return '0.0';
     }
     return this.runtimeState.policyVersion;
   }
 
   /** Claim数を取得 */
   getClaimCount(): number {
-    if (this.runtimeState.type === "HasClaims") {
+    if (this.runtimeState.type === 'HasClaims') {
       return this.runtimeState.claimCount;
     }
     return 0;
@@ -253,7 +257,7 @@ export class PCEMemory<S extends PCEState> {
 
   /** アクティブコンテキストIDを取得 */
   getActiveContextId(): string | undefined {
-    if (this.runtimeState.type === "Ready") {
+    if (this.runtimeState.type === 'Ready') {
       return this.runtimeState.activeContextId;
     }
     return undefined;
@@ -263,33 +267,36 @@ export class PCEMemory<S extends PCEState> {
 // ========== 状態検証ユーティリティ ==========
 
 /** 状態がUninitializedかチェック */
-export const isUninitialized = (state: RuntimeState): state is { type: "Uninitialized" } =>
-  state.type === "Uninitialized";
+export const isUninitialized = (state: RuntimeState): state is { type: 'Uninitialized' } =>
+  state.type === 'Uninitialized';
 
 /** 状態がPolicyAppliedかチェック */
-export const isPolicyApplied = (state: RuntimeState): state is { type: "PolicyApplied"; policyVersion: string } =>
-  state.type === "PolicyApplied";
+export const isPolicyApplied = (
+  state: RuntimeState
+): state is { type: 'PolicyApplied'; policyVersion: string } => state.type === 'PolicyApplied';
 
 /** 状態がHasClaimsかチェック */
-export const isHasClaims = (state: RuntimeState): state is { type: "HasClaims"; policyVersion: string; claimCount: number } =>
-  state.type === "HasClaims";
+export const isHasClaims = (
+  state: RuntimeState
+): state is { type: 'HasClaims'; policyVersion: string; claimCount: number } =>
+  state.type === 'HasClaims';
 
 /** 状態がReadyかチェック */
-export const isReady = (state: RuntimeState): state is { type: "Ready"; policyVersion: string; activeContextId: string } =>
-  state.type === "Ready";
+export const isReady = (
+  state: RuntimeState
+): state is { type: 'Ready'; policyVersion: string; activeContextId: string } =>
+  state.type === 'Ready';
 
 /** upsert可能な状態かチェック（Ready状態からも追加upsert可能） */
 export const canUpsert = (state: RuntimeState): boolean =>
-  state.type === "PolicyApplied" || state.type === "HasClaims" || state.type === "Ready";
+  state.type === 'PolicyApplied' || state.type === 'HasClaims' || state.type === 'Ready';
 
 /** activate可能な状態かチェック */
-export const canActivate = (state: RuntimeState): boolean =>
-  state.type === "HasClaims";
+export const canActivate = (state: RuntimeState): boolean => state.type === 'HasClaims';
 
 /** feedback可能な状態かチェック */
-export const canFeedback = (state: RuntimeState): boolean =>
-  state.type === "Ready";
+export const canFeedback = (state: RuntimeState): boolean => state.type === 'Ready';
 
 /** 状態エラーを生成 */
 export const stateError = (expected: string, actual: RuntimeStateType): DomainError =>
-  domainError("VALIDATION_ERROR", `Invalid state: expected ${expected}, got ${actual}`);
+  domainError('VALIDATION_ERROR', `Invalid state: expected ${expected}, got ${actual}`);

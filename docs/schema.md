@@ -126,7 +126,7 @@ INSTALL vss;  LOAD vss;
 
 # pce-memory DB Schema（SQLite v0）
 
-> 目的：**自己ホスト**・**監査可能**・**再現可能**な PCE-Memory を最小コストで運用するための **SQLite スキーマ v0**。 
+> 目的：**自己ホスト**・**監査可能**・**再現可能**な PCE-Memory を最小コストで運用するための **SQLite スキーマ v0**。
 > ハイブリッド検索（**FTS5+ベクトル**）、**LCP/AC（二相）**、**Boundary/Policy**、**Critic/Telemetry** をカバーする。
 
 ---
@@ -141,6 +141,7 @@ INSTALL vss;  LOAD vss;
 - スキーマ版管理：`PRAGMA user_version = <int>`
 
 運用の要件は以下に反映：
+
 - **Boundary-First**：`boundary_class`、Policy 版、AC スナップショットに由来を残す
 - **Provenance-by-Default**：Observation→Claim→Evidence の鎖
 - **Pace-aware**：AC（短期）/ LCP（長期）を分離
@@ -180,6 +181,7 @@ erDiagram
 ## 3. DDL（コア）
 
 ### 3.1 Observations（生観測）
+
 ```sql
 CREATE TABLE IF NOT EXISTS observations (
   id                  TEXT PRIMARY KEY,
@@ -194,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_type, 
 ```
 
 ### 3.2 Claims（抽出主張・検索対象）
+
 ```sql
 CREATE TABLE IF NOT EXISTS claims (
   id                     TEXT PRIMARY KEY,
@@ -215,6 +218,7 @@ CREATE INDEX IF NOT EXISTS idx_claims_qcur ON claims(quality, confidence, utilit
 ```
 
 ### 3.3 FTS5（全文検索）
+
 ```sql
 CREATE VIRTUAL TABLE IF NOT EXISTS claim_fts USING fts5(
   text, content='claims', content_rowid='rowid'
@@ -232,7 +236,9 @@ END;
 ```
 
 ### 3.4 ベクトル（sqlite-vec / vec0）
+
 > 例：次元 384。導入手順は `sqlite-vec` のドキュメントに従う。
+
 ```sql
 CREATE VIRTUAL TABLE IF NOT EXISTS claim_vectors USING vec0(
   claim_id TEXT PRIMARY KEY,    -- claims.id
@@ -245,6 +251,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS claim_vectors USING vec0(
 ## 4. DDL（グラフ・由来・フィードバック）
 
 ### 4.1 Entities / Relations（薄いグラフ）
+
 ```sql
 CREATE TABLE IF NOT EXISTS entities (
   id             TEXT PRIMARY KEY,
@@ -268,6 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_rel_dst ON relations(dst_id);
 ```
 
 ### 4.2 Evidences（由来鎖）
+
 ```sql
 CREATE TABLE IF NOT EXISTS evidences (
   id             TEXT PRIMARY KEY,
@@ -280,6 +288,7 @@ CREATE INDEX IF NOT EXISTS idx_evidences_claim ON evidences(claim_id);
 ```
 
 ### 4.3 Feedbacks（Critic 入力）
+
 ```sql
 CREATE TABLE IF NOT EXISTS feedbacks (
   id        TEXT PRIMARY KEY,
@@ -296,6 +305,7 @@ CREATE INDEX IF NOT EXISTS idx_feedbacks_claim_ts ON feedbacks(claim_id, ts);
 ## 5. DDL（AC/LCP・Policy・Telemetry）
 
 ### 5.1 Active Context（短期・使い捨て）
+
 ```sql
 CREATE TABLE IF NOT EXISTS active_contexts (
   id             TEXT PRIMARY KEY,
@@ -318,7 +328,9 @@ CREATE INDEX IF NOT EXISTS idx_ac_items_rank ON active_context_items(ac_id, rank
 ```
 
 ### 5.2 Latent Context Pool（長期・統合）
+
 > LCP 自体は「メタ情報」のみ。実体は `claims/entities/relations/evidences`。
+
 ```sql
 CREATE TABLE IF NOT EXISTS latent_pool (
   id       TEXT PRIMARY KEY,
@@ -329,6 +341,7 @@ CREATE TABLE IF NOT EXISTS latent_pool (
 ```
 
 ### 5.3 Policies（適用 YAML・版）
+
 ```sql
 CREATE TABLE IF NOT EXISTS policies (
   id          TEXT PRIMARY KEY,
@@ -340,6 +353,7 @@ CREATE INDEX IF NOT EXISTS idx_policies_version ON policies(version);
 ```
 
 ### 5.4 Events / Telemetry（監査・運用）
+
 ```sql
 CREATE TABLE IF NOT EXISTS events (
   id        TEXT PRIMARY KEY,
@@ -357,6 +371,7 @@ CREATE INDEX IF NOT EXISTS idx_events_topic_ts ON events(topic, ts);
 ## 6. 代表クエリ（ハイブリッド検索／AC 構成）
 
 ### 6.1 FTS × ベクトル（ハイブリッド）
+
 ```sql
 -- 例: クエリ埋め込みはアプリ側で生成し、:qvec にバインド
 WITH
@@ -381,6 +396,7 @@ SELECT * FROM scored ORDER BY score DESC LIMIT :k;
 ```
 
 ### 6.2 AC への取り込み
+
 ```sql
 -- 事前: INSERT INTO active_contexts(...);
 INSERT INTO active_context_items(ac_id, claim_id, rank, score)
@@ -396,6 +412,7 @@ FROM (
 
 - 版管理：`PRAGMA user_version` を **整数インクリメント**（v0.1 = 1, v0.2 = 2 ...）
 - 例：**v1→v2**（列追加の non-breaking）
+
 ```sql
 BEGIN;
 PRAGMA user_version;              -- 1 を期待
@@ -403,6 +420,7 @@ ALTER TABLE claims ADD COLUMN source_hint TEXT;
 PRAGMA user_version=2;
 COMMIT;
 ```
+
 - 例：**破壊的変更**は `CREATE TABLE new_*` → データ移送 → `DROP/RENAME` の手順で安全に
 - すべての変更は `events(topic='schema')` にも記録すること（監査）
 
