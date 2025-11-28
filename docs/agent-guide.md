@@ -190,6 +190,57 @@ Agent:
 
 ---
 
+## Graph Memoryでタグを実現する
+
+専用のタグ機能はありませんが、Graph Memory（Entity + Relation）で代替できます。
+
+### 1. タグをEntityとして登録
+
+```json
+// pce.memory.upsert.entity
+{
+  "id": "tag_typescript",
+  "type": "Concept",
+  "name": "TypeScript"
+}
+```
+
+### 2. ClaimとタグをRelationで紐付け
+
+```json
+// pce.memory.upsert.relation
+{
+  "id": "rel_clm_tag_001",
+  "src_id": "clm_abc123",
+  "dst_id": "tag_typescript",
+  "type": "TAGGED"
+}
+```
+
+### 3. upsert時にentitiesとrelationsを同時登録
+
+```json
+// pce.memory.upsert（一括登録）
+{
+  "text": "TypeScriptのexactOptionalPropertyTypesに注意",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "content_hash": "sha256:...",
+  "provenance": { "at": "2025-11-28T00:00:00Z" },
+  "entities": [
+    { "id": "tag_typescript", "type": "Concept", "name": "TypeScript" }
+  ],
+  "relations": [
+    { "id": "rel_001", "src_id": "$claim_id", "dst_id": "tag_typescript", "type": "TAGGED" }
+  ]
+}
+```
+
+> **Note**: 既存の分類（`kind` 4種 + `scope` 3層）と `activate` の `q` パラメータによるテキスト検索で多くのケースは対応可能です。
+
+---
+
 ## MCP設定例（Claude Desktop）
 
 ```json
