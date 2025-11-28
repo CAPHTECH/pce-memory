@@ -59,8 +59,14 @@ export default defineConfig({
     hookTimeout: 30000,
 
     // 並列実行設定
-    threads: true,
-    maxThreads: 4,
+    // テスト間のDuckDB状態分離を確保するためforks poolを使用
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: false,
+        isolate: true,
+      },
+    },
 
     // レポーター設定
     reporters: ['default', 'json', 'html'],
