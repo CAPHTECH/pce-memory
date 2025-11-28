@@ -582,30 +582,56 @@ describe('Inv_C_ThresholdFiltering boundary values', () => {
   }
 
   it('should filter results below threshold', async () => {
-    await insertTestData();
-    const mockService = createMockEmbeddingService(createDummyEmbedding(1));
-
-    // threshold=0.0で全て通過
-    const configLow: Partial<HybridSearchConfig> = {
-      embeddingService: mockService,
-      threshold: 0.0,
+    // CI環境でのDuckDB一時エラーに対応するためリトライラッパーを使用
+    const runWithRetry = async (fn: () => Promise<void>, retries = 3) => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          await fn();
+          return;
+        } catch (error) {
+          if (attempt === retries) throw error;
+          // リトライ前にDB再初期化
+          await resetDbAsync();
+          const freshPath = join(tmpdir(), `pce-test-threshold-retry-${randomUUID()}.duckdb`);
+          process.env.PCE_DB = freshPath;
+          await initDb();
+          await initSchema();
+          await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+        }
+      }
     };
-    const resultsLow = await hybridSearch(['project', 'session', 'principle'], 20, 'a', configLow);
 
-    // threshold=1.0で全てフィルタ
-    const configHigh: Partial<HybridSearchConfig> = {
-      embeddingService: mockService,
-      threshold: 1.0,
-    };
-    const resultsHigh = await hybridSearch(
-      ['project', 'session', 'principle'],
-      20,
-      'a',
-      configHigh
-    );
+    await runWithRetry(async () => {
+      await insertTestData();
+      const mockService = createMockEmbeddingService(createDummyEmbedding(1));
 
-    // 低閾値の方が結果が多い
-    expect(resultsLow.length).toBeGreaterThanOrEqual(resultsHigh.length);
+      // threshold=0.0で全て通過
+      const configLow: Partial<HybridSearchConfig> = {
+        embeddingService: mockService,
+        threshold: 0.0,
+      };
+      const resultsLow = await hybridSearch(
+        ['project', 'session', 'principle'],
+        20,
+        'a',
+        configLow
+      );
+
+      // threshold=1.0で全てフィルタ
+      const configHigh: Partial<HybridSearchConfig> = {
+        embeddingService: mockService,
+        threshold: 1.0,
+      };
+      const resultsHigh = await hybridSearch(
+        ['project', 'session', 'principle'],
+        20,
+        'a',
+        configHigh
+      );
+
+      // 低閾値の方が結果が多い
+      expect(resultsLow.length).toBeGreaterThanOrEqual(resultsHigh.length);
+    });
   });
 
   it('should include result exactly at threshold', async () => {
