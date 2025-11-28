@@ -10,7 +10,7 @@
  * @see docs/adr/0004-hybrid-search-design.md
  * @see docs/spec/tlaplus/hybrid_search_simple.tla
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
 import { upsertClaim } from '../src/store/claims';
 import type { EmbeddingService } from '@pce/embeddings';
@@ -52,11 +52,16 @@ function createFailingEmbeddingService(): EmbeddingService {
 }
 
 beforeEach(async () => {
+  // EmbeddingServiceをリセット（テスト間で独立させる）
+  setEmbeddingService(null as unknown as EmbeddingService);
   await resetDbAsync();
   process.env.PCE_DB = ':memory:';
   await initDb();
   await initSchema();
-  // EmbeddingServiceをリセット（テスト間で独立させる）
+});
+
+afterEach(async () => {
+  // テスト後のクリーンアップ（グローバル状態をリセット）
   setEmbeddingService(null as unknown as EmbeddingService);
 });
 
