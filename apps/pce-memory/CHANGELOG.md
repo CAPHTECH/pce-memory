@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-11-28
+
+### Added
+
+- **Graph Memory Query Tools** (Issue #1)
+  - `pce.memory.query.entity` - Query entities by ID, type, canonical_key, or claim_id
+  - `pce.memory.query.relation` - Query relations by ID, src_id, dst_id, type, or evidence_claim_id
+- English descriptions for all MCP tools (MCP standard compliance)
+
+### Fixed
+
+- CI stability improvements for DuckDB tests
+  - File-based DB isolation (tmpdir + UUID)
+  - Connection auto-recovery on invalid state
+  - Retry wrappers for flaky tests
+
 ## [0.2.1] - 2025-11-28
 
 ### Fixed
