@@ -9,4 +9,7 @@ export default defineConfig({
   // - fp-ts: ESM互換性問題を回避
   // - @pce/*: workspace依存をバンドル化（npm公開時に単一パッケージ化）
   noExternal: [/^fp-ts/, /^@pce\//],
+  // バンドルから除外（npm install時にインストールされる）
+  // - @xenova/transformers: onnxruntime-nodeのネイティブバイナリが必要なため
+  external: [/@xenova\/transformers/],
 });
