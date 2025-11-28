@@ -90,6 +90,8 @@ afterEach(async () => {
       // 削除エラーは無視
     }
   }
+  // CI環境でのDuckDBリソースクリーンアップのための小さな遅延
+  await new Promise((resolve) => setTimeout(resolve, 50));
 });
 
 // ========== テストデータ ==========
@@ -482,15 +484,25 @@ describe('hybridSearch with EmbeddingService', () => {
   /**
    * テストデータ挿入ヘルパー
    * 各テスト内で直接呼び出し、テスト間の完全な独立性を確保
+   * リトライロジックでCI環境でのDuckDB一時エラーを処理
    */
-  async function insertTestClaims(): Promise<string[]> {
-    const claimIds: string[] = [];
-    for (let i = 0; i < testClaims.length; i++) {
-      const { claim } = await upsertClaim(testClaims[i]);
-      claimIds.push(claim.id);
-      await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
+  async function insertTestClaims(retries = 3): Promise<string[]> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const claimIds: string[] = [];
+        for (let i = 0; i < testClaims.length; i++) {
+          const { claim } = await upsertClaim(testClaims[i]);
+          claimIds.push(claim.id);
+          await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
+        }
+        return claimIds;
+      } catch (error) {
+        if (attempt === retries) throw error;
+        // リトライ前に少し待機
+        await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+      }
     }
-    return claimIds;
+    return [];
   }
 
   it('should use EmbeddingService for vector search when provided via config', async () => {
@@ -551,11 +563,21 @@ describe('Inv_C_ThresholdFiltering boundary values', () => {
   /**
    * テストデータ挿入ヘルパー
    * テスト内で直接呼び出すことで、各テストの完全な独立性を確保
+   * リトライロジックでCI環境でのDuckDB一時エラーを処理
    */
-  async function insertTestData() {
-    for (let i = 0; i < testClaims.length; i++) {
-      const { claim } = await upsertClaim(testClaims[i]);
-      await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
+  async function insertTestData(retries = 3) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        for (let i = 0; i < testClaims.length; i++) {
+          const { claim } = await upsertClaim(testClaims[i]);
+          await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
+        }
+        return;
+      } catch (error) {
+        if (attempt === retries) throw error;
+        // リトライ前に少し待機
+        await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+      }
     }
   }
 
