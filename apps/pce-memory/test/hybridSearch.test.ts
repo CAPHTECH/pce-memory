@@ -439,18 +439,22 @@ describe('Edge cases', () => {
 // ========== EmbeddingService統合テスト ==========
 
 describe('hybridSearch with EmbeddingService', () => {
-  let claimIds: string[];
-
-  beforeEach(async () => {
-    claimIds = [];
+  /**
+   * テストデータ挿入ヘルパー
+   * 各テスト内で直接呼び出し、テスト間の完全な独立性を確保
+   */
+  async function insertTestClaims(): Promise<string[]> {
+    const claimIds: string[] = [];
     for (let i = 0; i < testClaims.length; i++) {
       const { claim } = await upsertClaim(testClaims[i]);
       claimIds.push(claim.id);
       await saveClaimVector(claim.id, createDummyEmbedding(i + 1), 'test-model-v1');
     }
-  });
+    return claimIds;
+  }
 
   it('should use EmbeddingService for vector search when provided via config', async () => {
+    await insertTestClaims();
     // モックEmbeddingServiceを設定（seed=1と同じ埋め込みを返す）
     const mockService = createMockEmbeddingService(createDummyEmbedding(1));
 
@@ -464,6 +468,7 @@ describe('hybridSearch with EmbeddingService', () => {
   });
 
   it('should use global EmbeddingService when set', async () => {
+    await insertTestClaims();
     // グローバルEmbeddingServiceを設定
     const mockService = createMockEmbeddingService(createDummyEmbedding(1));
     setEmbeddingService(mockService);
@@ -473,6 +478,7 @@ describe('hybridSearch with EmbeddingService', () => {
   });
 
   it('should fallback to text-only when EmbeddingService fails', async () => {
+    await insertTestClaims();
     const failingService = createFailingEmbeddingService();
     setEmbeddingService(failingService);
 
@@ -483,6 +489,7 @@ describe('hybridSearch with EmbeddingService', () => {
   });
 
   it('should apply custom alpha and threshold from config', async () => {
+    await insertTestClaims();
     const mockService = createMockEmbeddingService(createDummyEmbedding(1));
 
     // 高い閾値を設定してフィルタリングをテスト
