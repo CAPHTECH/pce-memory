@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs/promises';
+import { acquireLock, releaseLock, LockfileError } from '../shared/lockfile.js';
 
 /**
  * デーモンライフサイクル管理クラス
@@ -53,18 +54,23 @@ export class DaemonLifecycle {
   }
 
   /**
-   * スタートアップロックを取得（排他的作成）
+   * スタートアップロックを取得（排他的作成 + stale lock検出）
    *
+   * lockfile.tsに委譲することで、以下の機能を提供:
+   * - アトミックなファイル作成（wx flag）
+   * - stale lock検出（PID生存確認）
+   * - TOCTOU脆弱性対策（ダブルチェック）
+   *
+   * @remarks 内部的に同期APIを使用するが、起動時1回のみの呼び出しなので許容。
    * @returns ロック取得に成功した場合はtrue、他のプロセスが既にロック中の場合はfalse
    */
   async acquireStartupLock(): Promise<boolean> {
     try {
-      await fs.writeFile(this.startupLockPath, String(process.pid), {
-        flag: 'wx', // 排他的作成
-      });
+      acquireLock(this.startupLockPath);
       return true;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      if (err instanceof LockfileError) {
+        // 他のプロセスがロックを保持中（stale lockは自動検出・削除済み）
         return false;
       }
       throw err;
@@ -73,14 +79,19 @@ export class DaemonLifecycle {
 
   /**
    * スタートアップロックを解放
+   *
+   * lockfile.tsのreleaseLock()に委譲。
+   * ファイルが存在しない場合は静かに成功（冪等）。
+   * 解放失敗時はログ出力するが、例外はスローしない（シャットダウン継続を優先）。
+   *
+   * @remarks 内部的に同期APIを使用するが、シャットダウン時1回のみの呼び出しなので許容。
    */
   async releaseStartupLock(): Promise<void> {
     try {
-      await fs.unlink(this.startupLockPath);
+      releaseLock(this.startupLockPath);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`[Daemon] Failed to release startup lock: ${err}`);
-      }
+      // シャットダウン継続を優先し、エラーはログのみ
+      console.error(`[Daemon] Failed to release startup lock: ${err}`);
     }
   }
 

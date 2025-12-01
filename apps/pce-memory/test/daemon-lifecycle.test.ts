@@ -110,6 +110,63 @@ describe('DaemonLifecycle', () => {
     it('should not throw when releasing non-existent lock', async () => {
       await expect(lifecycle.releaseStartupLock()).resolves.not.toThrow();
     });
+
+    it('should acquire lock when existing lock has dead PID (stale lock detection)', async () => {
+      // 存在しないPIDでロックファイルを作成（stale lock）
+      const lockPath = lifecycle.getStartupLockPath();
+      await fs.writeFile(lockPath, '999999999', { flag: 'wx' });
+
+      // stale lockは自動検出・削除され、ロック取得に成功する
+      const acquired = await lifecycle.acquireStartupLock();
+      expect(acquired).toBe(true);
+
+      // ロックファイルが現在のPIDで更新されている
+      const content = await fs.readFile(lockPath, 'utf-8');
+      expect(content).toBe(String(process.pid));
+
+      // クリーンアップ
+      await lifecycle.releaseStartupLock();
+    });
+
+    it('should fail when lock has live PID (not stale)', async () => {
+      // 現在のプロセスのPIDでロックファイルを作成
+      const lockPath = lifecycle.getStartupLockPath();
+      await fs.writeFile(lockPath, String(process.pid), { flag: 'wx' });
+
+      // 生存プロセスのロックは取得失敗
+      const lifecycle2 = new DaemonLifecycle(databasePath, 5);
+      const acquired = await lifecycle2.acquireStartupLock();
+      expect(acquired).toBe(false);
+
+      // クリーンアップ
+      await fs.unlink(lockPath);
+    });
+
+    it('should treat empty lock file as potentially active (conservative)', async () => {
+      // 空のロックファイルを作成
+      const lockPath = lifecycle.getStartupLockPath();
+      await fs.writeFile(lockPath, '', { flag: 'wx' });
+
+      // 保守的に処理: 空ファイルはアクティブとみなす
+      const acquired = await lifecycle.acquireStartupLock();
+      expect(acquired).toBe(false);
+
+      // クリーンアップ
+      await fs.unlink(lockPath);
+    });
+
+    it('should treat invalid PID content as potentially active (conservative)', async () => {
+      // 不正な内容のロックファイルを作成
+      const lockPath = lifecycle.getStartupLockPath();
+      await fs.writeFile(lockPath, 'not-a-pid', { flag: 'wx' });
+
+      // 保守的に処理: 不正PIDはアクティブとみなす
+      const acquired = await lifecycle.acquireStartupLock();
+      expect(acquired).toBe(false);
+
+      // クリーンアップ
+      await fs.unlink(lockPath);
+    });
   });
 
   describe('running check', () => {
