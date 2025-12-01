@@ -63,9 +63,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.21.1
-      '@xenova/transformers':
-        specifier: ^2.17.2
-        version: 2.17.2
+      '@pce/boundary':
+        specifier: workspace:*
+        version: link:../../packages/pce-boundary
+      '@pce/embeddings':
+        specifier: workspace:*
+        version: link:../../packages/pce-embeddings
+      '@pce/policy-schemas':
+        specifier: workspace:*
+        version: link:../../packages/pce-policy-schemas
       fp-ts:
         specifier: ^2.16.11
         version: 2.16.11
