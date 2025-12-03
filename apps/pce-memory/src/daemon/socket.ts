@@ -50,6 +50,9 @@ export interface SocketServerOptions {
   onError?: (error: Error) => void;
 }
 
+/** シャットダウン時のタイムアウト（ミリ秒） */
+const SHUTDOWN_TIMEOUT_MS = 5000;
+
 /**
  * ソケットサーバーを作成し、複数クライアント接続を処理する
  *
@@ -61,6 +64,9 @@ export async function createSocketServer(
 ): Promise<() => Promise<void>> {
   const { socketPath, onRequest, onError } = options;
   const isWindows = os.platform() === 'win32';
+
+  // アクティブなソケット接続を追跡（シャットダウン時の強制切断用）
+  const activeSockets = new Set<net.Socket>();
 
   // 排他ロックでデーモン重複起動を防止
   const lockfilePath = `${socketPath}.lock`;
@@ -86,6 +92,12 @@ export async function createSocketServer(
   }
 
   const server = net.createServer((socket) => {
+    // ソケットを追跡に追加
+    activeSockets.add(socket);
+    socket.on('close', () => {
+      activeSockets.delete(socket);
+    });
+
     handleClientConnection(socket, onRequest, onError);
   });
 
@@ -116,10 +128,15 @@ export async function createSocketServer(
 
   console.error(`[Daemon] Listening on socket: ${socketPath}`);
 
-  // クリーンアップハンドラを返す
+  // クリーンアップハンドラを返す（タイムアウト付き）
   return async () => {
     return new Promise<void>((resolve) => {
-      server.close(async () => {
+      let resolved = false;
+
+      const cleanup = async () => {
+        if (resolved) return;
+        resolved = true;
+
         releaseLock(lockfilePath);
 
         if (!isWindows) {
@@ -130,6 +147,25 @@ export async function createSocketServer(
           }
         }
         resolve();
+      };
+
+      // タイムアウト: 指定時間後に強制終了
+      const timeout = setTimeout(async () => {
+        console.error(
+          `[Daemon] Shutdown timeout (${SHUTDOWN_TIMEOUT_MS}ms). Force-destroying ${activeSockets.size} connections.`
+        );
+        // 全てのアクティブソケットを強制切断
+        for (const socket of activeSockets) {
+          socket.destroy();
+        }
+        activeSockets.clear();
+        await cleanup();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // 新規接続を拒否し、既存接続の終了を待つ
+      server.close(async () => {
+        clearTimeout(timeout);
+        await cleanup();
       });
     });
   };
