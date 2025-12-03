@@ -91,3 +91,31 @@ export async function resetDbAsync(): Promise<void> {
   cachedConnection = null;
   instance = null;
 }
+
+/**
+ * DB接続を明示的にクローズ（デーモンシャットダウン用）
+ * DuckDBロックを解放し、他のプロセスがDBにアクセスできるようにする
+ *
+ * @remarks
+ * - cachedConnection.closeSync() でDuckDBファイルロックを解放
+ * - DuckDBInstanceはcloseメソッドを持たないため、参照解放でGCに委ねる
+ * - 複数回呼び出しても安全（冪等）
+ *
+ * TODO: @duckdb/node-api の将来バージョンで DuckDBInstance.close() が追加された場合、
+ *       明示的なクローズ処理に切り替えること。
+ *       関連: https://github.com/duckdb/duckdb-node-neo/issues
+ */
+export async function closeDb(): Promise<void> {
+  if (cachedConnection) {
+    try {
+      cachedConnection.closeSync();
+    } catch (err) {
+      console.error(`[DB] Failed to close connection: ${err}`);
+    }
+    cachedConnection = null;
+  }
+
+  // DuckDBInstanceはcloseメソッドを持たないため、参照を解放
+  // GCによってリソースが解放される
+  instance = null;
+}

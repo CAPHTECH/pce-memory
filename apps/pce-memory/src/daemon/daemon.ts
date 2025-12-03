@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { parseArgs } from 'util';
 
-import { initDb, initSchema } from '../db/connection.js';
+import { initDb, initSchema, closeDb } from '../db/connection.js';
 import {
   initLocalProvider,
   localProvider,
@@ -25,6 +25,7 @@ import * as E from 'fp-ts/Either';
 
 import { DaemonLifecycle } from './lifecycle.js';
 import { createSocketServer } from './socket.js';
+import { DAEMON_SHUTDOWN_WATCHDOG_MS } from './constants.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './socket.js';
 import { getSocketPath } from '../shared/socket.js';
 import { dispatchTool, TOOL_DEFINITIONS } from '../core/handlers.js';
@@ -268,11 +269,29 @@ async function main() {
     // スタートアップロックを解放（起動完了）
     await lifecycle.releaseStartupLock();
 
-    // グレースフルシャットダウンの設定
+    // グレースフルシャットダウンの設定（ウォッチドッグタイマー付き）
+    // タイムアウト値は constants.ts で一元管理
+
     lifecycle.onShutdown(async () => {
-      await lifecycle.log('Shutting down daemon...');
-      console.error('[Daemon] Closing server...');
-      await closeServer();
+      // ウォッチドッグ: 全体のシャットダウンが指定時間内に完了しない場合は強制終了
+      const watchdog = setTimeout(() => {
+        console.error('[Daemon] Shutdown watchdog triggered. Force exiting.');
+        process.exit(1);
+      }, DAEMON_SHUTDOWN_WATCHDOG_MS);
+      watchdog.unref(); // プロセス終了をブロックしない
+
+      try {
+        await lifecycle.log('Shutting down daemon...');
+        console.error('[Daemon] Closing server...');
+        await closeServer();
+
+        console.error('[Daemon] Closing database...');
+        await closeDb();
+
+        console.error('[Daemon] Shutdown complete.');
+      } finally {
+        clearTimeout(watchdog);
+      }
     });
 
     lifecycle.setupGracefulShutdown();

@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Move `workspace:*` dependencies to devDependencies
   - `@pce/*` packages are bundled by tsdown, not needed at runtime
-  - Fixes "Unsupported URL Type workspace:*" error with `npx pce-memory`
+  - Fixes "Unsupported URL Type workspace:\*" error with `npx pce-memory`
 
 ## [0.3.3] - 2025-12-01
 

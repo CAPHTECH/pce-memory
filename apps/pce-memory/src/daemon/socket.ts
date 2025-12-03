@@ -13,6 +13,7 @@ import * as os from 'os';
 import * as readline from 'readline';
 
 import { acquireLock, releaseLock } from '../shared/lockfile.js';
+import { SOCKET_SHUTDOWN_TIMEOUT_MS } from './constants.js';
 
 /**
  * JSON-RPCリクエスト型
@@ -50,6 +51,9 @@ export interface SocketServerOptions {
   onError?: (error: Error) => void;
 }
 
+// SOCKET_SHUTDOWN_TIMEOUT_MS は constants.ts からre-export
+export { SOCKET_SHUTDOWN_TIMEOUT_MS } from './constants.js';
+
 /**
  * ソケットサーバーを作成し、複数クライアント接続を処理する
  *
@@ -61,6 +65,9 @@ export async function createSocketServer(
 ): Promise<() => Promise<void>> {
   const { socketPath, onRequest, onError } = options;
   const isWindows = os.platform() === 'win32';
+
+  // アクティブなソケット接続を追跡（シャットダウン時の強制切断用）
+  const activeSockets = new Set<net.Socket>();
 
   // 排他ロックでデーモン重複起動を防止
   const lockfilePath = `${socketPath}.lock`;
@@ -86,6 +93,12 @@ export async function createSocketServer(
   }
 
   const server = net.createServer((socket) => {
+    // ソケットを追跡に追加
+    activeSockets.add(socket);
+    socket.on('close', () => {
+      activeSockets.delete(socket);
+    });
+
     handleClientConnection(socket, onRequest, onError);
   });
 
@@ -116,10 +129,15 @@ export async function createSocketServer(
 
   console.error(`[Daemon] Listening on socket: ${socketPath}`);
 
-  // クリーンアップハンドラを返す
+  // クリーンアップハンドラを返す（タイムアウト付き）
   return async () => {
     return new Promise<void>((resolve) => {
-      server.close(async () => {
+      let resolved = false;
+
+      const cleanup = async () => {
+        if (resolved) return;
+        resolved = true;
+
         releaseLock(lockfilePath);
 
         if (!isWindows) {
@@ -130,6 +148,30 @@ export async function createSocketServer(
           }
         }
         resolve();
+      };
+
+      // タイムアウト: 指定時間後に強制終了
+      const timeout = setTimeout(async () => {
+        console.warn(
+          `[Daemon] Shutdown timeout (${SOCKET_SHUTDOWN_TIMEOUT_MS}ms). Force-destroying ${activeSockets.size} connections.`
+        );
+        // 全てのアクティブソケットを強制切断
+        // 1つのソケット破棄失敗が全体を中断しないようtry-catchで保護
+        for (const socket of activeSockets) {
+          try {
+            socket.destroy();
+          } catch (err) {
+            console.error(`[Daemon] Failed to destroy socket: ${err}`);
+          }
+        }
+        activeSockets.clear();
+        await cleanup();
+      }, SOCKET_SHUTDOWN_TIMEOUT_MS);
+
+      // 新規接続を拒否し、既存接続の終了を待つ
+      server.close(async () => {
+        clearTimeout(timeout);
+        await cleanup();
       });
     });
   };
