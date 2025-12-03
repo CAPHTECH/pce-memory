@@ -13,6 +13,7 @@ import * as os from 'os';
 import * as readline from 'readline';
 
 import { acquireLock, releaseLock } from '../shared/lockfile.js';
+import { SOCKET_SHUTDOWN_TIMEOUT_MS } from './constants.js';
 
 /**
  * JSON-RPCリクエスト型
@@ -50,12 +51,8 @@ export interface SocketServerOptions {
   onError?: (error: Error) => void;
 }
 
-/**
- * ソケットシャットダウンタイムアウト（ミリ秒）
- * この時間内に全接続がクローズしない場合、残存接続を強制切断する
- * 注: daemon.ts の SHUTDOWN_WATCHDOG_MS より短く設定すること
- */
-export const SOCKET_SHUTDOWN_TIMEOUT_MS = 5000;
+// SOCKET_SHUTDOWN_TIMEOUT_MS は constants.ts からre-export
+export { SOCKET_SHUTDOWN_TIMEOUT_MS } from './constants.js';
 
 /**
  * ソケットサーバーを作成し、複数クライアント接続を処理する
@@ -159,8 +156,13 @@ export async function createSocketServer(
           `[Daemon] Shutdown timeout (${SOCKET_SHUTDOWN_TIMEOUT_MS}ms). Force-destroying ${activeSockets.size} connections.`
         );
         // 全てのアクティブソケットを強制切断
+        // 1つのソケット破棄失敗が全体を中断しないようtry-catchで保護
         for (const socket of activeSockets) {
-          socket.destroy();
+          try {
+            socket.destroy();
+          } catch (err) {
+            console.error(`[Daemon] Failed to destroy socket: ${err}`);
+          }
         }
         activeSockets.clear();
         await cleanup();

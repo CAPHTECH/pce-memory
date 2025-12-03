@@ -25,6 +25,7 @@ import * as E from 'fp-ts/Either';
 
 import { DaemonLifecycle } from './lifecycle.js';
 import { createSocketServer } from './socket.js';
+import { DAEMON_SHUTDOWN_WATCHDOG_MS } from './constants.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './socket.js';
 import { getSocketPath } from '../shared/socket.js';
 import { dispatchTool, TOOL_DEFINITIONS } from '../core/handlers.js';
@@ -269,15 +270,14 @@ async function main() {
     await lifecycle.releaseStartupLock();
 
     // グレースフルシャットダウンの設定（ウォッチドッグタイマー付き）
-    // 注: SOCKET_SHUTDOWN_TIMEOUT_MS (5秒) より長く設定すること
-    const SHUTDOWN_WATCHDOG_MS = 10000;
+    // タイムアウト値は constants.ts で一元管理
 
     lifecycle.onShutdown(async () => {
       // ウォッチドッグ: 全体のシャットダウンが指定時間内に完了しない場合は強制終了
       const watchdog = setTimeout(() => {
         console.error('[Daemon] Shutdown watchdog triggered. Force exiting.');
         process.exit(1);
-      }, SHUTDOWN_WATCHDOG_MS);
+      }, DAEMON_SHUTDOWN_WATCHDOG_MS);
       watchdog.unref(); // プロセス終了をブロックしない
 
       try {
