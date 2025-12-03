@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-12-03
+
+### Fixed
+
+- Daemon shutdown hang issue
+  - `server.close()` now has 5-second socket shutdown timeout
+  - DuckDB connection explicitly closed via `closeDb()`
+  - 10-second watchdog timer forces exit on hang
+  - Fixes DuckDB lock conflict: "Could not set lock on file"
+
 ## [0.3.4] - 2025-12-01
 
 ### Fixed
