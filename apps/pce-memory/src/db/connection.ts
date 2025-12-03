@@ -95,6 +95,11 @@ export async function resetDbAsync(): Promise<void> {
 /**
  * DB接続を明示的にクローズ（デーモンシャットダウン用）
  * DuckDBロックを解放し、他のプロセスがDBにアクセスできるようにする
+ *
+ * @remarks
+ * - cachedConnection.closeSync() でDuckDBファイルロックを解放
+ * - DuckDBInstanceはcloseメソッドを持たないため、参照解放でGCに委ねる
+ * - 複数回呼び出しても安全（冪等）
  */
 export async function closeDb(): Promise<void> {
   if (cachedConnection) {
@@ -106,13 +111,7 @@ export async function closeDb(): Promise<void> {
     cachedConnection = null;
   }
 
-  if (instance) {
-    try {
-      // DuckDBInstanceはcloseメソッドを持たないため、参照を解放
-      // GCによってリソースが解放される
-      instance = null;
-    } catch (err) {
-      console.error(`[DB] Failed to close instance: ${err}`);
-    }
-  }
+  // DuckDBInstanceはcloseメソッドを持たないため、参照を解放
+  // GCによってリソースが解放される
+  instance = null;
 }

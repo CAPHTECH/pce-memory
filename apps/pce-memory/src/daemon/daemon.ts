@@ -269,7 +269,8 @@ async function main() {
     await lifecycle.releaseStartupLock();
 
     // グレースフルシャットダウンの設定（ウォッチドッグタイマー付き）
-    const SHUTDOWN_WATCHDOG_MS = 10000; // 10秒でタイムアウト
+    // 注: SOCKET_SHUTDOWN_TIMEOUT_MS (5秒) より長く設定すること
+    const SHUTDOWN_WATCHDOG_MS = 10000;
 
     lifecycle.onShutdown(async () => {
       // ウォッチドッグ: 全体のシャットダウンが指定時間内に完了しない場合は強制終了

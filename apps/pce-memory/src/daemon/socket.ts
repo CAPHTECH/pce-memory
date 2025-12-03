@@ -50,8 +50,12 @@ export interface SocketServerOptions {
   onError?: (error: Error) => void;
 }
 
-/** シャットダウン時のタイムアウト（ミリ秒） */
-const SHUTDOWN_TIMEOUT_MS = 5000;
+/**
+ * ソケットシャットダウンタイムアウト（ミリ秒）
+ * この時間内に全接続がクローズしない場合、残存接続を強制切断する
+ * 注: daemon.ts の SHUTDOWN_WATCHDOG_MS より短く設定すること
+ */
+export const SOCKET_SHUTDOWN_TIMEOUT_MS = 5000;
 
 /**
  * ソケットサーバーを作成し、複数クライアント接続を処理する
@@ -151,8 +155,8 @@ export async function createSocketServer(
 
       // タイムアウト: 指定時間後に強制終了
       const timeout = setTimeout(async () => {
-        console.error(
-          `[Daemon] Shutdown timeout (${SHUTDOWN_TIMEOUT_MS}ms). Force-destroying ${activeSockets.size} connections.`
+        console.warn(
+          `[Daemon] Shutdown timeout (${SOCKET_SHUTDOWN_TIMEOUT_MS}ms). Force-destroying ${activeSockets.size} connections.`
         );
         // 全てのアクティブソケットを強制切断
         for (const socket of activeSockets) {
@@ -160,7 +164,7 @@ export async function createSocketServer(
         }
         activeSockets.clear();
         await cleanup();
-      }, SHUTDOWN_TIMEOUT_MS);
+      }, SOCKET_SHUTDOWN_TIMEOUT_MS);
 
       // 新規接続を拒否し、既存接続の終了を待つ
       server.close(async () => {
