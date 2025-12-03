@@ -55,9 +55,7 @@ describe('daemon constants', () => {
 describe('socket module re-export', () => {
   it('should re-export SOCKET_SHUTDOWN_TIMEOUT_MS from socket module', async () => {
     // socket.ts からも同じ値がエクスポートされていることを確認
-    const { SOCKET_SHUTDOWN_TIMEOUT_MS: fromSocket } = await import(
-      '../src/daemon/socket.js'
-    );
+    const { SOCKET_SHUTDOWN_TIMEOUT_MS: fromSocket } = await import('../src/daemon/socket.js');
     expect(fromSocket).toBe(SOCKET_SHUTDOWN_TIMEOUT_MS);
   });
 });
