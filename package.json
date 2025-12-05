@@ -46,7 +46,8 @@
   "pnpm": {
     "overrides": {
       "duckdb": "1.4.1-r.5",
-      "@vitest/coverage-v8": "4.0.8"
+      "@vitest/coverage-v8": "4.0.8",
+      "sharp": "^0.34.5"
     },
     "peerDependencyRules": {
       "allowedVersions": {
