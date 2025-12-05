@@ -73,6 +73,9 @@ importers:
       io-ts:
         specifier: ^2.2.22
         version: 2.2.22(fp-ts@2.16.11)
+      sharp:
+        specifier: ^0.34.5
+        version: 0.34.5
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -89,9 +92,6 @@ importers:
       p-limit:
         specifier: ^5.0.0
         version: 5.0.0
-      sharp:
-        specifier: ^0.34.5
-        version: 0.34.5
       tsdown:
         specifier: ^0.14.0
         version: 0.14.2(typescript@5.9.3)

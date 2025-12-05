@@ -48,6 +48,7 @@
     "@xenova/transformers": "^2.17.2",
     "fp-ts": "^2.16.11",
     "io-ts": "^2.2.22",
+    "sharp": "^0.34.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -55,7 +56,6 @@
     "@pce/embeddings": "workspace:*",
     "@pce/policy-schemas": "workspace:*",
     "p-limit": "^5.0.0",
-    "sharp": "^0.34.5",
     "tsdown": "^0.14.0",
     "tsx": "^4.19.2",
     "yaml": "^2.5.1"
