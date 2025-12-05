@@ -11,7 +11,6 @@ import * as net from 'node:net';
 import * as readline from 'node:readline';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
 
 import type {
   SearchAdapter,
@@ -83,7 +82,7 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
   /**
    * ウォームアップ: daemon起動、ポリシー適用、テストデータ投入
    */
-  async warmup(dataset: Dataset<PceQuery>): Promise<void> {
+  async warmup(_dataset: Dataset<PceQuery>): Promise<void> {
     console.log('🚀 Starting PCE-Memory daemon...');
 
     // DBディレクトリを作成

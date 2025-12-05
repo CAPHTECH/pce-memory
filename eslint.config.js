@@ -10,6 +10,7 @@ export default [
       "**/node_modules/**",
       "**/dist/**",
       "**/coverage/**",
+      "**/external/**",
       "**/*.js",
       "**/*.mjs",
       "**/*.cjs",
