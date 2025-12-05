@@ -1,0 +1,3 @@
+[submodule "apps/pce-memory/external/assay-kit"]
+	path = apps/pce-memory/external/assay-kit
+	url = git@github.com:CAPHTECH/assay-kit.git

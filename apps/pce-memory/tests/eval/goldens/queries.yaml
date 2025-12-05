@@ -1,0 +1,114 @@
+schemaVersion: "1.0.0"
+version: "v2024-12-05"
+name: pce-memory-golden
+description: pce-memory activate検索精度評価
+
+defaultParams:
+  k: 5
+  timeoutMs: 30000
+
+queries:
+  # === fact カテゴリ ===
+  # Note: Text-only fallback mode uses ILIKE substring match
+  # Query text must be exact substrings of claim text
+  - id: fact-001-jwt
+    text: "JWT認証"
+    metadata:
+      category: fact
+      intent: "JWT認証に関するアーキテクチャ決定を検索"
+      expected:
+        - path: "fact-jwt-auth"
+          relevance: 3
+
+  - id: fact-002-storage
+    text: "ローカル永続化"
+    metadata:
+      category: fact
+      intent: "ストレージに関する決定を検索"
+      expected:
+        - path: "fact-duckdb-storage"
+          relevance: 3
+
+  - id: fact-003-error-handling
+    text: "fp-tsのEither"
+    metadata:
+      category: fact
+      intent: "エラーハンドリングパターンを検索"
+      expected:
+        - path: "fact-fp-ts-error"
+          relevance: 3
+
+  - id: fact-004-search
+    text: "RRF"
+    metadata:
+      category: fact
+      intent: "検索アルゴリズムの決定を検索"
+      expected:
+        - path: "fact-hybrid-search"
+          relevance: 3
+
+  # === preference カテゴリ ===
+  - id: pref-001-test
+    text: "Vitest"
+    metadata:
+      category: preference
+      intent: "テストツールの選定を検索"
+      expected:
+        - path: "pref-vitest"
+          relevance: 3
+
+  - id: pref-002-naming
+    text: "handleUpsert"
+    metadata:
+      category: preference
+      intent: "ハンドラ関数の命名規則を検索"
+      expected:
+        - path: "pref-handler-prefix"
+          relevance: 3
+
+  - id: pref-003-style
+    text: "純粋関数"
+    metadata:
+      category: preference
+      intent: "コーディングスタイルの好みを検索"
+      expected:
+        - path: "pref-functional-style"
+          relevance: 3
+
+  # === task カテゴリ ===
+  - id: task-001-rate
+    text: "トークンバケット"
+    metadata:
+      category: task
+      intent: "進行中のタスクを検索"
+      expected:
+        - path: "task-rate-limit"
+          relevance: 3
+
+  - id: task-002-cache
+    text: "LRUキャッシュ"
+    metadata:
+      category: task
+      intent: "キャッシュ関連のタスクを検索"
+      expected:
+        - path: "task-embedding-cache"
+          relevance: 3
+
+  # === cross-scope (複数カテゴリ横断) ===
+  - id: cross-001-auth
+    text: "アクセストークン"
+    metadata:
+      category: cross-scope
+      intent: "認証関連の知識を横断検索"
+      expected:
+        - path: "fact-jwt-auth"
+          relevance: 3
+
+  - id: cross-002-data
+    text: "DuckDB"
+    metadata:
+      category: cross-scope
+      intent: "データ保存関連の知識を横断検索"
+      expected:
+        - path: "fact-duckdb-storage"
+          relevance: 3

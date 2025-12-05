@@ -39,7 +39,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist *.tsbuildinfo"
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "assay:evaluate": "tsx scripts/assay/run-evaluation.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "1.4.1-r.5",
@@ -53,8 +54,11 @@
     "@pce/boundary": "workspace:*",
     "@pce/embeddings": "workspace:*",
     "@pce/policy-schemas": "workspace:*",
+    "p-limit": "^5.0.0",
+    "sharp": "^0.34.5",
     "tsdown": "^0.14.0",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "yaml": "^2.5.1"
   },
   "engines": {
     "node": ">=22.18.0"

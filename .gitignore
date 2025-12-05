@@ -56,6 +56,9 @@ temp/
 *.tmp
 /.cache
 
+# Generated evaluation results
+var/
+
 docs/spec/tlaplus/states/
 states/
 
