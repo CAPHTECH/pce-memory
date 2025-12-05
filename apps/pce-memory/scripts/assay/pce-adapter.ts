@@ -98,15 +98,11 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
 
     // daemonを起動
     const daemonPath = path.join(this.repoRoot, 'dist/daemon/daemon.js');
-    this.daemonProcess = spawn(
-      process.execPath,
-      [daemonPath, '--db', this.databasePath],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        cwd: this.repoRoot,
-        env: process.env,
-      }
-    );
+    this.daemonProcess = spawn(process.execPath, [daemonPath, '--db', this.databasePath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: this.repoRoot,
+      env: process.env,
+    });
 
     this.daemonProcess.stdout?.on('data', (data) => {
       this.daemonLogs += data.toString();
@@ -399,16 +395,18 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
       return [];
     }
 
-    return expected.map((item) => {
-      let testId = '';
-      if (typeof item === 'string') {
-        testId = item;
-      } else if (typeof item === 'object' && 'path' in item) {
-        testId = item.path;
-      }
-      // テストIDを生成されたclaim IDに変換
-      return this.testIdToClaimId.get(testId) ?? testId;
-    }).filter(Boolean);
+    return expected
+      .map((item) => {
+        let testId = '';
+        if (typeof item === 'string') {
+          testId = item;
+        } else if (typeof item === 'object' && 'path' in item) {
+          testId = item.path;
+        }
+        // テストIDを生成されたclaim IDに変換
+        return this.testIdToClaimId.get(testId) ?? testId;
+      })
+      .filter(Boolean);
   }
 
   /**
