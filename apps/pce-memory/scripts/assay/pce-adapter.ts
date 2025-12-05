@@ -12,6 +12,8 @@ import * as readline from 'node:readline';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 
+import { getSocketPath } from '../../src/shared/socket.ts';
+
 import type {
   SearchAdapter,
   SearchAdapterContext,
@@ -75,8 +77,8 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
   constructor(databasePath: string, repoRoot: string) {
     this.databasePath = databasePath;
     this.repoRoot = repoRoot;
-    // ソケットパスはDBパスに.sockを追加（daemonと同じロジック）
-    this.socketPath = `${databasePath}.sock`;
+    // daemonと同じgetSocketPathロジックを使用（Windows/長いパスに対応）
+    this.socketPath = getSocketPath(databasePath);
   }
 
   /**
