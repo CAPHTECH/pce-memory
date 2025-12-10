@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-10
+
+### Changed
+
+- レートリミットのデフォルト値をバルク登録向けに緩和
+  - `PCE_RATE_CAP`: 100 → 1000（10倍に増加）
+  - `PCE_RATE_WINDOW`: 60秒 → 10秒（短縮）
+  - 効果: 10秒あたり1000件、1分あたり6000件相当の操作が可能
+  - 環境変数で従来値に戻すことも可能
+
+## [0.3.7] - 2025-12-07
+
+### Fixed
+
+- デーモン起動時にレートリミットカウンタをリセットするよう修正
+  - `initRateState()`で`INSERT OR IGNORE`から`ON CONFLICT DO UPDATE`に変更
+  - 永続化DB使用時でもデーモン再起動でクリーンな状態から開始
+
 ## [0.3.6] - 2025-12-05
 
 ### Added
