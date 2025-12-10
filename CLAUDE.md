@@ -148,8 +148,8 @@ const entity = await upsertEntity({
 | Variable          | Description                         | Default    |
 | ----------------- | ----------------------------------- | ---------- |
 | `PCE_DB`          | DuckDB file path                    | `:memory:` |
-| `PCE_RATE_CAP`    | Rate limit per bucket               | `100`      |
-| `PCE_RATE_WINDOW` | Rate window (seconds)               | `60`       |
+| `PCE_RATE_CAP`    | Rate limit per bucket               | `1000`     |
+| `PCE_RATE_WINDOW` | Rate window (seconds)               | `10`       |
 | `PCE_TOKEN`       | Auth token (required in production) | -          |
 
 ## Quality Gates
