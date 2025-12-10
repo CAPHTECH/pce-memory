@@ -214,6 +214,98 @@ describe('textSearch', () => {
   });
 });
 
+// ========== 単語分割OR検索テスト ==========
+
+describe('textSearch word splitting (OR search)', () => {
+  beforeEach(async () => {
+    // 単語分割テスト用のデータ
+    await upsertClaim({
+      text: '状態管理にはXStateを使用する',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: 'sha256:ws001',
+    });
+    await upsertClaim({
+      text: 'Valtioは軽量な状態管理ライブラリです',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: 'sha256:ws002',
+    });
+    await upsertClaim({
+      text: 'Reactの基本的な使い方を学ぶ',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: 'sha256:ws003',
+    });
+    await upsertClaim({
+      text: 'TypeScript型システムの利点',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: 'sha256:ws004',
+    });
+  });
+
+  it('should find claims matching any word (OR search)', async () => {
+    // "状態管理 XState Valtio" → 3単語に分割してOR検索
+    const results = await textSearch('状態管理 XState Valtio', ['project'], 10);
+    // 「状態管理」「XState」「Valtio」のいずれかを含むClaimがマッチ
+    expect(results.length).toBe(2);
+    const texts = results.map((r) => r.claim.text);
+    expect(texts.some((t) => t.includes('状態管理'))).toBe(true);
+  });
+
+  it('should handle single word query (backward compatible)', async () => {
+    const results = await textSearch('XState', ['project'], 10);
+    expect(results.length).toBe(1);
+    expect(results[0]?.claim.text).toContain('XState');
+  });
+
+  it('should handle Japanese and English mixed query', async () => {
+    const results = await textSearch('React 基本', ['project'], 10);
+    // 「React」または「基本」を含むClaimがマッチ
+    expect(results.length).toBe(1);
+    expect(results[0]?.claim.text).toContain('React');
+    expect(results[0]?.claim.text).toContain('基本');
+  });
+
+  it('should handle full-width spaces', async () => {
+    // 全角スペースで区切ったクエリ
+    const results = await textSearch('状態管理　XState', ['project'], 10);
+    // 「状態管理」または「XState」を含むClaimがマッチ
+    expect(results.length).toBe(2);
+  });
+
+  it('should return all claims for empty query', async () => {
+    const results = await textSearch('', ['project'], 10);
+    // 空クエリは全件取得
+    expect(results.length).toBe(4);
+  });
+
+  it('should return all claims for whitespace-only query', async () => {
+    const results = await textSearch('   ', ['project'], 10);
+    // 空白のみのクエリは空クエリと同等
+    expect(results.length).toBe(4);
+  });
+
+  it('should escape special characters in each word', async () => {
+    // 特殊文字を含むクエリ
+    const results = await textSearch('100% _test', ['project'], 10);
+    // エラーにならないこと（マッチなしで空配列）
+    expect(results.length).toBe(0);
+  });
+
+  it('should find partial matches within words', async () => {
+    // 「TypeScript」の一部「Script」で検索
+    const results = await textSearch('Script', ['project'], 10);
+    expect(results.length).toBe(1);
+    expect(results[0]?.claim.text).toContain('TypeScript');
+  });
+});
+
 // ========== Vector検索テスト ==========
 
 describe('vectorSearch', () => {

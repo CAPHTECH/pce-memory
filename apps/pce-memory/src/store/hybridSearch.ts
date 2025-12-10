@@ -87,9 +87,63 @@ function validateEmbedding(embedding: readonly number[]): void {
  * @param query 検索クエリ
  * @returns エスケープ済みクエリ
  */
-function escapeLikePattern(query: string): string {
+export function escapeLikePattern(query: string): string {
   // DuckDBのLIKE: % と _ が特殊文字
   return query.replace(/[%_\\]/g, '\\$&');
+}
+
+/**
+ * クエリを単語に分割（全角・半角空白対応）
+ * 空白文字（半角スペース、タブ、改行、全角スペース）で分割し、空文字を除去
+ *
+ * @param query 検索クエリ
+ * @returns 単語配列（空文字を除去済み）
+ */
+export function splitQueryWords(query: string): string[] {
+  // \s: 半角スペース、タブ、改行など
+  // \u3000: 全角スペース
+  return query.split(/[\s\u3000]+/).filter((word) => word.length > 0);
+}
+
+/**
+ * 複数単語用のILIKE OR条件を構築
+ * 各単語をエスケープし、OR条件で結合したSQL条件を生成
+ *
+ * @param words 単語配列
+ * @param startParamIndex プレースホルダー開始インデックス
+ * @returns { sql: string, params: string[] } - SQL条件とパラメータ配列
+ */
+export function buildWordOrCondition(
+  words: string[],
+  startParamIndex: number
+): { sql: string; params: string[] } {
+  if (words.length === 0) {
+    return { sql: '', params: [] };
+  }
+
+  if (words.length === 1) {
+    // 単一単語: 従来と同じ形式
+    const escaped = escapeLikePattern(words[0]!);
+    return {
+      sql: `c.text ILIKE $${startParamIndex} ESCAPE '\\'`,
+      params: [`%${escaped}%`],
+    };
+  }
+
+  // 複数単語: OR条件
+  const conditions: string[] = [];
+  const params: string[] = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const escaped = escapeLikePattern(words[i]!);
+    conditions.push(`c.text ILIKE $${startParamIndex + i} ESCAPE '\\'`);
+    params.push(`%${escaped}%`);
+  }
+
+  return {
+    sql: `(${conditions.join(' OR ')})`,
+    params,
+  };
 }
 
 /**
@@ -206,10 +260,13 @@ export function getEmbeddingService(): EmbeddingService | null {
 // ========== Text検索 ==========
 
 /**
- * テキスト検索（ILIKE）
+ * テキスト検索（ILIKE + 単語分割OR検索）
  * TLA+ C_TextSearch: スコープ内のテキスト一致候補を取得
  *
- * @param query 検索クエリ文字列
+ * 検索クエリは空白（半角・全角）で分割され、各単語のいずれかを含むClaimがマッチ。
+ * 例: "状態管理 XState Valtio" → "状態管理" OR "XState" OR "Valtio"
+ *
+ * @param query 検索クエリ文字列（空白区切りで複数単語指定可能）
  * @param scopes スコープ配列
  * @param limit 結果上限
  * @returns スコア付き検索結果
@@ -229,12 +286,50 @@ export async function textSearch(
 
   // スコープのプレースホルダー構築
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
-  // LIKEパターンの特殊文字をエスケープ
-  const escapedQuery = escapeLikePattern(query);
-  const queryParam = `%${escapedQuery}%`;
+
+  // クエリを単語に分割
+  const words = splitQueryWords(query);
+
+  // 空クエリの場合はスコープ内の全Claimを返す（criticスコア順）
+  if (words.length === 0) {
+    const sql = `
+      SELECT
+        c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+        c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+        COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
+      FROM claims c
+      LEFT JOIN critic cr ON cr.claim_id = c.id
+      WHERE c.scope IN (${scopePlaceholders})
+      ORDER BY text_score DESC
+      LIMIT $${scopes.length + 1}
+    `;
+    const reader = await conn.runAndReadAll(sql, [...scopes, normalizedLimit]);
+    const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
+    const rows = normalizeRowsTimestamps(rawRows);
+
+    return rows.map((row) => ({
+      claim: {
+        id: row.id,
+        text: row.text,
+        kind: row.kind,
+        scope: row.scope,
+        boundary_class: row.boundary_class,
+        content_hash: row.content_hash,
+        utility: row.utility,
+        confidence: row.confidence,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        recency_anchor: row.recency_anchor,
+      },
+      score: row.text_score,
+    }));
+  }
+
+  // 単語OR条件を構築
+  const { sql: wordCondition, params: wordParams } = buildWordOrCondition(words, scopes.length + 1);
 
   // criticスコアとテキストマッチを組み合わせたスコア計算
-  // TLA+ claimTextRelevant: LIKE '%query%' で判定
+  // TLA+ claimTextRelevant: いずれかの単語に対して LIKE '%word%' でマッチ
   const sql = `
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
@@ -243,12 +338,12 @@ export async function textSearch(
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
-      AND c.text ILIKE $${scopes.length + 1} ESCAPE '\\'
+      AND ${wordCondition}
     ORDER BY text_score DESC
-    LIMIT $${scopes.length + 2}
+    LIMIT $${scopes.length + wordParams.length + 1}
   `;
 
-  const reader = await conn.runAndReadAll(sql, [...scopes, queryParam, normalizedLimit]);
+  const reader = await conn.runAndReadAll(sql, [...scopes, ...wordParams, normalizedLimit]);
   const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
   const rows = normalizeRowsTimestamps(rawRows);
 

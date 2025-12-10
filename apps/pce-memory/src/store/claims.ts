@@ -1,7 +1,7 @@
 import { getConnection } from '../db/connection.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
-import { saveClaimVector } from './hybridSearch.js';
+import { saveClaimVector, splitQueryWords, buildWordOrCondition } from './hybridSearch.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
 /**
@@ -109,26 +109,33 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   }
 }
 
+/**
+ * スコープ別Claim一覧取得（単語分割OR検索対応）
+ *
+ * 検索クエリは空白（半角・全角）で分割され、各単語のいずれかを含むClaimがマッチ。
+ * 例: "状態管理 XState Valtio" → "状態管理" OR "XState" OR "Valtio"
+ *
+ * @param scopes スコープ配列
+ * @param limit 結果上限
+ * @param q 検索クエリ（オプション、空白区切りで複数単語指定可能）
+ * @returns Claim配列
+ */
 export async function listClaimsByScope(
   scopes: string[],
   limit: number,
   q?: string
 ): Promise<Claim[]> {
   const conn = await getConnection();
-  const hasQuery = q && q.trim().length > 0;
 
   // DuckDBはプレースホルダーのIN句に配列をそのまま渡せないため、動的にSQL構築
   const placeholders = scopes.map((_, i) => `$${i + 1}`).join(',');
-  const sql = hasQuery
-    ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
-              c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
-              coalesce(cr.score, 0) as score
-       FROM claims c
-       LEFT JOIN critic cr ON cr.claim_id = c.id
-       WHERE c.scope IN (${placeholders}) AND c.text ILIKE $${scopes.length + 1}
-       ORDER BY score DESC
-       LIMIT $${scopes.length + 2}`
-    : `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+
+  // クエリを単語に分割
+  const words = q ? splitQueryWords(q) : [];
+
+  // 空クエリの場合はスコープ内の全Claimを返す
+  if (words.length === 0) {
+    const sql = `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
               c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
               coalesce(cr.score, 0) as score
        FROM claims c
@@ -136,9 +143,24 @@ export async function listClaimsByScope(
        WHERE c.scope IN (${placeholders})
        ORDER BY score DESC
        LIMIT $${scopes.length + 1}`;
+    const reader = await conn.runAndReadAll(sql, [...scopes, limit]);
+    const rawRows = reader.getRowObjects() as unknown as Claim[];
+    return normalizeRowsTimestamps(rawRows);
+  }
 
-  const args = hasQuery ? [...scopes, `%${q}%`, limit] : [...scopes, limit];
-  const reader = await conn.runAndReadAll(sql, args);
+  // 単語OR条件を構築
+  const { sql: wordCondition, params: wordParams } = buildWordOrCondition(words, scopes.length + 1);
+
+  const sql = `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+              c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+              coalesce(cr.score, 0) as score
+       FROM claims c
+       LEFT JOIN critic cr ON cr.claim_id = c.id
+       WHERE c.scope IN (${placeholders}) AND ${wordCondition}
+       ORDER BY score DESC
+       LIMIT $${scopes.length + wordParams.length + 1}`;
+
+  const reader = await conn.runAndReadAll(sql, [...scopes, ...wordParams, limit]);
   const rawRows = reader.getRowObjects() as unknown as Claim[];
   return normalizeRowsTimestamps(rawRows);
 }
