@@ -3,7 +3,7 @@
  * ADR-0003: LocalEmbeddingProvider (ONNX Runtime)
  *
  * モデル: all-MiniLM-L6-v2 (384次元, 22MB, 日本語対応)
- * 実装: @xenova/transformers (ONNX Runtime + Tokenizer統合)
+ * 実装: @huggingface/transformers v3 (ONNX Runtime + Tokenizer統合)
  */
 
 import * as TE from 'fp-ts/TaskEither';
@@ -37,7 +37,7 @@ export interface LocalProviderConfig {
 
 // ========== モジュール状態 ==========
 
-/** @xenova/transformers の pipeline */
+/** @huggingface/transformers の pipeline */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pipeline: any = null;
 /** 現在のプロバイダー状態 */
@@ -52,7 +52,7 @@ let initPromise: Promise<void> | null = null;
 /**
  * ローカルプロバイダーを初期化
  *
- * @xenova/transformers を使用してモデルをロード
+ * @huggingface/transformers v3 を使用してモデルをロード
  * 初回実行時にモデルがダウンロードされる（約22MB）
  *
  * レース条件防止:
@@ -79,16 +79,18 @@ export const initLocalProvider = async (config: LocalProviderConfig = {}): Promi
   initPromise = (async () => {
     try {
       // 動的インポート（ESMモジュール対応）
-      const { pipeline: createPipeline, env } = await import('@xenova/transformers');
+      const { pipeline: createPipeline, env } = await import('@huggingface/transformers');
 
-      // キャッシュディレクトリ設定
+      // キャッシュディレクトリ設定（v3でも env.cacheDir は有効）
       if (config.cacheDir) {
         env.cacheDir = config.cacheDir;
       }
 
       // feature-extraction パイプラインを作成
+      // v3 Breaking Change: quantized: boolean → dtype: string
+      // 有効な dtype 値: 'fp32'(デフォルト), 'fp16', 'q8'(8bit量子化), 'q4'(4bit量子化)
       pipeline = await createPipeline('feature-extraction', modelId, {
-        quantized: true, // 量子化モデル使用（高速化）
+        dtype: 'q8', // 8bit量子化（モデルサイズ削減、推論高速化）
       });
 
       providerStatus = 'available';
@@ -128,7 +130,7 @@ const embedSingle = async (text: string): Promise<readonly number[]> => {
     throw new Error('Provider not initialized');
   }
 
-  // @xenova/transformers の pipeline を呼び出し
+  // @huggingface/transformers の pipeline を呼び出し
   const output = await pipeline(text, {
     pooling: 'mean', // Mean pooling
     normalize: true, // L2正規化

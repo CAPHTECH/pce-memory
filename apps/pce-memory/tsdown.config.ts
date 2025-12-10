@@ -10,6 +10,6 @@ export default defineConfig({
   // - @pce/*: workspace依存をバンドル化（npm公開時に単一パッケージ化）
   noExternal: [/^fp-ts/, /^@pce\//],
   // バンドルから除外（npm install時にインストールされる）
-  // - @xenova/transformers: onnxruntime-nodeのネイティブバイナリが必要なため
-  external: [/@xenova\/transformers/],
+  // - @huggingface/transformers: onnxruntime-nodeのネイティブバイナリが必要なため
+  external: [/@huggingface\/transformers/],
 });

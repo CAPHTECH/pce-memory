@@ -23,7 +23,7 @@
     "io-ts": "^2.2.22",
     "@pce/boundary": "workspace:*",
     "@pce/policy-schemas": "workspace:*",
-    "@xenova/transformers": "^2.17.2"
+    "@huggingface/transformers": "^3.8.1"
   },
   "devDependencies": {},
   "engines": {
