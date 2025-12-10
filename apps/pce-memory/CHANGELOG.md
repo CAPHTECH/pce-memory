@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-12-10
+
+### Fixed
+
+- Word-split OR search for text queries (#11)
+  - Fix `pce.memory.activate` `q` parameter not working with multi-word queries
+  - Split search query by whitespace (half-width and full-width) and match claims containing any word
+  - Example: `q="state XState Valtio"` → matches claims containing "state" OR "XState" OR "Valtio"
+
 ## [0.4.0] - 2025-12-10
 
 ### Changed
