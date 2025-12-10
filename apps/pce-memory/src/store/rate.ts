@@ -2,14 +2,22 @@ import { getConnection } from '../db/connection.js';
 
 const DEFAULT_BUCKETS = ['tool', 'policy', 'activate'];
 
+/**
+ * レート制限の上限値を取得
+ * デフォルト: 1000件/10秒（バルク登録に対応するため緩和）
+ */
 function cap(): number {
   const envCap = Number(process.env['PCE_RATE_CAP'] ?? '');
-  return Number.isFinite(envCap) && envCap > 0 ? envCap : 100;
+  return Number.isFinite(envCap) && envCap > 0 ? envCap : 1000;
 }
 
+/**
+ * レート制限の時間窓（秒）を取得
+ * デフォルト: 10秒（短い窓で頻繁にリセットし、一時的な制限からの回復を早める）
+ */
 function windowSec(): number {
   const envWin = Number(process.env['PCE_RATE_WINDOW'] ?? '');
-  return Number.isFinite(envWin) && envWin >= 0 ? envWin : 60; // seconds
+  return Number.isFinite(envWin) && envWin >= 0 ? envWin : 10; // seconds
 }
 
 /**
