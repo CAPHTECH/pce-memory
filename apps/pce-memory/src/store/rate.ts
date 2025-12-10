@@ -12,11 +12,21 @@ function windowSec(): number {
   return Number.isFinite(envWin) && envWin >= 0 ? envWin : 60; // seconds
 }
 
+/**
+ * rate_stateテーブルを初期化する。
+ * デーモン起動時に呼び出され、すべてのバケットのカウンタをリセットする。
+ *
+ * Note: INSERT OR IGNOREではなくON CONFLICT DO UPDATEを使用することで、
+ * デーモン再起動時にrate limitが正しくリセットされるようにする。
+ * これにより、永続化DBを使用している場合でも、デーモン起動時にクリーンな状態から開始できる。
+ */
 export async function initRateState(): Promise<void> {
   const conn = await getConnection();
   for (const b of DEFAULT_BUCKETS) {
     await conn.run(
-      'INSERT OR IGNORE INTO rate_state (bucket, value, last_reset) VALUES ($1, 0, epoch(now())::INTEGER)',
+      `INSERT INTO rate_state (bucket, value, last_reset)
+       VALUES ($1, 0, epoch(now())::INTEGER)
+       ON CONFLICT(bucket) DO UPDATE SET value = 0, last_reset = epoch(now())::INTEGER`,
       [b]
     );
   }

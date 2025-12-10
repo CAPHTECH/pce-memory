@@ -26,4 +26,49 @@ describe('rate limit', () => {
     await conn.run("UPDATE rate_state SET last_reset = last_reset - 200 WHERE bucket = 'tool'");
     expect(await checkAndConsume('tool')).toBe(true);
   });
+
+  // Bug fix: initRateStateがINSERT OR IGNOREを使用していたため、
+  // デーモン再起動時にrate limitがリセットされなかった問題の検証テスト
+  it('initRateState should reset values on daemon restart', async () => {
+    const conn = await getConnection();
+
+    // rate limitに到達
+    expect(await checkAndConsume('tool')).toBe(true);
+    expect(await checkAndConsume('tool')).toBe(false);
+
+    // 現在の状態を確認（value = 1 = cap）
+    let reader = await conn.runAndReadAll("SELECT value FROM rate_state WHERE bucket = 'tool'");
+    let rows = reader.getRowObjects() as { value: number }[];
+    expect(rows[0].value).toBe(1); // cap = 1
+
+    // デーモン再起動をシミュレート（initRateStateを再度呼び出す）
+    await initRateState();
+
+    // initRateState後はリセットされているべき
+    reader = await conn.runAndReadAll("SELECT value FROM rate_state WHERE bucket = 'tool'");
+    rows = reader.getRowObjects() as { value: number }[];
+    expect(rows[0].value).toBe(0); // リセットされているべき
+
+    // リセット後は再度使用可能
+    expect(await checkAndConsume('tool')).toBe(true);
+  });
+
+  it('rate limit should reset even with persistent DB simulation', async () => {
+    const conn = await getConnection();
+
+    // rate limitに到達
+    expect(await checkAndConsume('tool')).toBe(true);
+    expect(await checkAndConsume('tool')).toBe(false);
+
+    // last_resetを過去に設定（時間窓経過をシミュレート）
+    await conn.run("UPDATE rate_state SET last_reset = last_reset - 200 WHERE bucket = 'tool'");
+
+    // initRateStateを呼び出し（デーモン再起動をシミュレート）
+    await initRateState();
+
+    // リセットされているべき
+    const reader = await conn.runAndReadAll("SELECT value FROM rate_state WHERE bucket = 'tool'");
+    const rows = reader.getRowObjects() as { value: number }[];
+    expect(rows[0].value).toBe(0);
+  });
 });
