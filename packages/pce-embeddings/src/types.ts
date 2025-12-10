@@ -162,7 +162,7 @@ export interface BatchEmbedResult {
 /**
  * ローカルプロバイダー設定（基本型）
  * ADR-0003: LocalEmbeddingProvider
- * Note: providers/local.ts の LocalProviderConfig は @xenova/transformers 用に拡張
+ * Note: providers/local.ts の LocalProviderConfig は @huggingface/transformers v3 用に拡張
  */
 export interface LocalProviderConfigBase {
   /** モデルバージョン識別子 */
