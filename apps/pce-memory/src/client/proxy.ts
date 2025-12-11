@@ -75,12 +75,16 @@ Options:
       ? undefined
       : getSocketPath(resolvedDbPath);
 
-  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : DEFAULT_IDLE_TIMEOUT_MINUTES;
+  const idleTimeoutMinutes = values['daemon-timeout']
+    ? parseInt(values['daemon-timeout'], 10)
+    : DEFAULT_IDLE_TIMEOUT_MINUTES;
 
   return {
     databasePath: resolvedDbPath,
     socketPath,
-    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? DEFAULT_IDLE_TIMEOUT_MINUTES : idleTimeoutMinutes,
+    idleTimeoutMinutes: isNaN(idleTimeoutMinutes)
+      ? DEFAULT_IDLE_TIMEOUT_MINUTES
+      : idleTimeoutMinutes,
     noDaemon: values['no-daemon'] || resolvedDbPath === ':memory:',
   };
 }

@@ -74,12 +74,16 @@ Options:
     ? path.resolve(values['socket-path'])
     : getSocketPath(resolvedDbPath, { ensureDir: true });
 
-  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : DEFAULT_IDLE_TIMEOUT_MINUTES;
+  const idleTimeoutMinutes = values['daemon-timeout']
+    ? parseInt(values['daemon-timeout'], 10)
+    : DEFAULT_IDLE_TIMEOUT_MINUTES;
 
   return {
     databasePath: resolvedDbPath,
     socketPath,
-    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? DEFAULT_IDLE_TIMEOUT_MINUTES : idleTimeoutMinutes,
+    idleTimeoutMinutes: isNaN(idleTimeoutMinutes)
+      ? DEFAULT_IDLE_TIMEOUT_MINUTES
+      : idleTimeoutMinutes,
   };
 }
 
