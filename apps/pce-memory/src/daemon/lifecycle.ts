@@ -25,7 +25,7 @@ export class DaemonLifecycle {
 
   constructor(
     databasePath: string,
-    private readonly idleTimeoutMinutes: number = 5
+    private readonly idleTimeoutMinutes: number = 30
   ) {
     this.pidFilePath = `${databasePath}.daemon.pid`;
     this.startupLockPath = `${databasePath}.daemon.starting`;

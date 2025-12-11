@@ -57,7 +57,7 @@ Usage: pce-memory [options]
 Options:
   -d, --db <path>            DuckDB file path (default: :memory:)
   -s, --socket-path <path>   Unix socket path (default: <db>.sock)
-  -t, --daemon-timeout <min> Idle timeout in minutes (default: 5)
+  -t, --daemon-timeout <min> Idle timeout in minutes (default: 30)
   --no-daemon                Run in stdio mode without daemon
   -h, --help                 Show help
 `);
@@ -74,12 +74,12 @@ Options:
       ? undefined
       : getSocketPath(resolvedDbPath);
 
-  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 5;
+  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 30;
 
   return {
     databasePath: resolvedDbPath,
     socketPath,
-    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? 5 : idleTimeoutMinutes,
+    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? 30 : idleTimeoutMinutes,
     noDaemon: values['no-daemon'] || resolvedDbPath === ':memory:',
   };
 }

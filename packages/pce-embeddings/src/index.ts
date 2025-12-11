@@ -79,6 +79,7 @@ export {
   initLocalProvider,
   isInitialized,
   resetLocalProvider,
+  disposeLocalProvider,
   localProvider,
   getLocalProvider,
   createStubProvider,

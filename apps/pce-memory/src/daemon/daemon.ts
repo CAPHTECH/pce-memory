@@ -13,6 +13,7 @@ import { parseArgs } from 'util';
 import { initDb, initSchema, closeDb } from '../db/connection.js';
 import {
   initLocalProvider,
+  disposeLocalProvider,
   localProvider,
   createInMemoryCache,
   createLocalOnlyService,
@@ -56,7 +57,7 @@ Usage: pce-daemon [options]
 Options:
   -d, --db <path>            DuckDB file path (required)
   -s, --socket-path <path>   Unix socket path (default: <db>.sock)
-  -t, --daemon-timeout <min> Idle timeout in minutes (default: 5, 0=disabled)
+  -t, --daemon-timeout <min> Idle timeout in minutes (default: 30, 0=disabled)
   -h, --help                 Show help
 `);
     process.exit(0);
@@ -73,12 +74,12 @@ Options:
     ? path.resolve(values['socket-path'])
     : getSocketPath(resolvedDbPath, { ensureDir: true });
 
-  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 5;
+  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 30;
 
   return {
     databasePath: resolvedDbPath,
     socketPath,
-    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? 5 : idleTimeoutMinutes,
+    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? 30 : idleTimeoutMinutes,
   };
 }
 
@@ -248,19 +249,23 @@ async function main() {
     }
 
     // ソケットサーバーを作成
+    // 接続ベースのアイドル判定: ソケット接続が維持されている間はシャットダウンしない
     const closeServer = await createSocketServer({
       socketPath: options.socketPath,
       onRequest: async (request) => {
-        lifecycle.incrementConnections();
-        try {
-          return await handleJsonRpcRequest(request);
-        } finally {
-          lifecycle.decrementConnections();
-        }
+        return await handleJsonRpcRequest(request);
       },
       onError: async (error) => {
         await lifecycle.log(`Connection error: ${error.message}`);
         console.error(`[Daemon] Connection error: ${error.message}`);
+      },
+      // 接続確立時にカウントアップ（アイドルタイマーリセット）
+      onConnect: () => {
+        lifecycle.incrementConnections();
+      },
+      // 接続終了時にカウントダウン（全接続終了後にアイドルタイマー開始）
+      onDisconnect: () => {
+        lifecycle.decrementConnections();
       },
     });
 
@@ -284,6 +289,10 @@ async function main() {
         await lifecycle.log('Shutting down daemon...');
         console.error('[Daemon] Closing server...');
         await closeServer();
+
+        // ONNX Runtimeを先に破棄（mutex例外防止）
+        console.error('[Daemon] Disposing embedding provider...');
+        await disposeLocalProvider();
 
         console.error('[Daemon] Closing database...');
         await closeDb();
