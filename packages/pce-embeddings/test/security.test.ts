@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as E from 'fp-ts/Either';
 import { createInMemoryCache } from '../src/cache.js';
 import { createRemoteProvider, createOpenAIProvider } from '../src/providers/remote.js';
-import { resetLocalProvider, isInitialized } from '../src/providers/local.js';
+import { resetLocalProvider, isInitialized, disposeLocalProvider } from '../src/providers/local.js';
 
 // ========== キャッシュディープコピーテスト ==========
 
@@ -164,6 +164,17 @@ describe('Security - Local Provider Initialization Guard', () => {
 
   it('should allow reset for testing', () => {
     resetLocalProvider();
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('should allow dispose when not initialized (no-op)', async () => {
+    // 未初期化状態でdisposeしてもエラーにならない
+    await expect(disposeLocalProvider()).resolves.not.toThrow();
+    expect(isInitialized()).toBe(false);
+  });
+
+  it('should set status to unavailable after dispose', async () => {
+    await disposeLocalProvider();
     expect(isInitialized()).toBe(false);
   });
 

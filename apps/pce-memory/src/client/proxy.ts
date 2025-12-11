@@ -16,6 +16,7 @@ import { parseArgs } from 'util';
 
 import { getSocketPath } from '../shared/socket.js';
 import { startDaemon, isDaemonRunning, stopDaemon } from './start-daemon.js';
+import { DEFAULT_IDLE_TIMEOUT_MINUTES } from '../daemon/constants.js';
 
 /**
  * パス内の ~ をホームディレクトリに展開
@@ -57,7 +58,7 @@ Usage: pce-memory [options]
 Options:
   -d, --db <path>            DuckDB file path (default: :memory:)
   -s, --socket-path <path>   Unix socket path (default: <db>.sock)
-  -t, --daemon-timeout <min> Idle timeout in minutes (default: 30)
+  -t, --daemon-timeout <min> Idle timeout in minutes (default: ${DEFAULT_IDLE_TIMEOUT_MINUTES})
   --no-daemon                Run in stdio mode without daemon
   -h, --help                 Show help
 `);
@@ -74,12 +75,12 @@ Options:
       ? undefined
       : getSocketPath(resolvedDbPath);
 
-  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 30;
+  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : DEFAULT_IDLE_TIMEOUT_MINUTES;
 
   return {
     databasePath: resolvedDbPath,
     socketPath,
-    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? 30 : idleTimeoutMinutes,
+    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? DEFAULT_IDLE_TIMEOUT_MINUTES : idleTimeoutMinutes,
     noDaemon: values['no-daemon'] || resolvedDbPath === ':memory:',
   };
 }

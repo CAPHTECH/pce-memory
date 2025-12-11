@@ -26,7 +26,7 @@ import * as E from 'fp-ts/Either';
 
 import { DaemonLifecycle } from './lifecycle.js';
 import { createSocketServer } from './socket.js';
-import { DAEMON_SHUTDOWN_WATCHDOG_MS } from './constants.js';
+import { DAEMON_SHUTDOWN_WATCHDOG_MS, DEFAULT_IDLE_TIMEOUT_MINUTES } from './constants.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './socket.js';
 import { getSocketPath } from '../shared/socket.js';
 import { dispatchTool, TOOL_DEFINITIONS } from '../core/handlers.js';
@@ -57,7 +57,7 @@ Usage: pce-daemon [options]
 Options:
   -d, --db <path>            DuckDB file path (required)
   -s, --socket-path <path>   Unix socket path (default: <db>.sock)
-  -t, --daemon-timeout <min> Idle timeout in minutes (default: 30, 0=disabled)
+  -t, --daemon-timeout <min> Idle timeout in minutes (default: ${DEFAULT_IDLE_TIMEOUT_MINUTES}, 0=disabled)
   -h, --help                 Show help
 `);
     process.exit(0);
@@ -74,12 +74,12 @@ Options:
     ? path.resolve(values['socket-path'])
     : getSocketPath(resolvedDbPath, { ensureDir: true });
 
-  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : 30;
+  const idleTimeoutMinutes = values['daemon-timeout'] ? parseInt(values['daemon-timeout'], 10) : DEFAULT_IDLE_TIMEOUT_MINUTES;
 
   return {
     databasePath: resolvedDbPath,
     socketPath,
-    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? 30 : idleTimeoutMinutes,
+    idleTimeoutMinutes: isNaN(idleTimeoutMinutes) ? DEFAULT_IDLE_TIMEOUT_MINUTES : idleTimeoutMinutes,
   };
 }
 

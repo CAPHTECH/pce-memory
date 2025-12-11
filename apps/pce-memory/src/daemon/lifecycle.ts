@@ -9,6 +9,7 @@
 
 import * as fs from 'fs/promises';
 import { acquireLock, releaseLock, LockfileError } from '../shared/lockfile.js';
+import { DEFAULT_IDLE_TIMEOUT_MINUTES } from './constants.js';
 
 /**
  * デーモンライフサイクル管理クラス
@@ -25,7 +26,7 @@ export class DaemonLifecycle {
 
   constructor(
     databasePath: string,
-    private readonly idleTimeoutMinutes: number = 30
+    private readonly idleTimeoutMinutes: number = DEFAULT_IDLE_TIMEOUT_MINUTES
   ) {
     this.pidFilePath = `${databasePath}.daemon.pid`;
     this.startupLockPath = `${databasePath}.daemon.starting`;
