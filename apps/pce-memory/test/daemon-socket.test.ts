@@ -170,6 +170,35 @@ describe('daemon socket types', () => {
 
       expect(typeof options.onError).toBe('function');
     });
+
+    it('should allow optional connect/disconnect handlers', () => {
+      const mockHandler = async () => null;
+      const mockConnect = () => {};
+      const mockDisconnect = () => {};
+
+      const options: SocketServerOptions = {
+        socketPath: '/tmp/test.sock',
+        onRequest: mockHandler,
+        onConnect: mockConnect,
+        onDisconnect: mockDisconnect,
+      };
+
+      expect(typeof options.onConnect).toBe('function');
+      expect(typeof options.onDisconnect).toBe('function');
+    });
+
+    it('should work without optional handlers', () => {
+      const mockHandler = async () => null;
+
+      const options: SocketServerOptions = {
+        socketPath: '/tmp/test.sock',
+        onRequest: mockHandler,
+      };
+
+      expect(options.onConnect).toBeUndefined();
+      expect(options.onDisconnect).toBeUndefined();
+      expect(options.onError).toBeUndefined();
+    });
   });
 });
 

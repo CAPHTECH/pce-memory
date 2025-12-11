@@ -120,6 +120,31 @@ export const resetLocalProvider = (): void => {
   initPromise = null;
 };
 
+/**
+ * プロバイダーを破棄（シャットダウン用）
+ *
+ * ONNX Runtimeのリソースを明示的に解放する。
+ * process.exit()前に呼び出すことで、mutex例外を防止。
+ *
+ * @see https://github.com/xenova/transformers.js/issues/715
+ */
+export const disposeLocalProvider = async (): Promise<void> => {
+  if (pipeline) {
+    try {
+      // @huggingface/transformers v3 の pipeline は dispose() メソッドを持つ
+      if (typeof pipeline.dispose === 'function') {
+        await pipeline.dispose();
+      }
+    } catch (e) {
+      // エラーはログのみ、シャットダウン継続を優先
+      console.error('[Embeddings] Failed to dispose pipeline:', e);
+    }
+    pipeline = null;
+  }
+  providerStatus = 'unavailable';
+  initPromise = null;
+};
+
 // ========== 埋め込み生成 ==========
 
 /**

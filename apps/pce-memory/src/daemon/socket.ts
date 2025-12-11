@@ -49,6 +49,10 @@ export interface SocketServerOptions {
   onRequest: (request: JsonRpcRequest) => Promise<JsonRpcResponse | null>;
   /** エラーハンドラ（オプション） */
   onError?: (error: Error) => void;
+  /** 接続確立時のコールバック（アイドル判定用） */
+  onConnect?: () => void;
+  /** 接続終了時のコールバック（アイドル判定用） */
+  onDisconnect?: () => void;
 }
 
 // SOCKET_SHUTDOWN_TIMEOUT_MS は constants.ts からre-export
@@ -63,7 +67,7 @@ export { SOCKET_SHUTDOWN_TIMEOUT_MS } from './constants.js';
 export async function createSocketServer(
   options: SocketServerOptions
 ): Promise<() => Promise<void>> {
-  const { socketPath, onRequest, onError } = options;
+  const { socketPath, onRequest, onError, onConnect, onDisconnect } = options;
   const isWindows = os.platform() === 'win32';
 
   // アクティブなソケット接続を追跡（シャットダウン時の強制切断用）
@@ -95,8 +99,18 @@ export async function createSocketServer(
   const server = net.createServer((socket) => {
     // ソケットを追跡に追加
     activeSockets.add(socket);
+
+    // 接続確立時のコールバック（アイドル判定用）
+    if (onConnect) {
+      onConnect();
+    }
+
     socket.on('close', () => {
       activeSockets.delete(socket);
+      // 接続終了時のコールバック（アイドル判定用）
+      if (onDisconnect) {
+        onDisconnect();
+      }
     });
 
     handleClientConnection(socket, onRequest, onError);
