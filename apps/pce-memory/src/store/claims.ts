@@ -176,6 +176,96 @@ export async function findClaimById(id: string): Promise<Claim | undefined> {
 }
 
 /**
+ * content_hashでClaimを検索
+ */
+export async function findClaimByContentHash(contentHash: string): Promise<Claim | undefined> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
+    [contentHash]
+  );
+  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  const rows = normalizeRowsTimestamps(rawRows);
+  return rows[0];
+}
+
+/**
+ * フィルター条件によるClaim一覧取得（同期機能用）
+ *
+ * @param options フィルターオプション
+ * @returns Claim配列
+ */
+export interface ClaimFilterOptions {
+  scopes?: string[];
+  boundaryClasses?: string[];
+  since?: Date;
+  limit?: number;
+}
+
+export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<Claim[]> {
+  const conn = await getConnection();
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  let paramIndex = 1;
+
+  // スコープフィルター
+  if (options.scopes && options.scopes.length > 0) {
+    const placeholders = options.scopes.map((_, i) => `$${paramIndex + i}`).join(',');
+    conditions.push(`scope IN (${placeholders})`);
+    params.push(...options.scopes);
+    paramIndex += options.scopes.length;
+  }
+
+  // 境界クラスフィルター
+  if (options.boundaryClasses && options.boundaryClasses.length > 0) {
+    const placeholders = options.boundaryClasses.map((_, i) => `$${paramIndex + i}`).join(',');
+    conditions.push(`boundary_class IN (${placeholders})`);
+    params.push(...options.boundaryClasses);
+    paramIndex += options.boundaryClasses.length;
+  }
+
+  // 日時フィルター（増分エクスポート用）
+  if (options.since) {
+    conditions.push(`created_at >= $${paramIndex}`);
+    params.push(options.since.toISOString());
+    paramIndex++;
+  }
+
+  // クエリ構築
+  let sql = `SELECT ${CLAIM_COLUMNS} FROM claims`;
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')}`;
+  }
+  sql += ` ORDER BY created_at DESC`;
+
+  // リミット
+  const limit = options.limit ?? 10000;
+  sql += ` LIMIT $${paramIndex}`;
+  params.push(limit);
+
+  const reader = await conn.runAndReadAll(sql, params);
+  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  return normalizeRowsTimestamps(rawRows);
+}
+
+/**
+ * Claimのboundary_classを更新（同期時のマージ用）
+ *
+ * @param id Claim ID
+ * @param boundaryClass 新しいboundary_class
+ */
+export async function updateClaimBoundaryClass(
+  id: string,
+  boundaryClass: string
+): Promise<void> {
+  const conn = await getConnection();
+  await conn.run('UPDATE claims SET boundary_class = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
+    boundaryClass,
+    id,
+  ]);
+}
+
+/**
  * DBに登録されているClaimの総数を取得
  * サーバー再起動時の状態復元に使用
  */

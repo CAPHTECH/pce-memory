@@ -40,7 +40,7 @@ export async function ensureDirectory(dirPath: string): Promise<E.Either<DomainE
   try {
     await fs.mkdir(dirPath, { recursive: true });
     return E.right(undefined);
-  } catch {
+  } catch (error) {
     return E.left(syncPathError(`Failed to create directory: ${dirPath}`));
   }
 }
@@ -86,7 +86,7 @@ export async function readJsonFile<T>(filePath: string): Promise<E.Either<Domain
     const content = await fs.readFile(filePath, 'utf-8');
     const parsed = JSON.parse(content) as T;
     return E.right(parsed);
-  } catch {
+  } catch (error) {
     return E.left(syncPathError(`Failed to read JSON file: ${filePath}`));
   }
 }
@@ -108,7 +108,7 @@ export async function writeJsonFile<T>(filePath: string, data: T): Promise<E.Eit
     const content = JSON.stringify(data, null, 2);
     await fs.writeFile(filePath, content, 'utf-8');
     return E.right(undefined);
-  } catch {
+  } catch (error) {
     return E.left(syncPathError(`Failed to write JSON file: ${filePath}`));
   }
 }

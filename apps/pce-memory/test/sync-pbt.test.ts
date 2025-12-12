@@ -6,7 +6,7 @@
  * 2. Boundary Never Downgrades: boundary_classは厳格な方向にのみ変化
  * 3. Content Hash Integrity: content_hashはテキストと常に一致
  */
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { computeContentHash } from '@pce/embeddings';
 import {

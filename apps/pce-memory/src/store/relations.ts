@@ -114,6 +114,21 @@ export async function findRelationById(id: string): Promise<Relation | undefined
 }
 
 /**
+ * 全Relationを取得（同期機能用）
+ *
+ * @param limit 取得上限（デフォルト10000）
+ * @returns Relation配列
+ */
+export async function listAllRelations(limit: number = 10000): Promise<Relation[]> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations ORDER BY created_at DESC LIMIT $1',
+    [limit]
+  );
+  return reader.getRowObjects() as unknown as Relation[];
+}
+
+/**
  * Relationクエリフィルター型
  */
 export interface RelationQueryFilters {
