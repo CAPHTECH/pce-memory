@@ -20,15 +20,19 @@ import type {
 
 /**
  * オブジェクトをキーでソートして安定的にJSON文字列化
- * キー順序に依存しない比較を実現する
+ * キー順序に依存しない比較を実現する（ネストされたオブジェクトも再帰的にソート）
  */
 function stableStringify(obj: Record<string, unknown>): string {
-  const sortedKeys = Object.keys(obj).sort();
-  const sortedObj: Record<string, unknown> = {};
-  for (const key of sortedKeys) {
-    sortedObj[key] = obj[key];
-  }
-  return JSON.stringify(sortedObj);
+  return JSON.stringify(obj, (_, value: unknown) => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      const sortedObj: Record<string, unknown> = {};
+      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+        sortedObj[key] = (value as Record<string, unknown>)[key];
+      }
+      return sortedObj;
+    }
+    return value;
+  });
 }
 
 /**

@@ -22,6 +22,60 @@ import { executeStatus, type StatusOptions } from '../sync/status.js';
 import type { Scope, BoundaryClass } from '../sync/schemas.js';
 
 /**
+ * 有効なスコープ値
+ */
+const VALID_SCOPES: readonly Scope[] = ['session', 'project', 'principle'];
+
+/**
+ * 有効な境界クラス値
+ */
+const VALID_BOUNDARIES: readonly BoundaryClass[] = ['public', 'internal', 'pii', 'secret'];
+
+/**
+ * スコープフィルタを検証してパース
+ * @returns パースされたスコープ配列、または無効な場合はnull
+ */
+function parseScopeFilter(value: string): Scope[] | null {
+  const scopes = value.split(',').map((s) => s.trim());
+  const invalid = scopes.filter((s) => !VALID_SCOPES.includes(s as Scope));
+  if (invalid.length > 0) {
+    console.error(`[pce-sync] Invalid scope(s): ${invalid.join(', ')}`);
+    console.error(`  Valid values: ${VALID_SCOPES.join(', ')}`);
+    return null;
+  }
+  return scopes as Scope[];
+}
+
+/**
+ * 境界クラスフィルタを検証してパース
+ * @returns パースされた境界クラス配列、または無効な場合はnull
+ */
+function parseBoundaryFilter(value: string): BoundaryClass[] | null {
+  const boundaries = value.split(',').map((s) => s.trim());
+  const invalid = boundaries.filter((s) => !VALID_BOUNDARIES.includes(s as BoundaryClass));
+  if (invalid.length > 0) {
+    console.error(`[pce-sync] Invalid boundary class(es): ${invalid.join(', ')}`);
+    console.error(`  Valid values: ${VALID_BOUNDARIES.join(', ')}`);
+    return null;
+  }
+  return boundaries as BoundaryClass[];
+}
+
+/**
+ * 日付文字列を検証してパース
+ * @returns パースされたDate、または無効な場合はnull
+ */
+function parseDateOption(value: string): Date | null {
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) {
+    console.error(`[pce-sync] Invalid date format: ${value}`);
+    console.error(`  Expected: ISO 8601 format (e.g., 2025-01-01T00:00:00Z)`);
+    return null;
+  }
+  return parsed;
+}
+
+/**
  * グローバルオプション（--db）を抽出し、残りの引数を返す
  * --db オプションが指定された場合、環境変数 PCE_DB を設定する
  */
@@ -96,13 +150,19 @@ async function handlePush(args: string[]): Promise<number> {
       targetDir = expandTilde(nextArg);
       i++;
     } else if (arg === '--scope-filter' && nextArg !== undefined) {
-      scopeFilter = nextArg.split(',') as Scope[];
+      const parsed = parseScopeFilter(nextArg);
+      if (parsed === null) return 1;
+      scopeFilter = parsed;
       i++;
     } else if (arg === '--boundary-filter' && nextArg !== undefined) {
-      boundaryFilter = nextArg.split(',') as BoundaryClass[];
+      const parsed = parseBoundaryFilter(nextArg);
+      if (parsed === null) return 1;
+      boundaryFilter = parsed;
       i++;
     } else if (arg === '--since' && nextArg !== undefined) {
-      since = new Date(nextArg);
+      const parsed = parseDateOption(nextArg);
+      if (parsed === null) return 1;
+      since = parsed;
       i++;
     }
   }
@@ -153,15 +213,21 @@ async function handlePull(args: string[]): Promise<number> {
       sourceDir = expandTilde(nextArg);
       i++;
     } else if (arg === '--scope-filter' && nextArg !== undefined) {
-      scopeFilter = nextArg.split(',') as Scope[];
+      const parsed = parseScopeFilter(nextArg);
+      if (parsed === null) return 1;
+      scopeFilter = parsed;
       i++;
     } else if (arg === '--boundary-filter' && nextArg !== undefined) {
-      boundaryFilter = nextArg.split(',') as BoundaryClass[];
+      const parsed = parseBoundaryFilter(nextArg);
+      if (parsed === null) return 1;
+      boundaryFilter = parsed;
       i++;
     } else if (arg === '--dry-run') {
       dryRun = true;
     } else if (arg === '--since' && nextArg !== undefined) {
-      since = new Date(nextArg);
+      const parsed = parseDateOption(nextArg);
+      if (parsed === null) return 1;
+      since = parsed;
       i++;
     }
   }
