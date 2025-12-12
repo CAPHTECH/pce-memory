@@ -1,0 +1,13 @@
+{
+  "text": "Git-based CRDT同期機能のCritical Review結果: (1)boundary_class格下げ漏洩リスク→最も厳格な方を採用するマージ戦略が必要 (2)Entity/RelationのID衝突→canonical_key必須化or名前空間付きIDが必要 (3)G-Set削除不可→tombstoneパターンで論理削除 (4)JSON検証不足→zodスキーマ+content_hash検証 (5)同期の原子性→トランザクション内一括インポート。Issue #18",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "content_hash": "sha256:57dc5215220ddee3621904960b1566b386819ebe9e45c404b90c39615c1800f4",
+  "provenance": {
+    "at": "2025-12-12T12:10:00Z",
+    "actor": "claude",
+    "note": "Critical Review結果（内部+Codex統合）",
+    "url": "https://github.com/CAPHTECH/pce-memory/issues/18#issuecomment-3644462920"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "text": "pce-memory リリース作業手順:\n\n1. **バージョン更新**: apps/pce-memory/package.json の version を更新\n2. **CHANGELOG更新**: apps/pce-memory/CHANGELOG.md に新バージョンのエントリを追加（Keep a Changelog形式）\n3. **コミット作成**: `git commit -m \"chore(release): vX.Y.Z\"`\n4. **タグ作成**: `git tag vX.Y.Z`\n5. **プッシュ**: `git push origin main && git push origin vX.Y.Z`\n6. **GitHub Release作成**: `gh release create vX.Y.Z --title \"vX.Y.Z\" --notes \"リリースノート\"`\n7. **ビルド**: `pnpm build`（ルートディレクトリで実行、全パッケージをビルド）\n8. **npm publish**: `cd apps/pce-memory && npm publish`\n\nビルド成果物:\n- dist/index.js - メインエントリポイント（MCPサーバー stdio）\n- dist/client/proxy.js - pce-memory CLI（bin: pce-memory）\n- dist/daemon/daemon.js - pce-daemon（bin: pce-daemon）\n- dist/handlers-*.js - ハンドラバンドル\n\n注意: npm publish は apps/pce-memory ディレクトリで実行すること",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "content_hash": "sha256:f13e7aee053f046b494d2638a62ca4345a70ad204eb3c7852942d0f2dfbc7945",
+  "provenance": {
+    "at": "2025-12-12T08:40:00Z",
+    "actor": "claude",
+    "note": "v0.5.1リリース作業から抽出した手順"
+  }
+}

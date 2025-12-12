@@ -1,0 +1,13 @@
+{
+  "text": "Git-based CRDT同期機能の設計決定: content_hashをCRDT識別子として活用し、.pce-shared/ディレクトリでGitベースの同期を実現。claims/entities/relationsは同期対象、feedback/critic/embeddingはユーザー固有のため同期対象外。Phase 1でsync.push/pull、Phase 2でGit統合、Phase 3で自動同期を実装予定。Issue #18",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "content_hash": "sha256:20158c1a23562b36978a0a08810dad465ca6809551a756c019790481169d3e8e",
+  "provenance": {
+    "at": "2025-12-12T12:00:00Z",
+    "actor": "claude",
+    "note": "同期機能設計検討の結果",
+    "url": "https://github.com/CAPHTECH/pce-memory/issues/18"
+  }
+}
