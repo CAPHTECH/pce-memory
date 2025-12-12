@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as E from 'fp-ts/Either';
 import { computeContentHash } from '@pce/embeddings';
+import packageJson from '../package.json' with { type: 'json' };
 import { executePush } from '../src/sync/push.js';
 import { upsertClaim } from '../src/store/claims.js';
 import { upsertEntity } from '../src/store/entities.js';
@@ -219,7 +220,7 @@ describe('executePush', () => {
       const manifestContent = await fs.readFile(manifestPath, 'utf-8');
       const manifest = JSON.parse(manifestContent);
       expect(manifest.version).toBe('1.0');
-      expect(manifest.pce_memory_version).toBeDefined();
+      expect(manifest.pce_memory_version).toBe(packageJson.version);
       expect(manifest.last_push_at).toBeDefined();
     }
   });

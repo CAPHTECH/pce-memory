@@ -9,6 +9,7 @@ import { syncPushError, type DomainError } from '../domain/errors.js';
 import { listClaimsByFilter, type Claim } from '../store/claims.js';
 import { listAllEntities, getEntitiesForClaim, type Entity } from '../store/entities.js';
 import { listAllRelations, type Relation } from '../store/relations.js';
+import packageJson from '../../package.json' with { type: 'json' };
 import {
   DEFAULT_SCOPE_FILTER,
   DEFAULT_BOUNDARY_FILTER,
@@ -26,8 +27,7 @@ import { isBoundarySyncable } from './merge.js';
 import { resolveDefaultTargetDir } from './resolveDefaultTargetDir.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
-// package.jsonからバージョンを取得するためのプレースホルダー
-const PCE_MEMORY_VERSION = '0.7.0';
+const PCE_MEMORY_VERSION = typeof packageJson?.version === 'string' ? packageJson.version : '0.0.0';
 
 /**
  * Push入力オプション
