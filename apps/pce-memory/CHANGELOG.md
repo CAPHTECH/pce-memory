@@ -5,14 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2025-12-12
+
+### Fixed
+
+- **prompt名をアンダースコアに変更** - Claude Codeスラッシュコマンドとの互換性向上
+  - `recall-context` → `recall_context`
+  - `record-decision` → `record_decision`
+  - `sync-workflow` → `sync_workflow`
+  - `debug-assist` → `debug_assist`
+
 ## [0.7.0] - 2025-12-12
 
 ### Added
 
 - **MCP Prompts対応** (Issue #16) - 定型プロンプトテンプレートを提供
-  - `recall-context`: タスク開始時の関連知識想起
-  - `record-decision`: 設計決定の記録支援
-  - `sync-workflow`: Git同期ワークフローガイド
+  - `recall_context`: タスク開始時の関連知識想起
+  - `record_decision`: 設計決定の記録支援
+  - `sync_workflow`: Git同期ワークフローガイド
   - `debug-assist`: デバッグ時の関連知識検索
   - MCP Protocol Prompts仕様に準拠
 
