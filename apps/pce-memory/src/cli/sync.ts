@@ -408,14 +408,6 @@ export async function runSyncCommand(args: string[]): Promise<number> {
   }
 }
 
-// 直接実行された場合
-const scriptPath = process.argv[1];
-if (scriptPath && import.meta.url.endsWith(scriptPath.replace(/^file:\/\//, ''))) {
-  const args = process.argv.slice(2);
-  runSyncCommand(args)
-    .then((code) => process.exit(code))
-    .catch((err) => {
-      console.error(`[pce-sync] Unhandled error: ${err}`);
-      process.exit(1);
-    });
-}
+// Note: 直接実行コードは削除済み
+// sync CLIは proxy.ts の handleSubcommand() 経由で呼び出される
+// バンドル後は import.meta.url が共有されるため、直接実行チェックは機能しない
