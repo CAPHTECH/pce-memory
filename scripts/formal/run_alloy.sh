@@ -13,6 +13,7 @@ ALLOY_FILES=(
   "$WORKDIR/boundary.als"
   "$WORKDIR/embedding.als"
   "$WORKDIR/embedding_design_comparison_small.als"
+  "$WORKDIR/sync_conflict.als"
   # embedding_design_comparison.als は大きすぎるため小さい版を使用
 )
 

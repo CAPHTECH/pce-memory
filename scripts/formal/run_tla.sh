@@ -14,6 +14,7 @@ IMG="eclipse-temurin:21-jre"
 TLA_SPECS=(
   "pce_memory.tla:${TLA_CFG:-pce_memory.small.cfg}"
   "pce_embedding.tla:${TLA_EMBED_CFG:-pce_embedding.small.cfg}"
+  "sync_crdt.tla:sync_crdt.small.cfg"
   # embedding_failover_comparison は設計Cの問題を示すため、別途実行
 )
 
