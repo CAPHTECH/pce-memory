@@ -55,4 +55,3 @@ describe('daemon MCP JSON-RPC handler', () => {
     expect(messages?.length).toBeGreaterThan(0);
   });
 });
-

@@ -121,4 +121,3 @@ export function createMcpJsonRpcRequestHandler(options: McpJsonRpcRequestHandler
     };
   };
 }
-

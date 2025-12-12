@@ -577,7 +577,7 @@ describe('hybridSearch with EmbeddingService', () => {
    * CI環境でのDuckDB一時エラーに対応するリトライラッパー
    * DB再初期化と指数バックオフを含む
    */
-  const runWithRetry = async (fn: () => Promise<void>, retries = 3) => {
+  const runWithRetry = async (fn: () => Promise<void>, retries = 5) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         await fn();
@@ -586,11 +586,14 @@ describe('hybridSearch with EmbeddingService', () => {
         if (attempt === retries) throw error;
         // リトライ前にDB再初期化
         await resetDbAsync();
+        // 前の接続が完全にクリーンアップされるまで待機（Ubuntu CIでの一時エラー対策）
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
         const freshPath = join(tmpdir(), `pce-embedding-test-${randomUUID()}.duckdb`);
+        testDbPath = freshPath;
         process.env.PCE_DB = freshPath;
         await initDb();
         await initSchema();
-        await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
   };
