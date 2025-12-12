@@ -43,8 +43,10 @@ import {
 import {
   executePush,
   executePull,
+  executeStatus,
   type PushOptions,
   type PullOptions,
+  type StatusOptions,
   type Scope,
   type BoundaryClass,
 } from '../sync/index.js';
@@ -1287,6 +1289,97 @@ export async function handleSyncPull(args: Record<string, unknown>) {
   }
 }
 
+/**
+ * Sync Status Handler (Phase 2)
+ * 同期ディレクトリの状態を確認
+ */
+export async function handleSyncStatus(args: Record<string, unknown>) {
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以上で実行可能）
+    if (!canDoQuery()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 引数の取得
+    const { target_dir } = args as { target_dir?: string };
+
+    // Statusオプション構築
+    const options: StatusOptions = {
+      basePath: process.cwd(),
+      ...(target_dir && { targetDir: target_dir }),
+    };
+
+    // Status実行
+    const result = await executeStatus(options);
+
+    if (E.isLeft(result)) {
+      await appendLog({
+        id: `log_${reqId}`,
+        op: 'sync_status',
+        ok: false,
+        req: reqId,
+        trace: traceId,
+        policy_version: getPolicyVersion(),
+      });
+      return createToolResult(
+        { ...err('SYNC_STATUS_FAILED', result.left.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 成功時のログ記録
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_status',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      exists: result.right.exists,
+      manifest: result.right.manifest,
+      files: result.right.files,
+      validation: result.right.validation,
+      target_dir: result.right.targetDir,
+      policy_version: result.right.policyVersion,
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_status',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('SYNC_STATUS_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  }
+}
+
 // ========== Tool Dispatcher ==========
 
 /**
@@ -1322,6 +1415,8 @@ export async function dispatchTool(
       return handleSyncPush(args);
     case 'pce.memory.sync.pull':
       return handleSyncPull(args);
+    case 'pce.memory.sync.status':
+      return handleSyncStatus(args);
     default:
       return createToolResult(
         { error: { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` } },
@@ -1971,6 +2066,74 @@ export const TOOL_DEFINITIONS = [
         'imported',
         'validation_errors',
         'dry_run',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  // Phase 2: sync.status
+  {
+    name: 'pce.memory.sync.status',
+    description: 'Get sync directory status including manifest, file counts, and validation state',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target_dir: {
+          type: 'string',
+          description: 'Target directory path (default: .pce-shared)',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        exists: { type: 'boolean', description: 'Whether sync directory exists' },
+        manifest: {
+          type: 'object',
+          properties: {
+            version: { type: 'string' },
+            pce_memory_version: { type: 'string' },
+            last_push_at: { type: 'string', format: 'date-time' },
+            last_push_policy_version: { type: 'string' },
+            last_pull_at: { type: 'string', format: 'date-time' },
+          },
+          description: 'Manifest content (if exists)',
+        },
+        files: {
+          type: 'object',
+          properties: {
+            claims: { type: 'integer', minimum: 0 },
+            entities: { type: 'integer', minimum: 0 },
+            relations: { type: 'integer', minimum: 0 },
+          },
+          required: ['claims', 'entities', 'relations'],
+          description: 'File counts by type',
+        },
+        validation: {
+          type: 'object',
+          properties: {
+            isValid: { type: 'boolean' },
+            errors: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['isValid', 'errors'],
+          description: 'Validation status',
+        },
+        target_dir: { type: 'string', description: 'Actual target directory path' },
+        policy_version: { type: 'string', description: 'Current policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'exists',
+        'files',
+        'validation',
+        'target_dir',
         'policy_version',
         'state',
         'request_id',

@@ -29,7 +29,13 @@ import {
   type EntityExport,
   type RelationExport,
 } from './schemas.js';
-import { directoryExists, readJsonFile, listJsonFiles, validatePath } from './fileSystem.js';
+import {
+  directoryExists,
+  readJsonFile,
+  writeJsonFile,
+  listJsonFiles,
+  validatePath,
+} from './fileSystem.js';
 import {
   validateClaimExport,
   validateEntityExport,
@@ -54,6 +60,7 @@ export interface PullOptions {
   scopeFilter?: Scope[]; // スコープフィルター（指定時はそのスコープのみインポート）
   boundaryFilter?: BoundaryClass[]; // 境界クラスフィルター
   dryRun?: boolean; // trueの場合は実際のインポートを行わない
+  since?: Date; // Phase 2: 増分インポート用の日時（provenance.atでフィルター）
 }
 
 /**
@@ -65,6 +72,7 @@ export interface PullResult {
       new: number;
       skippedDuplicate: number;
       upgradedBoundary: number;
+      skippedBySince: number; // Phase 2: sinceでスキップされた数
     };
     entities: {
       new: number;
@@ -78,6 +86,7 @@ export interface PullResult {
   validationErrors: ValidationError[];
   dryRun: boolean;
   policyVersion: string;
+  manifestUpdated: boolean; // Phase 2: manifest.jsonが更新されたか
 }
 
 /**
@@ -324,13 +333,14 @@ export async function executePull(
   const policyVersion = getPolicyVersion();
   const result: PullResult = {
     imported: {
-      claims: { new: 0, skippedDuplicate: 0, upgradedBoundary: 0 },
+      claims: { new: 0, skippedDuplicate: 0, upgradedBoundary: 0, skippedBySince: 0 },
       entities: { new: 0, skippedDuplicate: 0 },
       relations: { new: 0, skippedDuplicate: 0 },
     },
     validationErrors: [],
     dryRun,
     policyVersion,
+    manifestUpdated: false,
   };
 
   try {
@@ -375,6 +385,16 @@ export async function executePull(
           }
 
           const claim = validationResult.right;
+
+          // Phase 2: sinceパラメータでのフィルタリング
+          // provenance.atがsince以前のClaimはスキップ
+          if (options.since && claim.provenance?.at) {
+            const claimDate = new Date(claim.provenance.at);
+            if (claimDate < options.since) {
+              result.imported.claims.skippedBySince++;
+              continue;
+            }
+          }
 
           // インポート実行
           const action = await importClaim(claim, boundaryFilter, dryRun);
@@ -465,6 +485,23 @@ export async function executePull(
             break;
         }
       }
+    }
+
+    // 7. Phase 2: manifest.jsonのlast_pull_atを更新（dryRunでない場合のみ）
+    if (!dryRun) {
+      const manifestPath = path.join(syncDir, 'manifest.json');
+      const existingManifest = await readJsonFile<Record<string, unknown>>(manifestPath);
+
+      // 既存のmanifestがある場合は更新、ない場合は新規作成
+      const updatedManifest = E.isRight(existingManifest)
+        ? { ...existingManifest.right, last_pull_at: new Date().toISOString() }
+        : { last_pull_at: new Date().toISOString() };
+
+      const writeResult = await writeJsonFile(manifestPath, updatedManifest);
+      if (E.isRight(writeResult)) {
+        result.manifestUpdated = true;
+      }
+      // manifest更新失敗はエラーとしない（メインのインポートは成功）
     }
 
     return E.right(result);

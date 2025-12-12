@@ -27,7 +27,8 @@ export type ErrorCode =
   | 'SYNC_PUSH_FAILED' // push実行エラー
   | 'SYNC_PULL_FAILED' // pull実行エラー
   | 'SYNC_VALIDATION_ERROR' // JSONスキーマ/content_hash検証エラー
-  | 'SYNC_PATH_ERROR'; // パストラバーサル等のパスエラー
+  | 'SYNC_PATH_ERROR' // パストラバーサル等のパスエラー
+  | 'SYNC_STATUS_FAILED'; // Phase 2: status取得エラー
 
 // ドメインエラー型
 export interface DomainError {
@@ -78,3 +79,7 @@ export const syncValidationError = (message: string, cause?: unknown): DomainErr
 
 export const syncPathError = (message: string): DomainError =>
   domainError('SYNC_PATH_ERROR', message);
+
+// Phase 2: sync.status用エラー生成関数
+export const syncStatusError = (message: string, cause?: unknown): DomainError =>
+  domainError('SYNC_STATUS_FAILED', message, cause);
