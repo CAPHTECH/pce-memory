@@ -46,8 +46,7 @@ import {
 
 // サーバー情報
 const SERVER_NAME = 'pce-memory';
-const SERVER_VERSION =
-  typeof packageJson?.version === 'string' ? packageJson.version : '0.0.0';
+const SERVER_VERSION = typeof packageJson?.version === 'string' ? packageJson.version : '0.0.0';
 
 /**
  * MCP ツールハンドラの登録（CallToolRequestSchema を使用）
@@ -142,7 +141,7 @@ export async function main() {
     {
       capabilities: {
         tools: {},
-        prompts: {},
+        prompts: { listChanged: false },
       },
     }
   );

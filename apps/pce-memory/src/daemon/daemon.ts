@@ -27,9 +27,8 @@ import * as E from 'fp-ts/Either';
 import { DaemonLifecycle } from './lifecycle.js';
 import { createSocketServer } from './socket.js';
 import { DAEMON_SHUTDOWN_WATCHDOG_MS, DEFAULT_IDLE_TIMEOUT_MINUTES } from './constants.js';
-import type { JsonRpcRequest, JsonRpcResponse } from './socket.js';
 import { getSocketPath } from '../shared/socket.js';
-import { dispatchTool, TOOL_DEFINITIONS } from '../core/handlers.js';
+import { createMcpJsonRpcRequestHandler } from './mcp-handler.js';
 
 const SERVER_NAME = 'pce-memory-daemon';
 const SERVER_VERSION = '0.1.0';
@@ -87,87 +86,11 @@ Options:
   };
 }
 
-/**
- * JSON-RPCリクエストハンドラ
- */
-async function handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcResponse | null> {
-  const { method, params, id } = request;
-
-  // pingリクエスト（ヘルスチェック用）
-  if (method === 'ping') {
-    return {
-      jsonrpc: '2.0',
-      id: id ?? null,
-      result: {
-        status: 'ok',
-        serverInfo: {
-          name: SERVER_NAME,
-          version: SERVER_VERSION,
-        },
-      },
-    };
-  }
-
-  // MCP initialize（MCPプロトコル必須）
-  if (method === 'initialize') {
-    return {
-      jsonrpc: '2.0',
-      id: id ?? null,
-      result: {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: {},
-        },
-        serverInfo: {
-          name: SERVER_NAME,
-          version: SERVER_VERSION,
-        },
-      },
-    };
-  }
-
-  // MCP notifications/initialized（初期化完了通知、レスポンス不要）
-  if (method === 'notifications/initialized') {
-    // 通知なのでレスポンスは不要
-    return null;
-  }
-
-  // MCP tools/list（ツール一覧）
-  if (method === 'tools/list') {
-    return {
-      jsonrpc: '2.0',
-      id: id ?? null,
-      result: { tools: TOOL_DEFINITIONS },
-    };
-  }
-
-  // MCP tools/call（ツール呼び出し）
-  if (method === 'tools/call') {
-    const toolName = (params as Record<string, unknown>)?.['name'] as string;
-    const toolArgs = ((params as Record<string, unknown>)?.['arguments'] ?? {}) as Record<
-      string,
-      unknown
-    >;
-
-    const result = await dispatchTool(toolName, toolArgs);
-
-    return {
-      jsonrpc: '2.0',
-      id: id ?? null,
-      result,
-    };
-  }
-
-  // 未知のメソッド
-  return {
-    jsonrpc: '2.0',
-    id: id ?? null,
-    error: {
-      code: -32601,
-      message: `Method not found: ${method}`,
-    },
-  };
-}
+const handleJsonRpcRequest = createMcpJsonRpcRequestHandler({
+  serverName: SERVER_NAME,
+  serverVersion: SERVER_VERSION,
+  protocolVersion: '2024-11-05',
+});
 
 /**
  * メイン関数
