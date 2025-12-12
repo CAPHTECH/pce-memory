@@ -9,7 +9,12 @@
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   initLocalProvider,
   localProvider,
@@ -31,7 +36,12 @@ import { initMemoryState } from './state/memoryState.js';
 import { registerSystemLayer, getLayerScopeSummary } from './state/layerScopeState.js';
 
 // Core handlers from handlers.ts（重複を排除して一元化）
-import { dispatchTool, TOOL_DEFINITIONS } from './core/handlers.js';
+import {
+  dispatchTool,
+  TOOL_DEFINITIONS,
+  handleListPrompts,
+  handleGetPrompt,
+} from './core/handlers.js';
 
 // サーバー情報
 const SERVER_NAME = 'pce-memory';
@@ -124,14 +134,32 @@ export async function main() {
   }
 
   // サーバー作成（名前とバージョンを指定）
+  // MCP capabilities: tools + prompts (Issue #16)
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { capabilities: { tools: {} } }
+    {
+      capabilities: {
+        tools: {},
+        prompts: {},
+      },
+    }
   );
 
   // ListToolsハンドラ登録
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return { tools: TOOL_DEFINITIONS };
+  });
+
+  // ListPromptsハンドラ登録 (Issue #16)
+  server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
+    const result = await handleListPrompts(request.params ?? {});
+    return result;
+  });
+
+  // GetPromptハンドラ登録 (Issue #16)
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const result = await handleGetPrompt(request.params);
+    return result;
   });
 
   // ツールハンドラ登録
