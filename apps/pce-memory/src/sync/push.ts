@@ -21,11 +21,7 @@ import {
   type RelationExport,
   type Manifest,
 } from './schemas.js';
-import {
-  initSyncDirectory,
-  writeJsonFile,
-  contentHashToFileName,
-} from './fileSystem.js';
+import { initSyncDirectory, writeJsonFile, contentHashToFileName } from './fileSystem.js';
 import { isBoundarySyncable } from './merge.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
@@ -115,7 +111,9 @@ function getEffectiveBoundaryFilter(filter?: BoundaryClass[]): BoundaryClass[] {
  * @param options Push設定
  * @returns 成功時はRight(PushResult)、失敗時はLeft(DomainError)
  */
-export async function executePush(options: PushOptions): Promise<E.Either<DomainError, PushResult>> {
+export async function executePush(
+  options: PushOptions
+): Promise<E.Either<DomainError, PushResult>> {
   const targetDir = options.targetDir ?? DEFAULT_TARGET_DIR;
   const scopeFilter = options.scopeFilter ?? DEFAULT_SCOPE_FILTER;
   const boundaryFilter = getEffectiveBoundaryFilter(options.boundaryFilter);
@@ -204,7 +202,9 @@ export async function executePush(options: PushOptions): Promise<E.Either<Domain
 
         const writeResult = await writeJsonFile(filePath, relationExport);
         if (E.isLeft(writeResult)) {
-          return E.left(syncPushError(`Failed to write relation: ${relation.id}`, writeResult.left));
+          return E.left(
+            syncPushError(`Failed to write relation: ${relation.id}`, writeResult.left)
+          );
         }
 
         exportedRelations++;

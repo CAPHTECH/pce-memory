@@ -103,12 +103,9 @@ describe('Property: isBoundarySyncable', () => {
 
   it('Property: allowedに含まれるnon-secretは同期可能', () => {
     fc.assert(
-      fc.property(
-        fc.constantFrom<BoundaryClass>('public', 'internal', 'pii'),
-        (bc) => {
-          return isBoundarySyncable(bc, [bc]) === true;
-        }
-      )
+      fc.property(fc.constantFrom<BoundaryClass>('public', 'internal', 'pii'), (bc) => {
+        return isBoundarySyncable(bc, [bc]) === true;
+      })
     );
   });
 });
@@ -206,22 +203,19 @@ describe('Property: Boundary Class CRDT Properties', () => {
   it('Property: 境界クラスマージはCRDT収束性を満たす', () => {
     // 任意の順序でマージしても最終結果は同じ
     fc.assert(
-      fc.property(
-        fc.array(boundaryClassArb, { minLength: 1, maxLength: 10 }),
-        (classes) => {
-          // 左から順にマージ
-          const leftFold = classes.reduce((acc, bc) => mergeBoundaryClass(acc, bc));
+      fc.property(fc.array(boundaryClassArb, { minLength: 1, maxLength: 10 }), (classes) => {
+        // 左から順にマージ
+        const leftFold = classes.reduce((acc, bc) => mergeBoundaryClass(acc, bc));
 
-          // 右から順にマージ
-          const rightFold = [...classes].reverse().reduce((acc, bc) => mergeBoundaryClass(acc, bc));
+        // 右から順にマージ
+        const rightFold = [...classes].reverse().reduce((acc, bc) => mergeBoundaryClass(acc, bc));
 
-          // シャッフルしてマージ
-          const shuffled = [...classes].sort(() => Math.random() - 0.5);
-          const shuffledFold = shuffled.reduce((acc, bc) => mergeBoundaryClass(acc, bc));
+        // シャッフルしてマージ
+        const shuffled = [...classes].sort(() => Math.random() - 0.5);
+        const shuffledFold = shuffled.reduce((acc, bc) => mergeBoundaryClass(acc, bc));
 
-          return leftFold === rightFold && rightFold === shuffledFold;
-        }
-      )
+        return leftFold === rightFold && rightFold === shuffledFold;
+      })
     );
   });
 });

@@ -254,15 +254,12 @@ export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<C
  * @param id Claim ID
  * @param boundaryClass 新しいboundary_class
  */
-export async function updateClaimBoundaryClass(
-  id: string,
-  boundaryClass: string
-): Promise<void> {
+export async function updateClaimBoundaryClass(id: string, boundaryClass: string): Promise<void> {
   const conn = await getConnection();
-  await conn.run('UPDATE claims SET boundary_class = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
-    boundaryClass,
-    id,
-  ]);
+  await conn.run(
+    'UPDATE claims SET boundary_class = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+    [boundaryClass, id]
+  );
 }
 
 /**

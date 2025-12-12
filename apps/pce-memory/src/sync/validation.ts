@@ -52,7 +52,9 @@ function validateWithSchema<T>(
   const result = schema.safeParse(data);
 
   if (!result.success) {
-    const errorMessages = result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ');
+    const errorMessages = result.error.errors
+      .map((e) => `${e.path.join('.')}: ${e.message}`)
+      .join('; ');
     return E.left({ file, error: `Schema validation failed: ${errorMessages}` });
   }
 
@@ -153,10 +155,7 @@ export function validateRelationExport(
  * @param file ファイルパス
  * @returns 成功時はRight(検証済みManifest)、失敗時はLeft(エラー)
  */
-export function validateManifest(
-  data: unknown,
-  file: string
-): E.Either<ValidationError, Manifest> {
+export function validateManifest(data: unknown, file: string): E.Either<ValidationError, Manifest> {
   return validateWithSchema(ManifestSchema, data, file);
 }
 

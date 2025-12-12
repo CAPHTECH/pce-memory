@@ -32,7 +32,10 @@ export const BOUNDARY_STRICTNESS: Record<BoundaryClass, number> = {
  * @param incoming インポートされるboundary_class
  * @returns より厳格なboundary_class
  */
-export function mergeBoundaryClass(existing: BoundaryClass, incoming: BoundaryClass): BoundaryClass {
+export function mergeBoundaryClass(
+  existing: BoundaryClass,
+  incoming: BoundaryClass
+): BoundaryClass {
   const existingLevel = BOUNDARY_STRICTNESS[existing];
   const incomingLevel = BOUNDARY_STRICTNESS[incoming];
 

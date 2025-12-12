@@ -81,7 +81,10 @@ describe('executePull', () => {
       content_hash: `sha256:${hash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${hash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -108,7 +111,10 @@ describe('executePull', () => {
       content_hash: `sha256:${wrongHash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${wrongHash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${wrongHash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -142,7 +148,10 @@ describe('executePull', () => {
       content_hash: `sha256:${hash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${hash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -175,7 +184,10 @@ describe('executePull', () => {
       content_hash: `sha256:${hash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${hash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -211,7 +223,10 @@ describe('executePull', () => {
       content_hash: `sha256:${hash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${hash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -233,7 +248,10 @@ describe('executePull', () => {
       name: 'プルテストエンティティ',
     };
 
-    await fs.writeFile(path.join(syncDir, 'entities', 'ent_pull_test.json'), JSON.stringify(entity));
+    await fs.writeFile(
+      path.join(syncDir, 'entities', 'ent_pull_test.json'),
+      JSON.stringify(entity)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -263,7 +281,10 @@ describe('executePull', () => {
       type: 'KNOWS',
     };
 
-    await fs.writeFile(path.join(syncDir, 'relations', 'rel_pull_test.json'), JSON.stringify(relation));
+    await fs.writeFile(
+      path.join(syncDir, 'relations', 'rel_pull_test.json'),
+      JSON.stringify(relation)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -290,7 +311,10 @@ describe('executePull', () => {
       content_hash: `sha256:${hash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${hash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir, dryRun: true });
 
@@ -317,7 +341,10 @@ describe('executePull', () => {
       content_hash: `sha256:${hash}`,
     };
 
-    await fs.writeFile(path.join(syncDir, 'claims', 'project', `${hash}.json`), JSON.stringify(claim));
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
 
     const result = await executePull({ basePath: tempDir });
 
@@ -339,7 +366,12 @@ describe('executePull', () => {
     };
 
     await fs.writeFile(
-      path.join(syncDir, 'claims', 'project', '0000000000000000000000000000000000000000000000000000000000000000.json'),
+      path.join(
+        syncDir,
+        'claims',
+        'project',
+        '0000000000000000000000000000000000000000000000000000000000000000.json'
+      ),
       JSON.stringify(invalidClaim)
     );
 

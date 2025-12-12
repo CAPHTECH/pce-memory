@@ -29,12 +29,7 @@ import {
   type EntityExport,
   type RelationExport,
 } from './schemas.js';
-import {
-  directoryExists,
-  readJsonFile,
-  listJsonFiles,
-  validatePath,
-} from './fileSystem.js';
+import { directoryExists, readJsonFile, listJsonFiles, validatePath } from './fileSystem.js';
 import {
   validateClaimExport,
   validateEntityExport,
@@ -42,7 +37,12 @@ import {
   validateManifest,
   type ValidationError,
 } from './validation.js';
-import { mergeBoundaryClass, isBoundarySyncable, isBoundaryUpgraded, type MergeAction } from './merge.js';
+import {
+  mergeBoundaryClass,
+  isBoundarySyncable,
+  isBoundaryUpgraded,
+  type MergeAction,
+} from './merge.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
 /**
@@ -278,7 +278,9 @@ async function importRelation(
   const dstEntity = await findEntityById(relation.dst_id);
 
   if (!srcEntity && !dstEntity) {
-    return { referenceError: `Referenced entities not found: src_id=${relation.src_id}, dst_id=${relation.dst_id}` };
+    return {
+      referenceError: `Referenced entities not found: src_id=${relation.src_id}, dst_id=${relation.dst_id}`,
+    };
   }
   if (!srcEntity) {
     return { referenceError: `Referenced entity not found: src_id=${relation.src_id}` };
@@ -300,7 +302,9 @@ async function importRelation(
  * @param options Pull設定
  * @returns 成功時はRight(PullResult)、失敗時はLeft(DomainError)
  */
-export async function executePull(options: PullOptions): Promise<E.Either<DomainError, PullResult>> {
+export async function executePull(
+  options: PullOptions
+): Promise<E.Either<DomainError, PullResult>> {
   const sourceDir = options.sourceDir ?? DEFAULT_TARGET_DIR;
   const boundaryFilter = getEffectiveBoundaryFilter(options.boundaryFilter);
   const dryRun = options.dryRun ?? false;

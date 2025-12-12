@@ -1817,7 +1817,8 @@ export const TOOL_DEFINITIONS = [
   // ========== Sync Tools (Issue #18) ==========
   {
     name: 'pce.memory.sync.push',
-    description: 'Export local claims/entities/relations to .pce-shared/ directory for Git-based CRDT sync',
+    description:
+      'Export local claims/entities/relations to .pce-shared/ directory for Git-based CRDT sync',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1833,7 +1834,8 @@ export const TOOL_DEFINITIONS = [
         boundary_filter: {
           type: 'array',
           items: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
-          description: 'Filter by boundary_class (default: ["public", "internal"], secret is always excluded)',
+          description:
+            'Filter by boundary_class (default: ["public", "internal"], secret is always excluded)',
         },
         since: {
           type: 'string',
@@ -1872,12 +1874,21 @@ export const TOOL_DEFINITIONS = [
         request_id: { type: 'string' },
         trace_id: { type: 'string' },
       },
-      required: ['exported', 'target_dir', 'manifest_updated', 'policy_version', 'state', 'request_id', 'trace_id'],
+      required: [
+        'exported',
+        'target_dir',
+        'manifest_updated',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
   {
     name: 'pce.memory.sync.pull',
-    description: 'Import claims/entities/relations from .pce-shared/ directory with CRDT merge strategy',
+    description:
+      'Import claims/entities/relations from .pce-shared/ directory with CRDT merge strategy',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1956,7 +1967,15 @@ export const TOOL_DEFINITIONS = [
         request_id: { type: 'string' },
         trace_id: { type: 'string' },
       },
-      required: ['imported', 'validation_errors', 'dry_run', 'policy_version', 'state', 'request_id', 'trace_id'],
+      required: [
+        'imported',
+        'validation_errors',
+        'dry_run',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
 ];
