@@ -182,6 +182,11 @@ Prop_Associative ==
     \A a, b, c \in BoundaryLevel:
         MergeBoundary(MergeBoundary(a, b), c) = MergeBoundary(a, MergeBoundary(b, c))
 
+\* ===== 状態空間制約 =====
+\* CI環境での検証用に状態空間を制限
+
+StateConstraint == Len(conflicts) <= 3
+
 \* ===== 検証コマンド =====
 \* TLC実行用の設定例:
 \* - BoundaryLevel = 0..3 (public, internal, pii, secret)
