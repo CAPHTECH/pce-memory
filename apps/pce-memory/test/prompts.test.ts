@@ -4,11 +4,7 @@
  * handleListPrompts, handleGetPromptの単体テスト
  */
 import { describe, it, expect } from 'vitest';
-import {
-  handleListPrompts,
-  handleGetPrompt,
-  PROMPTS_DEFINITIONS,
-} from '../src/core/handlers';
+import { handleListPrompts, handleGetPrompt, PROMPTS_DEFINITIONS } from '../src/core/handlers';
 
 describe('MCP Prompts (Issue #16)', () => {
   describe('PROMPTS_DEFINITIONS', () => {
