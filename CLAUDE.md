@@ -152,6 +152,51 @@ const entity = await upsertEntity({
 | `PCE_RATE_WINDOW` | Rate window (seconds)               | `10`       |
 | `PCE_TOKEN`       | Auth token (required in production) | -          |
 
+## Sync & Git Hooks
+
+Git hooksを使用して、チーム間で知識を自動同期。
+
+### CLI Commands
+
+```bash
+# Export local DB to .pce-shared/
+pce-memory sync push
+
+# Import from .pce-shared/
+pce-memory sync pull [--dry-run]
+
+# Check sync status
+pce-memory sync status
+```
+
+### Git Hooks Setup
+
+```bash
+# Install hooks
+./scripts/git-hooks/install-hooks.sh
+
+# Enable sync
+export PCE_SYNC_ENABLED=true
+```
+
+### Sync Environment Variables
+
+| Variable                 | Default       | Description                          |
+| ------------------------ | ------------- | ------------------------------------ |
+| `PCE_SYNC_ENABLED`       | `false`       | Enable sync hooks                    |
+| `PCE_SYNC_TARGET_DIR`    | `.pce-shared` | Push destination                     |
+| `PCE_SYNC_SOURCE_DIR`    | `.pce-shared` | Pull source                          |
+| `PCE_SYNC_SCOPE_FILTER`  | -             | Scope filter (e.g., `project,principle`) |
+| `PCE_SYNC_AUTO_STAGE`    | `true`        | Auto `git add` after push            |
+
+### CRDT Merge Strategy
+
+- **G-Set CRDT**: Claims can only be added, not deleted
+- **Boundary monotonicity**: `public < internal < pii < secret` (upgrade only)
+- **Conflict detection**: boundary_upgrade (auto-resolved), entity/relation diff (skipped)
+
+See [docs/git-hooks-integration.md](docs/git-hooks-integration.md) for details.
+
 ## Quality Gates
 
 | Gate                  | Threshold |
