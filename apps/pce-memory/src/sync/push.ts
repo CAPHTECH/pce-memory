@@ -23,6 +23,7 @@ import {
 } from './schemas.js';
 import { initSyncDirectory, writeJsonFile, contentHashToFileName } from './fileSystem.js';
 import { isBoundarySyncable } from './merge.js';
+import { resolveDefaultTargetDir } from './resolveDefaultTargetDir.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
 // package.jsonからバージョンを取得するためのプレースホルダー
@@ -114,14 +115,21 @@ function getEffectiveBoundaryFilter(filter?: BoundaryClass[]): BoundaryClass[] {
 export async function executePush(
   options: PushOptions
 ): Promise<E.Either<DomainError, PushResult>> {
-  const targetDir = options.targetDir ?? DEFAULT_TARGET_DIR;
+  let basePath = options.basePath;
+  let targetDir = options.targetDir ?? DEFAULT_TARGET_DIR;
+  if (options.targetDir === undefined) {
+    const resolved = await resolveDefaultTargetDir(options.basePath);
+    basePath = resolved.basePath;
+    targetDir = resolved.targetDir;
+  }
+
   const scopeFilter = options.scopeFilter ?? DEFAULT_SCOPE_FILTER;
   const boundaryFilter = getEffectiveBoundaryFilter(options.boundaryFilter);
   const includeEntities = options.includeEntities ?? true;
   const includeRelations = options.includeRelations ?? true;
 
   // 1. ディレクトリ初期化
-  const initResult = await initSyncDirectory(options.basePath, targetDir);
+  const initResult = await initSyncDirectory(basePath, targetDir);
   if (E.isLeft(initResult)) {
     return initResult;
   }

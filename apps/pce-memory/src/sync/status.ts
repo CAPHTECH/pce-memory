@@ -9,6 +9,7 @@ import { syncStatusError, type DomainError } from '../domain/errors.js';
 import { directoryExists, readJsonFile, listJsonFiles, validatePath } from './fileSystem.js';
 import { validateManifest } from './validation.js';
 import { DEFAULT_TARGET_DIR, type Manifest } from './schemas.js';
+import { resolveDefaultTargetDir } from './resolveDefaultTargetDir.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
 /**
@@ -47,10 +48,16 @@ export interface StatusResult {
 export async function executeStatus(
   options: StatusOptions
 ): Promise<E.Either<DomainError, StatusResult>> {
-  const targetDir = options.targetDir ?? DEFAULT_TARGET_DIR;
+  let basePath = options.basePath;
+  let targetDir = options.targetDir ?? DEFAULT_TARGET_DIR;
+  if (options.targetDir === undefined) {
+    const resolved = await resolveDefaultTargetDir(options.basePath);
+    basePath = resolved.basePath;
+    targetDir = resolved.targetDir;
+  }
 
   // 1. パス検証
-  const validatedPath = validatePath(options.basePath, targetDir);
+  const validatedPath = validatePath(basePath, targetDir);
   if (E.isLeft(validatedPath)) {
     return validatedPath;
   }

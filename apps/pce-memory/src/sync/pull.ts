@@ -58,6 +58,7 @@ import {
   addConflict,
   type ConflictReport,
 } from './conflict.js';
+import { resolveDefaultTargetDir } from './resolveDefaultTargetDir.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
 /**
@@ -324,12 +325,19 @@ async function importRelation(
 export async function executePull(
   options: PullOptions
 ): Promise<E.Either<DomainError, PullResult>> {
-  const sourceDir = options.sourceDir ?? DEFAULT_TARGET_DIR;
+  let basePath = options.basePath;
+  let sourceDir = options.sourceDir ?? DEFAULT_TARGET_DIR;
+  if (options.sourceDir === undefined) {
+    const resolved = await resolveDefaultTargetDir(options.basePath);
+    basePath = resolved.basePath;
+    sourceDir = resolved.targetDir;
+  }
+
   const boundaryFilter = getEffectiveBoundaryFilter(options.boundaryFilter);
   const dryRun = options.dryRun ?? false;
 
   // 1. パス検証
-  const validatedPath = validatePath(options.basePath, sourceDir);
+  const validatedPath = validatePath(basePath, sourceDir);
   if (E.isLeft(validatedPath)) {
     return validatedPath;
   }

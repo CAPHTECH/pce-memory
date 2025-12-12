@@ -2,9 +2,11 @@
  * Sync Status機能テスト (Issue #18 Phase 2)
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { promisify } from 'node:util';
 import * as E from 'fp-ts/Either';
 import { computeContentHash } from '@pce/embeddings';
 import { executeStatus } from '../src/sync/status.js';
@@ -13,6 +15,8 @@ import { upsertClaim } from '../src/store/claims.js';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection.js';
 import { initRateState, resetRates } from '../src/store/rate.js';
 import { resetMemoryState } from '../src/state/memoryState.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('executeStatus', () => {
   let tempDir: string;
@@ -46,6 +50,23 @@ describe('executeStatus', () => {
       expect(result.right.files.entities).toBe(0);
       expect(result.right.files.relations).toBe(0);
       expect(result.right.validation.isValid).toBe(true);
+    }
+  });
+
+  it('Git管理下では.gitルートに.pce-sharedを解決する', async () => {
+    await execFileAsync('git', ['init'], { cwd: tempDir });
+
+    const nestedDir = path.join(tempDir, 'packages', 'nested');
+    await fs.mkdir(nestedDir, { recursive: true });
+
+    const result = await executeStatus({ basePath: nestedDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(path.basename(result.right.targetDir)).toBe('.pce-shared');
+      const resolvedGitRoot = await fs.realpath(path.dirname(result.right.targetDir));
+      const expectedGitRoot = await fs.realpath(tempDir);
+      expect(resolvedGitRoot).toBe(expectedGitRoot);
     }
   });
 

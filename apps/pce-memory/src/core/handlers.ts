@@ -1679,7 +1679,7 @@ Use pce.memory.sync.push to export knowledge from the local DB to .pce-shared/.
 \`\`\`
 
 ### Options
-- \`target_dir\`: Export destination (default: .pce-shared)
+- \`target_dir\`: Export destination (default: .pce-shared at Git root if available)
 - \`scope_filter\`: Filter by scope
 - \`boundary_filter\`: Filter by boundary_class (secret is always excluded)
 - \`since\`: Export only changes after the specified datetime
@@ -1699,7 +1699,7 @@ Use pce.memory.sync.pull to import knowledge from .pce-shared/.
 \`\`\`
 
 ### Options
-- \`source_dir\`: Import source (default: .pce-shared)
+- \`source_dir\`: Import source (default: .pce-shared at Git root if available)
 - \`scope_filter\`: Filter by scope
 - \`boundary_filter\`: Filter by boundary_class
 - \`dry_run\`: Preview changes without applying when true
@@ -2511,7 +2511,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         target_dir: {
           type: 'string',
-          description: 'Target directory path (default: .pce-shared)',
+          description: 'Target directory path (default: .pce-shared at Git root if available)',
         },
         scope_filter: {
           type: 'array',
@@ -2581,7 +2581,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         source_dir: {
           type: 'string',
-          description: 'Source directory path (default: .pce-shared)',
+          description: 'Source directory path (default: .pce-shared at Git root if available)',
         },
         scope_filter: {
           type: 'array',
@@ -2690,7 +2690,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         target_dir: {
           type: 'string',
-          description: 'Target directory path (default: .pce-shared)',
+          description: 'Target directory path (default: .pce-shared at Git root if available)',
         },
       },
     },
