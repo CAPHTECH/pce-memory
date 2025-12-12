@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2025-12-12
+
+### Fixed
+
+- **MCP SDK を 1.24.3 に更新** - Claude Code prompts互換性向上
+  - v1.0.4 から v1.24.3 へアップグレード
+  - プロトコルバージョンおよびcapabilities対応の改善
+- **SERVER_VERSION のハードコード問題を修正** (Issue #23)
+  - package.json から動的にバージョンを取得するよう変更
+
 ## [0.7.1] - 2025-12-12
 
 ### Fixed
@@ -23,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `recall_context`: タスク開始時の関連知識想起
   - `record_decision`: 設計決定の記録支援
   - `sync_workflow`: Git同期ワークフローガイド
-  - `debug-assist`: デバッグ時の関連知識検索
+  - `debug_assist`: デバッグ時の関連知識検索
   - MCP Protocol Prompts仕様に準拠
 
 - **Git-based CRDT同期機能** (Issue #18) - チーム間での知識同期を実現

@@ -15,6 +15,7 @@ import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import packageJson from '../package.json' with { type: 'json' };
 import {
   initLocalProvider,
   localProvider,
@@ -45,7 +46,8 @@ import {
 
 // サーバー情報
 const SERVER_NAME = 'pce-memory';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION =
+  typeof packageJson?.version === 'string' ? packageJson.version : '0.0.0';
 
 /**
  * MCP ツールハンドラの登録（CallToolRequestSchema を使用）
