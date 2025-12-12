@@ -27,6 +27,7 @@ import {
   contentHashToFileName,
 } from './fileSystem.js';
 import { isBoundarySyncable } from './merge.js';
+import { getPolicyVersion } from '../state/memoryState.js';
 
 // package.jsonからバージョンを取得するためのプレースホルダー
 const PCE_MEMORY_VERSION = '0.7.0';
@@ -211,11 +212,12 @@ export async function executePush(options: PushOptions): Promise<E.Either<Domain
     }
 
     // 5. manifest.jsonを更新
+    const policyVersion = getPolicyVersion();
     const manifest: Manifest = {
       version: '1.0',
       pce_memory_version: PCE_MEMORY_VERSION,
       last_push_at: new Date().toISOString(),
-      last_push_policy_version: 'default',
+      last_push_policy_version: policyVersion,
     };
 
     const manifestPath = path.join(syncDir, 'manifest.json');
@@ -232,7 +234,7 @@ export async function executePush(options: PushOptions): Promise<E.Either<Domain
       },
       targetDir: syncDir,
       manifestUpdated: true,
-      policyVersion: 'default',
+      policyVersion,
     });
   } catch (error) {
     return E.left(syncPushError('Push execution failed', error));

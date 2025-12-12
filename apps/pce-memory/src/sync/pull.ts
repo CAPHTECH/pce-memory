@@ -21,6 +21,7 @@ import { upsertEntity, findEntityById, type EntityInput } from '../store/entitie
 import { upsertRelation, findRelationById, type RelationInput } from '../store/relations.js';
 import {
   DEFAULT_TARGET_DIR,
+  DEFAULT_BOUNDARY_FILTER,
   SYNC_BLOCKED_BOUNDARY,
   type Scope,
   type BoundaryClass,
@@ -42,6 +43,7 @@ import {
   type ValidationError,
 } from './validation.js';
 import { mergeBoundaryClass, isBoundarySyncable, isBoundaryUpgraded, type MergeAction } from './merge.js';
+import { getPolicyVersion } from '../state/memoryState.js';
 
 /**
  * Pull入力オプション
@@ -81,13 +83,13 @@ export interface PullResult {
 /**
  * 有効な境界クラスフィルターを計算
  * secretは常に除外
+ *
+ * デフォルトはpushと同じ値（public, internal）を使用
+ * piiはオプトイン（明示的に指定が必要）
  */
 function getEffectiveBoundaryFilter(filter?: BoundaryClass[]): BoundaryClass[] {
-  if (!filter) {
-    // フィルター未指定の場合は全て許可（secret除く）
-    return ['public', 'internal', 'pii'];
-  }
-  return filter.filter((bc) => !SYNC_BLOCKED_BOUNDARY.includes(bc));
+  const base = filter ?? DEFAULT_BOUNDARY_FILTER;
+  return base.filter((bc) => !SYNC_BLOCKED_BOUNDARY.includes(bc));
 }
 
 /**
@@ -248,9 +250,16 @@ async function importEntity(entity: EntityExport, dryRun: boolean): Promise<Merg
 /**
  * Relationをインポート
  *
- * @returns マージアクションの種別
+ * 参照整合性検証:
+ * - src_idとdst_idが存在するEntityを参照していることを確認
+ * - 参照先が存在しない場合はスキップ（バリデーションエラーとして報告）
+ *
+ * @returns マージアクションの種別、または参照エラーの場合はValidationError
  */
-async function importRelation(relation: RelationExport, dryRun: boolean): Promise<MergeAction> {
+async function importRelation(
+  relation: RelationExport,
+  dryRun: boolean
+): Promise<MergeAction | { referenceError: string }> {
   // tombstoneチェック（Phase 2対応）
   if (relation.tombstone) {
     return 'skipped_tombstone';
@@ -262,6 +271,20 @@ async function importRelation(relation: RelationExport, dryRun: boolean): Promis
   if (existing) {
     // 既存がある場合はスキップ（ID衝突時は既存優先）
     return 'skipped_duplicate';
+  }
+
+  // 参照整合性検証: src_idとdst_idのEntityが存在するか確認
+  const srcEntity = await findEntityById(relation.src_id);
+  const dstEntity = await findEntityById(relation.dst_id);
+
+  if (!srcEntity && !dstEntity) {
+    return { referenceError: `Referenced entities not found: src_id=${relation.src_id}, dst_id=${relation.dst_id}` };
+  }
+  if (!srcEntity) {
+    return { referenceError: `Referenced entity not found: src_id=${relation.src_id}` };
+  }
+  if (!dstEntity) {
+    return { referenceError: `Referenced entity not found: dst_id=${relation.dst_id}` };
   }
 
   // 新規の場合
@@ -294,6 +317,7 @@ export async function executePull(options: PullOptions): Promise<E.Either<Domain
     return E.left(syncPullError(`Source directory not found: ${syncDir}`));
   }
 
+  const policyVersion = getPolicyVersion();
   const result: PullResult = {
     imported: {
       claims: { new: 0, skippedDuplicate: 0, upgradedBoundary: 0 },
@@ -302,7 +326,7 @@ export async function executePull(options: PullOptions): Promise<E.Either<Domain
     },
     validationErrors: [],
     dryRun,
-    policyVersion: 'default',
+    policyVersion,
   };
 
   try {
@@ -420,6 +444,12 @@ export async function executePull(options: PullOptions): Promise<E.Either<Domain
 
         const relation = validationResult.right;
         const action = await importRelation(relation, dryRun);
+
+        // 参照エラーの場合はバリデーションエラーとして報告
+        if (typeof action === 'object' && 'referenceError' in action) {
+          result.validationErrors.push({ file: filePath, error: action.referenceError });
+          continue;
+        }
 
         switch (action) {
           case 'new':
