@@ -17,6 +17,7 @@ import * as path from 'path';
 import * as readline from 'readline';
 import { parseArgs } from 'util';
 
+import packageJson from '../../package.json' with { type: 'json' };
 import { getSocketPath } from '../shared/socket.js';
 import { startDaemon, isDaemonRunning, stopDaemon } from './start-daemon.js';
 import { DEFAULT_IDLE_TIMEOUT_MINUTES } from '../daemon/constants.js';
@@ -36,7 +37,7 @@ function expandTilde(filePath: string): string {
 }
 
 const SERVER_NAME = 'pce-memory';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = typeof packageJson?.version === 'string' ? packageJson.version : '0.0.0';
 
 /**
  * CLI引数をパース

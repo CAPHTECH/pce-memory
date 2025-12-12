@@ -10,6 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { parseArgs } from 'util';
 
+import packageJson from '../../package.json' with { type: 'json' };
 import { initDb, initSchema, closeDb } from '../db/connection.js';
 import {
   initLocalProvider,
@@ -31,7 +32,7 @@ import { getSocketPath } from '../shared/socket.js';
 import { createMcpJsonRpcRequestHandler } from './mcp-handler.js';
 
 const SERVER_NAME = 'pce-memory-daemon';
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = typeof packageJson?.version === 'string' ? packageJson.version : '0.0.0';
 
 /**
  * CLI引数をパース

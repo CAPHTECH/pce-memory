@@ -1,6 +1,6 @@
 {
   "name": "pce-memory",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": false,
   "type": "module",
   "description": "PCE Memory - MCP server for Process-Context Engine",
