@@ -142,7 +142,7 @@ export async function main() {
     {
       capabilities: {
         tools: {},
-        prompts: {},
+        prompts: { listChanged: false },
       },
     }
   );
