@@ -138,7 +138,7 @@ function expandTilde(filePath: string): string {
  */
 async function handlePush(args: string[]): Promise<number> {
   // 引数パース
-  let targetDir = '.pce-shared';
+  let targetDir: string | undefined;
   let scopeFilter: Scope[] | undefined;
   let boundaryFilter: BoundaryClass[] | undefined;
   let since: Date | undefined;
@@ -175,7 +175,7 @@ async function handlePush(args: string[]): Promise<number> {
   // Push実行
   const options: PushOptions = {
     basePath: process.cwd(),
-    targetDir,
+    ...(targetDir && { targetDir }),
     ...(scopeFilter && { scopeFilter }),
     ...(boundaryFilter && { boundaryFilter }),
     ...(since && { since }),
@@ -200,7 +200,7 @@ async function handlePush(args: string[]): Promise<number> {
  */
 async function handlePull(args: string[]): Promise<number> {
   // 引数パース
-  let sourceDir = '.pce-shared';
+  let sourceDir: string | undefined;
   let scopeFilter: Scope[] | undefined;
   let boundaryFilter: BoundaryClass[] | undefined;
   let dryRun = false;
@@ -240,7 +240,7 @@ async function handlePull(args: string[]): Promise<number> {
   // Pull実行
   const options: PullOptions = {
     basePath: process.cwd(),
-    sourceDir,
+    ...(sourceDir && { sourceDir }),
     ...(scopeFilter && { scopeFilter }),
     ...(boundaryFilter && { boundaryFilter }),
     dryRun,
@@ -287,7 +287,7 @@ async function handlePull(args: string[]): Promise<number> {
  */
 async function handleStatus(args: string[]): Promise<number> {
   // 引数パース
-  let targetDir = '.pce-shared';
+  let targetDir: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -301,7 +301,7 @@ async function handleStatus(args: string[]): Promise<number> {
   // Status実行（DB初期化不要）
   const options: StatusOptions = {
     basePath: process.cwd(),
-    targetDir,
+    ...(targetDir && { targetDir }),
   };
 
   const result = await executeStatus(options);
@@ -313,7 +313,7 @@ async function handleStatus(args: string[]): Promise<number> {
 
   const status = result.right;
 
-  console.log(`[pce-sync] Sync directory: ${path.join(process.cwd(), targetDir)}`);
+  console.log(`[pce-sync] Sync directory: ${status.targetDir}`);
   console.log(`  Exists: ${status.exists ? 'yes' : 'no'}`);
 
   if (status.exists) {
