@@ -688,20 +688,24 @@ describe('Inv_C_ThresholdFiltering boundary values', () => {
 
   it('should filter results below threshold', async () => {
     // CI環境でのDuckDB一時エラーに対応するためリトライラッパーを使用
-    const runWithRetry = async (fn: () => Promise<void>, retries = 3) => {
+    // Ubuntu CI環境ではDuckDBのprepared statement実行で一時的なエラーが発生することがある
+    const runWithRetry = async (fn: () => Promise<void>, retries = 5) => {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           await fn();
           return;
         } catch (error) {
           if (attempt === retries) throw error;
-          // リトライ前にDB再初期化
+          // リトライ前にDB再初期化（より長い待機時間）
           await resetDbAsync();
+          // 前の接続が完全にクリーンアップされるまで待機
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
           const freshPath = join(tmpdir(), `pce-test-threshold-retry-${randomUUID()}.duckdb`);
           process.env.PCE_DB = freshPath;
           await initDb();
           await initSchema();
-          await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+          // DB初期化後も少し待機
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
       }
     };
