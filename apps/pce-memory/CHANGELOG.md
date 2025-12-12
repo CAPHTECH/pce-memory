@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-12-12
+
+### Added
+
+- **MCP Prompts対応** (Issue #16) - 定型プロンプトテンプレートを提供
+  - `recall-context`: タスク開始時の関連知識想起
+  - `record-decision`: 設計決定の記録支援
+  - `sync-workflow`: Git同期ワークフローガイド
+  - `debug-assist`: デバッグ時の関連知識検索
+  - MCP Protocol Prompts仕様に準拠
+
+- **Git-based CRDT同期機能** (Issue #18) - チーム間での知識同期を実現
+  - `pce.memory.sync.push` MCPツール: ローカルDBから`.pce-shared/`へエクスポート
+  - `pce.memory.sync.pull` MCPツール: `.pce-shared/`からインポート（増分同期対応）
+  - `pce.memory.sync.status` MCPツール: 同期ステータス確認
+  - CLIコマンド: `pce-memory sync push/pull/status`
+  - Git hooks統合: pre-commit, post-mergeによる自動同期
+  - G-Set CRDTに基づいた衝突検出・解決
+  - boundary_classマージ戦略（格上げのみ許可）
+  - dry_runモードでの事前確認機能
+  - TLA+/Alloy形式検証 (`docs/spec/tlaplus/sync_crdt.tla`, `docs/spec/alloy/sync_conflict.als`)
+  - 統合ガイド (`docs/git-hooks-integration.md`)
+
+### Fixed
+
+- hybridSearchテストのCI安定性を改善
+- Critical Reviewで指摘されたバリデーション・エラーハンドリングの問題を修正
+
 ## [0.6.0] - 2025-12-12
 
 ### Added
