@@ -1,6 +1,6 @@
 {
   "name": "pce-memory",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "private": false,
   "type": "module",
   "description": "PCE Memory - MCP server for Process-Context Engine",
@@ -8,7 +8,7 @@
   "author": "CAPHTECH",
   "repository": {
     "type": "git",
-    "url": "https://github.com/CAPHTECH/pce-memory.git",
+    "url": "git+https://github.com/CAPHTECH/pce-memory.git",
     "directory": "apps/pce-memory"
   },
   "keywords": [
@@ -29,9 +29,9 @@
     "CHANGELOG.md"
   ],
   "bin": {
-    "pce-memory": "./dist/client/proxy.js",
-    "pce-daemon": "./dist/daemon/daemon.js",
-    "pce-memory-stdio": "./dist/index.js"
+    "pce-memory": "dist/client/proxy.js",
+    "pce-daemon": "dist/daemon/daemon.js",
+    "pce-memory-stdio": "dist/index.js"
   },
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",
