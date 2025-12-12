@@ -71,16 +71,16 @@ pce-memory sync pull --dry-run
 
 ### 環境変数
 
-| 変数名                     | デフォルト    | 説明                                        |
-| -------------------------- | ------------- | ------------------------------------------- |
-| `PCE_SYNC_ENABLED`         | `false`       | `true`で同期を有効化                        |
+| 変数名                     | デフォルト    | 説明                                                     |
+| -------------------------- | ------------- | -------------------------------------------------------- |
+| `PCE_SYNC_ENABLED`         | `false`       | `true`で同期を有効化                                     |
 | `PCE_SYNC_TARGET_DIR`      | `.pce-shared` | pushのエクスポート先（未指定時は<git_root>/.pce-shared） |
 | `PCE_SYNC_SOURCE_DIR`      | `.pce-shared` | pullのインポート元（未指定時は<git_root>/.pce-shared）   |
-| `PCE_SYNC_SCOPE_FILTER`    | -             | スコープフィルタ（例: `project,principle`） |
-| `PCE_SYNC_BOUNDARY_FILTER` | -             | 境界クラスフィルタ（例: `public,internal`） |
-| `PCE_SYNC_AUTO_STAGE`      | `true`        | push後に自動で`git add`                     |
-| `PCE_SYNC_DRY_RUN`         | `false`       | pullをdry-runモードで実行                   |
-| `PCE_SYNC_QUIET`           | `false`       | ログ出力を抑制                              |
+| `PCE_SYNC_SCOPE_FILTER`    | -             | スコープフィルタ（例: `project,principle`）              |
+| `PCE_SYNC_BOUNDARY_FILTER` | -             | 境界クラスフィルタ（例: `public,internal`）              |
+| `PCE_SYNC_AUTO_STAGE`      | `true`        | push後に自動で`git add`                                  |
+| `PCE_SYNC_DRY_RUN`         | `false`       | pullをdry-runモードで実行                                |
+| `PCE_SYNC_QUIET`           | `false`       | ログ出力を抑制                                           |
 
 ### 推奨設定
 

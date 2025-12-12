@@ -108,7 +108,7 @@ export async function writeJsonFile<T>(
     await fs.mkdir(dir, { recursive: true });
 
     // 整形されたJSONを書き込み（可読性とGit差分のため）
-    const content = JSON.stringify(data, null, 2);
+    const content = JSON.stringify(data, null, 2) + '\n';
     await fs.writeFile(filePath, content, 'utf-8');
     return E.right(undefined);
   } catch {
