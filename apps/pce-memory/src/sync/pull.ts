@@ -409,6 +409,8 @@ export async function executePull(
           }
 
           // Phase 3: インポート前に衝突検出
+          // TODO: パフォーマンス最適化 - existingClaim を importClaim に渡して再利用可能
+          // 現在は importClaim 内で再度クエリが発生する（N件で2N回のDBアクセス）
           const existingClaim = await findClaimByContentHash(claim.content_hash);
           const claimConflict = detectClaimConflict(
             existingClaim ? { boundary_class: existingClaim.boundary_class as BoundaryClass } : undefined,
@@ -458,6 +460,7 @@ export async function executePull(
         const entity = validationResult.right;
 
         // Phase 3: インポート前に衝突検出
+        // TODO: パフォーマンス最適化 - existingEntity を importEntity に渡して再利用可能
         const existingEntity = await findEntityById(entity.id);
         const entityConflict = detectEntityConflict(
           existingEntity

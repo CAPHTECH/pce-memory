@@ -5,9 +5,9 @@
  * Git hooksから呼び出すためのコマンドラインインターフェース
  *
  * Usage:
- *   pce-memory sync push [--target-dir .pce-shared]
- *   pce-memory sync pull [--source-dir .pce-shared] [--dry-run]
- *   pce-memory sync status [--target-dir .pce-shared]
+ *   pce-memory sync push [--db <path>] [--target-dir .pce-shared]
+ *   pce-memory sync pull [--db <path>] [--source-dir .pce-shared] [--dry-run]
+ *   pce-memory sync status [--db <path>] [--target-dir .pce-shared]
  */
 import * as E from 'fp-ts/Either';
 import * as path from 'node:path';
@@ -20,6 +20,29 @@ import { executePush, type PushOptions } from '../sync/push.js';
 import { executePull, type PullOptions } from '../sync/pull.js';
 import { executeStatus, type StatusOptions } from '../sync/status.js';
 import type { Scope, BoundaryClass } from '../sync/schemas.js';
+
+/**
+ * グローバルオプション（--db）を抽出し、残りの引数を返す
+ * --db オプションが指定された場合、環境変数 PCE_DB を設定する
+ */
+function extractGlobalOptions(args: string[]): string[] {
+  const remaining: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    const nextArg = args[i + 1];
+    if ((arg === '--db' || arg === '-d') && nextArg !== undefined) {
+      // DBパスを環境変数に設定（initDbで使用される）
+      process.env['PCE_DB'] = expandTilde(nextArg);
+      i++;
+    } else {
+      remaining.push(arg);
+    }
+  }
+
+  return remaining;
+}
 
 /**
  * DB初期化（sync操作に必要な最小限の初期化）
@@ -266,6 +289,9 @@ Commands:
   pull      Import from .pce-shared/ to local DB
   status    Show sync directory status
 
+Global options:
+  -d, --db <path>          DuckDB file path (default: $PCE_DB or :memory:)
+
 Options for push:
   --target-dir <path>      Target directory (default: .pce-shared)
   --scope-filter <scopes>  Comma-separated scopes (e.g., project,principle)
@@ -283,7 +309,7 @@ Options for status:
   --target-dir <path>      Target directory (default: .pce-shared)
 
 Examples:
-  pce-memory sync push
+  pce-memory sync --db ~/my.pce.db push
   pce-memory sync pull --dry-run
   pce-memory sync status
 `);
@@ -293,7 +319,9 @@ Examples:
  * sync コマンドのエントリポイント
  */
 export async function runSyncCommand(args: string[]): Promise<number> {
-  const [subcommand, ...subArgs] = args;
+  // グローバルオプション（--db）を抽出
+  const remainingArgs = extractGlobalOptions(args);
+  const [subcommand, ...subArgs] = remainingArgs;
 
   switch (subcommand) {
     case 'push':

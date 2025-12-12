@@ -19,6 +19,19 @@ import type {
 } from './schemas.js';
 
 /**
+ * オブジェクトをキーでソートして安定的にJSON文字列化
+ * キー順序に依存しない比較を実現する
+ */
+function stableStringify(obj: Record<string, unknown>): string {
+  const sortedKeys = Object.keys(obj).sort();
+  const sortedObj: Record<string, unknown> = {};
+  for (const key of sortedKeys) {
+    sortedObj[key] = obj[key];
+  }
+  return JSON.stringify(sortedObj);
+}
+
+/**
  * 衝突種別
  */
 export type ConflictType =
@@ -138,11 +151,11 @@ export function detectEntityConflict(
     return null;
   }
 
-  // 内容が完全に同一かチェック
+  // 内容が完全に同一かチェック（attrs はキー順序に依存しない比較）
   const isSame =
     existing.name === incoming.name &&
     existing.type === incoming.type &&
-    JSON.stringify(existing.attrs ?? {}) === JSON.stringify(incoming.attrs ?? {}) &&
+    stableStringify(existing.attrs ?? {}) === stableStringify(incoming.attrs ?? {}) &&
     existing.canonical_key === incoming.canonical_key;
 
   if (isSame) {
@@ -179,12 +192,12 @@ export function detectRelationConflict(
     return null;
   }
 
-  // 内容が完全に同一かチェック
+  // 内容が完全に同一かチェック（props はキー順序に依存しない比較）
   const isSame =
     existing.src_id === incoming.src_id &&
     existing.dst_id === incoming.dst_id &&
     existing.type === incoming.type &&
-    JSON.stringify(existing.props ?? {}) === JSON.stringify(incoming.props ?? {}) &&
+    stableStringify(existing.props ?? {}) === stableStringify(incoming.props ?? {}) &&
     existing.evidence_claim_id === incoming.evidence_claim_id;
 
   if (isSame) {
