@@ -36,6 +36,7 @@ Thumbs.db
 .idea/
 *.sublime-*
 *.code-workspace
+.serena/
 
 # Environment variables
 .env
@@ -44,6 +45,9 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Local artifacts
+apps/pce-memory/pce-memory-*.tgz
 
 # DuckDB
 *.db
