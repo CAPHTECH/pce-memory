@@ -2020,7 +2020,8 @@ export const TOOL_DEFINITIONS = [
         since: {
           type: 'string',
           format: 'date-time',
-          description: 'Incremental import: only import claims with provenance.at >= since (ISO8601)',
+          description:
+            'Incremental import: only import claims with provenance.at >= since (ISO8601)',
         },
       },
     },
@@ -2036,7 +2037,11 @@ export const TOOL_DEFINITIONS = [
                 new: { type: 'integer', minimum: 0 },
                 skipped_duplicate: { type: 'integer', minimum: 0 },
                 upgraded_boundary: { type: 'integer', minimum: 0 },
-                skipped_by_since: { type: 'integer', minimum: 0, description: 'Skipped due to since filter' },
+                skipped_by_since: {
+                  type: 'integer',
+                  minimum: 0,
+                  description: 'Skipped due to since filter',
+                },
               },
               required: ['new', 'skipped_duplicate', 'upgraded_boundary', 'skipped_by_since'],
             },
@@ -2072,7 +2077,10 @@ export const TOOL_DEFINITIONS = [
           description: 'List of validation errors encountered',
         },
         dry_run: { type: 'boolean', description: 'Whether this was a dry run' },
-        manifest_updated: { type: 'boolean', description: 'Whether manifest.json was updated with last_pull_at' },
+        manifest_updated: {
+          type: 'boolean',
+          description: 'Whether manifest.json was updated with last_pull_at',
+        },
         policy_version: { type: 'string', description: 'Policy version' },
         state: {
           type: 'string',

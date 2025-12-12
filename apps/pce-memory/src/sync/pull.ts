@@ -495,7 +495,10 @@ export async function executePull(
 
       // 既存のmanifestがある場合のみ更新（スキーマ必須フィールドを壊さないため）
       if (E.isRight(existingManifest)) {
-        const updatedManifest = { ...existingManifest.right, last_pull_at: new Date().toISOString() };
+        const updatedManifest = {
+          ...existingManifest.right,
+          last_pull_at: new Date().toISOString(),
+        };
         const writeResult = await writeJsonFile(manifestPath, updatedManifest);
         if (E.isRight(writeResult)) {
           result.manifestUpdated = true;

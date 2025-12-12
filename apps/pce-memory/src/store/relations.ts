@@ -142,7 +142,9 @@ export interface RelationFilterOptions {
  * @param options フィルターオプション
  * @returns Relation配列
  */
-export async function listRelationsByFilter(options: RelationFilterOptions = {}): Promise<Relation[]> {
+export async function listRelationsByFilter(
+  options: RelationFilterOptions = {}
+): Promise<Relation[]> {
   const conn = await getConnection();
   const conditions: string[] = [];
   const params: (string | number)[] = [];

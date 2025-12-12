@@ -244,9 +244,7 @@ describe('Incremental Sync (since parameter)', () => {
 
       // Pull実行前のmanifestを確認
       const manifestPath = path.join(tempDir, '.pce-shared', 'manifest.json');
-      const beforeManifest = JSON.parse(
-        await fs.readFile(manifestPath, 'utf-8')
-      ) as Manifest;
+      const beforeManifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8')) as Manifest;
       expect(beforeManifest.last_pull_at).toBeUndefined();
 
       // DBをリセット
@@ -266,9 +264,10 @@ describe('Incremental Sync (since parameter)', () => {
       }
 
       // Pull実行後のmanifestを確認
-      const afterManifest = JSON.parse(
-        await fs.readFile(manifestPath, 'utf-8')
-      ) as Record<string, unknown>;
+      const afterManifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
       expect(afterManifest.last_pull_at).toBeDefined();
       expect(typeof afterManifest.last_pull_at).toBe('string');
     });
