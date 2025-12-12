@@ -84,25 +84,33 @@ describe('Property: CRDT Merge Laws', () => {
 describe('Property: Claim Conflict Detection', () => {
   it('Property: 境界格上げ時のみconflictが発生', () => {
     fc.assert(
-      fc.property(boundaryClassArb, boundaryClassArb, contentHashArb, (existing, incoming, hash) => {
-        const conflict = detectClaimConflict({ boundary_class: existing }, {
-          text: 'test',
-          kind: 'fact',
-          scope: 'project',
-          boundary_class: incoming,
-          content_hash: hash,
-        });
+      fc.property(
+        boundaryClassArb,
+        boundaryClassArb,
+        contentHashArb,
+        (existing, incoming, hash) => {
+          const conflict = detectClaimConflict(
+            { boundary_class: existing },
+            {
+              text: 'test',
+              kind: 'fact',
+              scope: 'project',
+              boundary_class: incoming,
+              content_hash: hash,
+            }
+          );
 
-        const isUpgrade = BOUNDARY_STRICTNESS[incoming] > BOUNDARY_STRICTNESS[existing];
+          const isUpgrade = BOUNDARY_STRICTNESS[incoming] > BOUNDARY_STRICTNESS[existing];
 
-        if (isUpgrade) {
-          // 格上げの場合は boundary_upgrade conflict
-          return conflict !== null && conflict.type === 'boundary_upgrade';
-        } else {
-          // 同一または格下げの場合は conflict なし
-          return conflict === null;
+          if (isUpgrade) {
+            // 格上げの場合は boundary_upgrade conflict
+            return conflict !== null && conflict.type === 'boundary_upgrade';
+          } else {
+            // 同一または格下げの場合は conflict なし
+            return conflict === null;
+          }
         }
-      })
+      )
     );
   });
 
@@ -123,19 +131,24 @@ describe('Property: Claim Conflict Detection', () => {
 
   it('Property: conflict検出は決定的（同じ入力に対して同じ結果）', () => {
     fc.assert(
-      fc.property(boundaryClassArb, boundaryClassArb, contentHashArb, (existing, incoming, hash) => {
-        const claim = {
-          text: 'test',
-          kind: 'fact' as const,
-          scope: 'project' as const,
-          boundary_class: incoming,
-          content_hash: hash,
-        };
-        const conflict1 = detectClaimConflict({ boundary_class: existing }, claim);
-        const conflict2 = detectClaimConflict({ boundary_class: existing }, claim);
+      fc.property(
+        boundaryClassArb,
+        boundaryClassArb,
+        contentHashArb,
+        (existing, incoming, hash) => {
+          const claim = {
+            text: 'test',
+            kind: 'fact' as const,
+            scope: 'project' as const,
+            boundary_class: incoming,
+            content_hash: hash,
+          };
+          const conflict1 = detectClaimConflict({ boundary_class: existing }, claim);
+          const conflict2 = detectClaimConflict({ boundary_class: existing }, claim);
 
-        return JSON.stringify(conflict1) === JSON.stringify(conflict2);
-      })
+          return JSON.stringify(conflict1) === JSON.stringify(conflict2);
+        }
+      )
     );
   });
 });

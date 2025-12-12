@@ -39,20 +39,26 @@ describe('detectClaimConflict', () => {
   });
 
   it('格上げ（public → internal）の場合はboundary_upgrade conflict', () => {
-    const conflict = detectClaimConflict({ boundary_class: 'public' }, {
-      ...baseClaim,
-      boundary_class: 'internal',
-    });
+    const conflict = detectClaimConflict(
+      { boundary_class: 'public' },
+      {
+        ...baseClaim,
+        boundary_class: 'internal',
+      }
+    );
     expect(conflict).not.toBeNull();
     expect(conflict?.type).toBe('boundary_upgrade');
     expect(conflict?.resolution).toBe('auto_resolved');
   });
 
   it('格上げ（internal → pii）の場合はboundary_upgrade conflict', () => {
-    const conflict = detectClaimConflict({ boundary_class: 'internal' }, {
-      ...baseClaim,
-      boundary_class: 'pii',
-    });
+    const conflict = detectClaimConflict(
+      { boundary_class: 'internal' },
+      {
+        ...baseClaim,
+        boundary_class: 'pii',
+      }
+    );
     expect(conflict).not.toBeNull();
     expect(conflict?.type).toBe('boundary_upgrade');
     expect(conflict?.localValue).toBe('internal');
@@ -60,10 +66,13 @@ describe('detectClaimConflict', () => {
   });
 
   it('格上げ（public → secret）の場合はboundary_upgrade conflict', () => {
-    const conflict = detectClaimConflict({ boundary_class: 'public' }, {
-      ...baseClaim,
-      boundary_class: 'secret',
-    });
+    const conflict = detectClaimConflict(
+      { boundary_class: 'public' },
+      {
+        ...baseClaim,
+        boundary_class: 'secret',
+      }
+    );
     expect(conflict).not.toBeNull();
     expect(conflict?.type).toBe('boundary_upgrade');
     expect(conflict?.message).toContain('public');

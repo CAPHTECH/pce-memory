@@ -11,12 +11,7 @@
  * - missing_reference: 参照整合性エラー（スキップ）
  */
 import { BOUNDARY_STRICTNESS, isBoundaryUpgraded } from './merge.js';
-import type {
-  BoundaryClass,
-  ClaimExport,
-  EntityExport,
-  RelationExport,
-} from './schemas.js';
+import type { BoundaryClass, ClaimExport, EntityExport, RelationExport } from './schemas.js';
 
 /**
  * オブジェクトをキーでソートして安定的にJSON文字列化

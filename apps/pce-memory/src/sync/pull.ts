@@ -413,7 +413,9 @@ export async function executePull(
           // 現在は importClaim 内で再度クエリが発生する（N件で2N回のDBアクセス）
           const existingClaim = await findClaimByContentHash(claim.content_hash);
           const claimConflict = detectClaimConflict(
-            existingClaim ? { boundary_class: existingClaim.boundary_class as BoundaryClass } : undefined,
+            existingClaim
+              ? { boundary_class: existingClaim.boundary_class as BoundaryClass }
+              : undefined,
             claim
           );
           if (claimConflict) {

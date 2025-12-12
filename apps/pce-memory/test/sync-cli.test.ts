@@ -17,7 +17,9 @@ vi.mock('../src/store/rate.js', () => ({
 }));
 
 vi.mock('../src/state/memoryState.js', () => ({
-  initMemoryState: vi.fn().mockReturnValue(() => Promise.resolve({ _tag: 'Right', right: undefined })),
+  initMemoryState: vi
+    .fn()
+    .mockReturnValue(() => Promise.resolve({ _tag: 'Right', right: undefined })),
 }));
 
 // executePush/Pull/Statusをモック

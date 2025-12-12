@@ -256,7 +256,9 @@ async function handlePull(args: string[]): Promise<number> {
 
   const { imported, conflicts } = result.right;
 
-  console.log(`[pce-sync] Imported: ${imported.claims.new} claims (new), ${imported.entities.new} entities, ${imported.relations.new} relations`);
+  console.log(
+    `[pce-sync] Imported: ${imported.claims.new} claims (new), ${imported.entities.new} entities, ${imported.relations.new} relations`
+  );
 
   if (conflicts.conflicts.length > 0) {
     console.log(`[pce-sync] Conflicts:`);

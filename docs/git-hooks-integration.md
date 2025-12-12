@@ -71,16 +71,16 @@ pce-memory sync pull --dry-run
 
 ### 環境変数
 
-| 変数名 | デフォルト | 説明 |
-|--------|-----------|------|
-| `PCE_SYNC_ENABLED` | `false` | `true`で同期を有効化 |
-| `PCE_SYNC_TARGET_DIR` | `.pce-shared` | pushのエクスポート先 |
-| `PCE_SYNC_SOURCE_DIR` | `.pce-shared` | pullのインポート元 |
-| `PCE_SYNC_SCOPE_FILTER` | - | スコープフィルタ（例: `project,principle`） |
-| `PCE_SYNC_BOUNDARY_FILTER` | - | 境界クラスフィルタ（例: `public,internal`） |
-| `PCE_SYNC_AUTO_STAGE` | `true` | push後に自動で`git add` |
-| `PCE_SYNC_DRY_RUN` | `false` | pullをdry-runモードで実行 |
-| `PCE_SYNC_QUIET` | `false` | ログ出力を抑制 |
+| 変数名                     | デフォルト    | 説明                                        |
+| -------------------------- | ------------- | ------------------------------------------- |
+| `PCE_SYNC_ENABLED`         | `false`       | `true`で同期を有効化                        |
+| `PCE_SYNC_TARGET_DIR`      | `.pce-shared` | pushのエクスポート先                        |
+| `PCE_SYNC_SOURCE_DIR`      | `.pce-shared` | pullのインポート元                          |
+| `PCE_SYNC_SCOPE_FILTER`    | -             | スコープフィルタ（例: `project,principle`） |
+| `PCE_SYNC_BOUNDARY_FILTER` | -             | 境界クラスフィルタ（例: `public,internal`） |
+| `PCE_SYNC_AUTO_STAGE`      | `true`        | push後に自動で`git add`                     |
+| `PCE_SYNC_DRY_RUN`         | `false`       | pullをdry-runモードで実行                   |
+| `PCE_SYNC_QUIET`           | `false`       | ログ出力を抑制                              |
 
 ### 推奨設定
 
@@ -207,6 +207,7 @@ public(0) < internal(1) < pii(2) < secret(3)
 ```
 
 例:
+
 - ローカル: `public` + リモート: `internal` → 結果: `internal`
 - ローカル: `pii` + リモート: `public` → 結果: `pii`（変更なし）
 
@@ -214,12 +215,12 @@ public(0) < internal(1) < pii(2) < secret(3)
 
 以下の場合に衝突が検出される:
 
-| タイプ | 説明 | 解決方法 |
-|--------|------|----------|
-| `boundary_upgrade` | 境界クラスの格上げ | 自動解決（格上げを適用） |
-| `entity_content_diff` | 同一IDで内容が異なる | スキップ（既存を維持） |
-| `relation_content_diff` | 同一IDで内容が異なる | スキップ（既存を維持） |
-| `missing_reference` | 参照先が存在しない | スキップ（インポートしない） |
+| タイプ                  | 説明                 | 解決方法                     |
+| ----------------------- | -------------------- | ---------------------------- |
+| `boundary_upgrade`      | 境界クラスの格上げ   | 自動解決（格上げを適用）     |
+| `entity_content_diff`   | 同一IDで内容が異なる | スキップ（既存を維持）       |
+| `relation_content_diff` | 同一IDで内容が異なる | スキップ（既存を維持）       |
+| `missing_reference`     | 参照先が存在しない   | スキップ（インポートしない） |
 
 衝突情報は`sync pull`の出力で確認可能:
 
@@ -250,12 +251,14 @@ public(0) < internal(1) < pii(2) < secret(3)
 ### hooksが実行されない
 
 1. 実行権限を確認:
+
 ```bash
 ls -la .git/hooks/
 # pre-commit と post-merge に実行権限があるか確認
 ```
 
 2. `PCE_SYNC_ENABLED`が設定されているか確認:
+
 ```bash
 echo $PCE_SYNC_ENABLED
 ```
@@ -306,14 +309,14 @@ APIキーやパスワードは絶対にClaimに保存しない:
 ```typescript
 // NG: 機密情報をClaimに保存
 await upsert({
-  text: "API_KEY=sk-xxxxx",
-  boundary_class: "secret", // 同期されないが、ローカルDBに残る
+  text: 'API_KEY=sk-xxxxx',
+  boundary_class: 'secret', // 同期されないが、ローカルDBに残る
 });
 
 // OK: 環境変数の名前のみ記録
 await upsert({
-  text: "認証にはAPI_KEY環境変数を使用",
-  boundary_class: "internal",
+  text: '認証にはAPI_KEY環境変数を使用',
+  boundary_class: 'internal',
 });
 ```
 
