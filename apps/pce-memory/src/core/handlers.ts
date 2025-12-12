@@ -43,8 +43,10 @@ import {
 import {
   executePush,
   executePull,
+  executeStatus,
   type PushOptions,
   type PullOptions,
+  type StatusOptions,
   type Scope,
   type BoundaryClass,
 } from '../sync/index.js';
@@ -1194,11 +1196,12 @@ export async function handleSyncPull(args: Record<string, unknown>) {
     }
 
     // 引数の取得
-    const { source_dir, scope_filter, boundary_filter, dry_run } = args as {
+    const { source_dir, scope_filter, boundary_filter, dry_run, since } = args as {
       source_dir?: string;
       scope_filter?: string[];
       boundary_filter?: string[];
       dry_run?: boolean;
+      since?: string; // Phase 2: 増分インポート用ISO8601日時
     };
 
     // Pull実行オプションの構築
@@ -1208,6 +1211,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       ...(scope_filter && { scopeFilter: scope_filter as Scope[] }),
       ...(boundary_filter && { boundaryFilter: boundary_filter as BoundaryClass[] }),
       ...(dry_run !== undefined && { dryRun: dry_run }),
+      ...(since && { since: new Date(since) }), // Phase 2: since追加
     };
 
     // Pull実行
@@ -1253,6 +1257,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
           new: result.right.imported.claims.new,
           skipped_duplicate: result.right.imported.claims.skippedDuplicate,
           upgraded_boundary: result.right.imported.claims.upgradedBoundary,
+          skipped_by_since: result.right.imported.claims.skippedBySince, // Phase 2
         },
         entities: {
           new: result.right.imported.entities.new,
@@ -1265,6 +1270,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       },
       validation_errors: result.right.validationErrors,
       dry_run: result.right.dryRun,
+      manifest_updated: result.right.manifestUpdated, // Phase 2
       policy_version: result.right.policyVersion,
       state: getStateType(),
       request_id: reqId,
@@ -1282,6 +1288,105 @@ export async function handleSyncPull(args: Record<string, unknown>) {
     const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
       { ...err('SYNC_PULL_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  }
+}
+
+/**
+ * Sync Status Handler (Phase 2)
+ * 同期ディレクトリの状態を確認
+ */
+export async function handleSyncStatus(args: Record<string, unknown>) {
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以上で実行可能）
+    if (!canDoQuery()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 引数の取得と検証
+    const { target_dir } = args as { target_dir?: unknown };
+
+    // 型検証: target_dirはstring | undefinedのみ許可
+    if (target_dir !== undefined && typeof target_dir !== 'string') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'target_dir must be a string', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // Statusオプション構築
+    const options: StatusOptions = {
+      basePath: process.cwd(),
+      ...(typeof target_dir === 'string' && { targetDir: target_dir }),
+    };
+
+    // Status実行
+    const result = await executeStatus(options);
+
+    if (E.isLeft(result)) {
+      await appendLog({
+        id: `log_${reqId}`,
+        op: 'sync_status',
+        ok: false,
+        req: reqId,
+        trace: traceId,
+        policy_version: getPolicyVersion(),
+      });
+      return createToolResult(
+        { ...err('SYNC_STATUS_FAILED', result.left.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 成功時のログ記録
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_status',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      exists: result.right.exists,
+      manifest: result.right.manifest,
+      files: result.right.files,
+      validation: result.right.validation,
+      target_dir: result.right.targetDir,
+      policy_version: result.right.policyVersion,
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_status',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('SYNC_STATUS_FAILED', msg, reqId), trace_id: traceId },
       { isError: true }
     );
   }
@@ -1322,6 +1427,8 @@ export async function dispatchTool(
       return handleSyncPush(args);
     case 'pce.memory.sync.pull':
       return handleSyncPull(args);
+    case 'pce.memory.sync.status':
+      return handleSyncStatus(args);
     default:
       return createToolResult(
         { error: { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` } },
@@ -1910,6 +2017,12 @@ export const TOOL_DEFINITIONS = [
           type: 'boolean',
           description: 'Preview changes without applying (default: false)',
         },
+        since: {
+          type: 'string',
+          format: 'date-time',
+          description:
+            'Incremental import: only import claims with provenance.at >= since (ISO8601)',
+        },
       },
     },
     outputSchema: {
@@ -1924,8 +2037,13 @@ export const TOOL_DEFINITIONS = [
                 new: { type: 'integer', minimum: 0 },
                 skipped_duplicate: { type: 'integer', minimum: 0 },
                 upgraded_boundary: { type: 'integer', minimum: 0 },
+                skipped_by_since: {
+                  type: 'integer',
+                  minimum: 0,
+                  description: 'Skipped due to since filter',
+                },
               },
-              required: ['new', 'skipped_duplicate', 'upgraded_boundary'],
+              required: ['new', 'skipped_duplicate', 'upgraded_boundary', 'skipped_by_since'],
             },
             entities: {
               type: 'object',
@@ -1959,6 +2077,10 @@ export const TOOL_DEFINITIONS = [
           description: 'List of validation errors encountered',
         },
         dry_run: { type: 'boolean', description: 'Whether this was a dry run' },
+        manifest_updated: {
+          type: 'boolean',
+          description: 'Whether manifest.json was updated with last_pull_at',
+        },
         policy_version: { type: 'string', description: 'Policy version' },
         state: {
           type: 'string',
@@ -1971,6 +2093,75 @@ export const TOOL_DEFINITIONS = [
         'imported',
         'validation_errors',
         'dry_run',
+        'manifest_updated',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  // Phase 2: sync.status
+  {
+    name: 'pce.memory.sync.status',
+    description: 'Get sync directory status including manifest, file counts, and validation state',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target_dir: {
+          type: 'string',
+          description: 'Target directory path (default: .pce-shared)',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        exists: { type: 'boolean', description: 'Whether sync directory exists' },
+        manifest: {
+          type: 'object',
+          properties: {
+            version: { type: 'string' },
+            pce_memory_version: { type: 'string' },
+            last_push_at: { type: 'string', format: 'date-time' },
+            last_push_policy_version: { type: 'string' },
+            last_pull_at: { type: 'string', format: 'date-time' },
+          },
+          description: 'Manifest content (if exists)',
+        },
+        files: {
+          type: 'object',
+          properties: {
+            claims: { type: 'integer', minimum: 0 },
+            entities: { type: 'integer', minimum: 0 },
+            relations: { type: 'integer', minimum: 0 },
+          },
+          required: ['claims', 'entities', 'relations'],
+          description: 'File counts by type',
+        },
+        validation: {
+          type: 'object',
+          properties: {
+            isValid: { type: 'boolean' },
+            errors: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['isValid', 'errors'],
+          description: 'Validation status',
+        },
+        target_dir: { type: 'string', description: 'Actual target directory path' },
+        policy_version: { type: 'string', description: 'Current policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'exists',
+        'files',
+        'validation',
+        'target_dir',
         'policy_version',
         'state',
         'request_id',

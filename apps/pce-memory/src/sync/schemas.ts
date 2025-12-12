@@ -104,12 +104,15 @@ export type RelationExport = z.infer<typeof RelationExportSchema>;
 /**
  * Manifest Schema
  * .pce-shared/manifest.json のファイル形式
+ *
+ * Phase 2拡張: last_pull_at追加（増分同期用）
  */
 export const ManifestSchema = z.object({
   version: z.literal('1.0'),
   pce_memory_version: z.string(),
   last_push_at: z.string(),
   last_push_policy_version: z.string().optional(),
+  last_pull_at: z.string().optional(), // Phase 2: 増分同期用
 });
 export type Manifest = z.infer<typeof ManifestSchema>;
 

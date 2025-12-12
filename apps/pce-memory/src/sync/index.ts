@@ -64,6 +64,7 @@ export {
   type ValidationError,
 } from './validation.js';
 
-// Push/Pull
+// Push/Pull/Status
 export { executePush, type PushOptions, type PushResult } from './push.js';
 export { executePull, type PullOptions, type PullResult } from './pull.js';
+export { executeStatus, type StatusOptions, type StatusResult } from './status.js';

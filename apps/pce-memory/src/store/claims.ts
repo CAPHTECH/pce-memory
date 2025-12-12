@@ -65,6 +65,32 @@ export type ClaimInput = Omit<
 const CLAIM_COLUMNS =
   'id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance';
 
+/**
+ * DBから取得したClaimのprovenanceフィールドをパース
+ * DuckDBはJSON列を文字列として返すため、オブジェクトに変換する
+ *
+ * exactOptionalPropertyTypes対応: undefinedを代入せずプロパティを省略する
+ */
+function parseClaimProvenance(claim: Claim): Claim {
+  if (claim.provenance && typeof claim.provenance === 'string') {
+    try {
+      return { ...claim, provenance: JSON.parse(claim.provenance) as Provenance };
+    } catch {
+      // パース失敗時はprovenanceプロパティを省略
+      const { provenance: _, ...rest } = claim;
+      return rest as Claim;
+    }
+  }
+  return claim;
+}
+
+/**
+ * 複数のClaimのprovenanceをパース
+ */
+function parseClaimsProvenance(claims: Claim[]): Claim[] {
+  return claims.map(parseClaimProvenance);
+}
+
 export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   const conn = await getConnection();
   try {
@@ -74,7 +100,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       [c.content_hash]
     );
     const rawExisting = reader.getRowObjects() as unknown as Claim[];
-    const existing = normalizeRowsTimestamps(rawExisting);
+    const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
     if (existing.length > 0 && existing[0]) {
       return { claim: existing[0], isNew: false };
     }
@@ -92,7 +118,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       [id]
     );
     const rawInserted = insertedReader.getRowObjects() as unknown as Claim[];
-    const inserted = normalizeRowsTimestamps(rawInserted);
+    const inserted = parseClaimsProvenance(normalizeRowsTimestamps(rawInserted));
     return { claim: inserted[0]!, isNew: true };
   } catch (e: unknown) {
     // UNIQUE 制約違反などは既存レコードを返す（idempotent upsert）
@@ -101,7 +127,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       [c.content_hash]
     );
     const rawExisting = reader.getRowObjects() as unknown as Claim[];
-    const existing = normalizeRowsTimestamps(rawExisting);
+    const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
     if (existing.length > 0 && existing[0]) {
       return { claim: existing[0], isNew: false };
     }
@@ -171,7 +197,7 @@ export async function findClaimById(id: string): Promise<Claim | undefined> {
     id,
   ]);
   const rawRows = reader.getRowObjects() as unknown as Claim[];
-  const rows = normalizeRowsTimestamps(rawRows);
+  const rows = parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
   return rows[0];
 }
 
@@ -185,7 +211,7 @@ export async function findClaimByContentHash(contentHash: string): Promise<Claim
     [contentHash]
   );
   const rawRows = reader.getRowObjects() as unknown as Claim[];
-  const rows = normalizeRowsTimestamps(rawRows);
+  const rows = parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
   return rows[0];
 }
 
@@ -245,7 +271,7 @@ export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<C
 
   const reader = await conn.runAndReadAll(sql, params);
   const rawRows = reader.getRowObjects() as unknown as Claim[];
-  return normalizeRowsTimestamps(rawRows);
+  return parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
 }
 
 /**

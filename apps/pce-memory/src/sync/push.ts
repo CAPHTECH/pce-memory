@@ -169,6 +169,7 @@ export async function executePush(
     }
 
     // 3. Entityをエクスポート（Claimに関連するもののみ）
+    // Note: sinceはClaimフィルタにのみ使用。参照されるEntity/Relationは常にエクスポート（参照整合性確保）
     if (includeEntities && exportedEntityIds.size > 0) {
       const allEntities = await listAllEntities();
       for (const entity of allEntities) {
@@ -189,6 +190,7 @@ export async function executePush(
     }
 
     // 4. Relationをエクスポート（Entityに関連するもののみ）
+    // Note: sinceはClaimフィルタにのみ使用。参照されるEntity/Relationは常にエクスポート（参照整合性確保）
     if (includeRelations && exportedEntityIds.size > 0) {
       const allRelations = await listAllRelations();
       for (const relation of allRelations) {

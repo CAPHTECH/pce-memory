@@ -134,6 +134,46 @@ export async function listAllEntities(limit: number = 10000): Promise<Entity[]> 
 }
 
 /**
+ * Entityフィルターオプション（Phase 2: 増分同期用）
+ */
+export interface EntityFilterOptions {
+  since?: Date;
+  limit?: number;
+}
+
+/**
+ * フィルターに基づいてEntityを取得（増分同期用）
+ *
+ * @param options フィルターオプション
+ * @returns Entity配列
+ */
+export async function listEntitiesByFilter(options: EntityFilterOptions = {}): Promise<Entity[]> {
+  const conn = await getConnection();
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  let paramIndex = 1;
+
+  if (options.since) {
+    conditions.push(`created_at >= $${paramIndex}`);
+    params.push(options.since.toISOString());
+    paramIndex++;
+  }
+
+  let sql = 'SELECT id, type, name, canonical_key, attrs, created_at FROM entities';
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')}`;
+  }
+  sql += ` ORDER BY created_at DESC`;
+
+  const limit = options.limit ?? 10000;
+  sql += ` LIMIT $${paramIndex}`;
+  params.push(limit);
+
+  const reader = await conn.runAndReadAll(sql, params);
+  return reader.getRowObjects() as unknown as Entity[];
+}
+
+/**
  * Entityクエリフィルター型
  */
 export interface EntityQueryFilters {

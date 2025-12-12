@@ -129,6 +129,48 @@ export async function listAllRelations(limit: number = 10000): Promise<Relation[
 }
 
 /**
+ * Relationフィルターオプション（Phase 2: 増分同期用）
+ */
+export interface RelationFilterOptions {
+  since?: Date;
+  limit?: number;
+}
+
+/**
+ * フィルターに基づいてRelationを取得（増分同期用）
+ *
+ * @param options フィルターオプション
+ * @returns Relation配列
+ */
+export async function listRelationsByFilter(
+  options: RelationFilterOptions = {}
+): Promise<Relation[]> {
+  const conn = await getConnection();
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  let paramIndex = 1;
+
+  if (options.since) {
+    conditions.push(`created_at >= $${paramIndex}`);
+    params.push(options.since.toISOString());
+    paramIndex++;
+  }
+
+  let sql = 'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations';
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')}`;
+  }
+  sql += ` ORDER BY created_at DESC`;
+
+  const limit = options.limit ?? 10000;
+  sql += ` LIMIT $${paramIndex}`;
+  params.push(limit);
+
+  const reader = await conn.runAndReadAll(sql, params);
+  return reader.getRowObjects() as unknown as Relation[];
+}
+
+/**
  * Relationクエリフィルター型
  */
 export interface RelationQueryFilters {
