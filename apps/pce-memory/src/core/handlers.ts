@@ -1271,6 +1271,13 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       validation_errors: result.right.validationErrors,
       dry_run: result.right.dryRun,
       manifest_updated: result.right.manifestUpdated, // Phase 2
+      // Phase 3: 衝突検出レポート
+      conflicts: {
+        total: result.right.conflicts.conflicts.length,
+        auto_resolved: result.right.conflicts.autoResolved,
+        skipped: result.right.conflicts.skipped,
+        details: result.right.conflicts.conflicts.slice(0, 10), // 最初の10件のみ
+      },
       policy_version: result.right.policyVersion,
       state: getStateType(),
       request_id: reqId,

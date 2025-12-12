@@ -68,3 +68,17 @@ export {
 export { executePush, type PushOptions, type PushResult } from './push.js';
 export { executePull, type PullOptions, type PullResult } from './pull.js';
 export { executeStatus, type StatusOptions, type StatusResult } from './status.js';
+
+// 衝突検出 (Phase 3)
+export {
+  detectClaimConflict,
+  detectEntityConflict,
+  detectRelationConflict,
+  createMissingReferenceConflict,
+  createEmptyConflictReport,
+  addConflict,
+  type ConflictType,
+  type ConflictResolution,
+  type Conflict,
+  type ConflictReport,
+} from './conflict.js';

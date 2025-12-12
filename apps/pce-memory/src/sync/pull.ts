@@ -49,6 +49,15 @@ import {
   isBoundaryUpgraded,
   type MergeAction,
 } from './merge.js';
+import {
+  detectClaimConflict,
+  detectEntityConflict,
+  detectRelationConflict,
+  createMissingReferenceConflict,
+  createEmptyConflictReport,
+  addConflict,
+  type ConflictReport,
+} from './conflict.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
 /**
@@ -87,6 +96,7 @@ export interface PullResult {
   dryRun: boolean;
   policyVersion: string;
   manifestUpdated: boolean; // Phase 2: manifest.jsonが更新されたか
+  conflicts: ConflictReport; // Phase 3: 衝突検出レポート
 }
 
 /**
@@ -331,6 +341,7 @@ export async function executePull(
   }
 
   const policyVersion = getPolicyVersion();
+  let conflictReport = createEmptyConflictReport();
   const result: PullResult = {
     imported: {
       claims: { new: 0, skippedDuplicate: 0, upgradedBoundary: 0, skippedBySince: 0 },
@@ -341,6 +352,7 @@ export async function executePull(
     dryRun,
     policyVersion,
     manifestUpdated: false,
+    conflicts: conflictReport, // 後で更新される
   };
 
   try {
@@ -396,6 +408,20 @@ export async function executePull(
             }
           }
 
+          // Phase 3: インポート前に衝突検出
+          // TODO: パフォーマンス最適化 - existingClaim を importClaim に渡して再利用可能
+          // 現在は importClaim 内で再度クエリが発生する（N件で2N回のDBアクセス）
+          const existingClaim = await findClaimByContentHash(claim.content_hash);
+          const claimConflict = detectClaimConflict(
+            existingClaim
+              ? { boundary_class: existingClaim.boundary_class as BoundaryClass }
+              : undefined,
+            claim
+          );
+          if (claimConflict) {
+            conflictReport = addConflict(conflictReport, claimConflict);
+          }
+
           // インポート実行
           const action = await importClaim(claim, boundaryFilter, dryRun);
 
@@ -434,6 +460,28 @@ export async function executePull(
         }
 
         const entity = validationResult.right;
+
+        // Phase 3: インポート前に衝突検出
+        // TODO: パフォーマンス最適化 - existingEntity を importEntity に渡して再利用可能
+        const existingEntity = await findEntityById(entity.id);
+        const entityConflict = detectEntityConflict(
+          existingEntity
+            ? {
+                id: existingEntity.id,
+                type: existingEntity.type as EntityExport['type'],
+                name: existingEntity.name,
+                ...(existingEntity.canonical_key !== undefined && {
+                  canonical_key: existingEntity.canonical_key,
+                }),
+                ...(existingEntity.attrs !== undefined && { attrs: existingEntity.attrs }),
+              }
+            : undefined,
+          entity
+        );
+        if (entityConflict) {
+          conflictReport = addConflict(conflictReport, entityConflict);
+        }
+
         const action = await importEntity(entity, dryRun);
 
         switch (action) {
@@ -467,11 +515,45 @@ export async function executePull(
         }
 
         const relation = validationResult.right;
+
+        // Phase 3: インポート前に衝突検出
+        const existingRelation = await findRelationById(relation.id);
+        const relationConflict = detectRelationConflict(
+          existingRelation
+            ? {
+                id: existingRelation.id,
+                src_id: existingRelation.src_id,
+                dst_id: existingRelation.dst_id,
+                type: existingRelation.type,
+                ...(existingRelation.props !== undefined && { props: existingRelation.props }),
+                ...(existingRelation.evidence_claim_id !== undefined && {
+                  evidence_claim_id: existingRelation.evidence_claim_id,
+                }),
+              }
+            : undefined,
+          relation
+        );
+        if (relationConflict) {
+          conflictReport = addConflict(conflictReport, relationConflict);
+        }
+
         const action = await importRelation(relation, dryRun);
 
-        // 参照エラーの場合はバリデーションエラーとして報告
+        // 参照エラーの場合はバリデーションエラーとして報告し、衝突レポートにも追加
         if (typeof action === 'object' && 'referenceError' in action) {
           result.validationErrors.push({ file: filePath, error: action.referenceError });
+          // Phase 3: 参照エラーを衝突として記録
+          const missingIds: string[] = [];
+          const srcEntity = await findEntityById(relation.src_id);
+          const dstEntity = await findEntityById(relation.dst_id);
+          if (!srcEntity) missingIds.push(relation.src_id);
+          if (!dstEntity) missingIds.push(relation.dst_id);
+          if (missingIds.length > 0) {
+            conflictReport = addConflict(
+              conflictReport,
+              createMissingReferenceConflict(relation.id, missingIds)
+            );
+          }
           continue;
         }
 
@@ -506,6 +588,9 @@ export async function executePull(
       }
       // manifest更新失敗・manifestなしはエラーとしない（メインのインポートは成功）
     }
+
+    // Phase 3: 最終的な衝突レポートを設定
+    result.conflicts = conflictReport;
 
     return E.right(result);
   } catch (error) {

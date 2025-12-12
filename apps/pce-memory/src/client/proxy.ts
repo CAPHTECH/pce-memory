@@ -5,6 +5,9 @@
  * stdio (MCP client) ↔ Unix socket (daemon) を透過的にブリッジする。
  * デーモンが未起動の場合は自動起動する。
  *
+ * サブコマンド:
+ *   sync  - Git-based CRDT同期操作
+ *
  * @see kiri/src/client/proxy.ts
  */
 
@@ -17,6 +20,7 @@ import { parseArgs } from 'util';
 import { getSocketPath } from '../shared/socket.js';
 import { startDaemon, isDaemonRunning, stopDaemon } from './start-daemon.js';
 import { DEFAULT_IDLE_TIMEOUT_MINUTES } from '../daemon/constants.js';
+import { runSyncCommand } from '../cli/sync.js';
 
 /**
  * パス内の ~ をホームディレクトリに展開
@@ -54,6 +58,14 @@ function parseCliArgs() {
 ${SERVER_NAME} v${SERVER_VERSION}
 
 Usage: pce-memory [options]
+       pce-memory sync <command> [options]
+
+Subcommands:
+  sync push      Export local DB to .pce-shared/
+  sync pull      Import from .pce-shared/ to local DB
+  sync status    Show sync directory status
+
+  Run 'pce-memory sync --help' for sync subcommand details.
 
 Options:
   -d, --db <path>            DuckDB file path (default: :memory:)
@@ -235,9 +247,28 @@ function bridgeStdioToSocket(socket: net.Socket): void {
 }
 
 /**
+ * サブコマンドを検出してルーティング
+ * サブコマンドが検出された場合は true を返し、処理を終了すべきことを示す
+ */
+async function handleSubcommand(): Promise<boolean> {
+  const args = process.argv.slice(2);
+  const [subcommand, ...subArgs] = args;
+
+  if (subcommand === 'sync') {
+    const exitCode = await runSyncCommand(subArgs);
+    process.exit(exitCode);
+  }
+
+  return false;
+}
+
+/**
  * メイン関数：プロキシを起動
  */
 async function main() {
+  // サブコマンドをチェック（sync など）
+  await handleSubcommand();
+
   const options = parseCliArgs();
 
   // --no-daemon または :memory: の場合は従来のstdioモードで起動
