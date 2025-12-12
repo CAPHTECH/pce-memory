@@ -5,18 +5,46 @@ import { DEFAULT_TARGET_DIR } from './schemas.js';
 
 const execFileAsync = promisify(execFile);
 
-async function tryGetGitRoot(cwd: string): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], {
-      cwd,
-      windowsHide: true,
-    });
+const gitRootCache = new Map<string, string>();
+const gitRootInFlight = new Map<string, Promise<string | null>>();
 
-    const gitRoot = stdout.trim();
-    return gitRoot.length > 0 ? gitRoot : null;
-  } catch {
-    return null;
+async function tryGetGitRoot(cwd: string): Promise<string | null> {
+  const resolvedCwd = path.resolve(cwd);
+
+  const cached = gitRootCache.get(resolvedCwd);
+  if (cached) {
+    return cached;
   }
+
+  const inFlight = gitRootInFlight.get(resolvedCwd);
+  if (inFlight) {
+    return await inFlight;
+  }
+
+  const promise = (async (): Promise<string | null> => {
+    try {
+      const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], {
+        cwd: resolvedCwd,
+        windowsHide: true,
+      });
+
+      const gitRoot = stdout.trim();
+      return gitRoot.length > 0 ? gitRoot : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  gitRootInFlight.set(resolvedCwd, promise);
+  const result = await promise;
+  gitRootInFlight.delete(resolvedCwd);
+
+  // 成功時のみキャッシュ（非Git→Gitに変わる可能性を潰さない）
+  if (result) {
+    gitRootCache.set(resolvedCwd, result);
+  }
+
+  return result;
 }
 
 export async function resolveDefaultTargetDir(

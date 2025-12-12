@@ -9,7 +9,7 @@
 #
 # Environment Variables:
 #   PCE_SYNC_ENABLED       - "true" で有効化（デフォルト: false）
-#   PCE_SYNC_TARGET_DIR    - エクスポート先ディレクトリ（デフォルト: .pce-shared）
+#   PCE_SYNC_TARGET_DIR    - エクスポート先ディレクトリ（未指定時: <git_root>/.pce-shared）
 #   PCE_SYNC_SCOPE_FILTER  - スコープフィルタ（カンマ区切り、例: project,principle）
 #   PCE_SYNC_BOUNDARY_FILTER - 境界クラスフィルタ（例: public,internal）
 #   PCE_SYNC_QUIET         - "true" で出力抑制（デフォルト: false）
@@ -23,7 +23,7 @@ set -euo pipefail
 
 # 設定
 PCE_SYNC_ENABLED="${PCE_SYNC_ENABLED:-false}"
-PCE_SYNC_TARGET_DIR="${PCE_SYNC_TARGET_DIR:-.pce-shared}"
+PCE_SYNC_TARGET_DIR="${PCE_SYNC_TARGET_DIR:-}"
 PCE_SYNC_SCOPE_FILTER="${PCE_SYNC_SCOPE_FILTER:-}"
 PCE_SYNC_BOUNDARY_FILTER="${PCE_SYNC_BOUNDARY_FILTER:-}"
 PCE_SYNC_QUIET="${PCE_SYNC_QUIET:-false}"
@@ -54,10 +54,25 @@ if ! command -v pce-memory &> /dev/null; then
   exit 0
 fi
 
-log "Starting sync push to $PCE_SYNC_TARGET_DIR..."
+# git hooks は必ずリポジトリルートで実行する（サブディレクトリ起動の揺れを防ぐ）
+if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  if ! cd "$git_root"; then
+    warn "Failed to cd to git root: $git_root (continuing in $(pwd))"
+  fi
+fi
+
+TARGET_DIR_EFFECTIVE="$PCE_SYNC_TARGET_DIR"
+if [ -z "$TARGET_DIR_EFFECTIVE" ]; then
+  TARGET_DIR_EFFECTIVE=".pce-shared"
+fi
+
+log "Starting sync push to $TARGET_DIR_EFFECTIVE..."
 
 # Push実行
-ARGS=(sync push --target-dir "$PCE_SYNC_TARGET_DIR")
+ARGS=(sync push)
+if [ -n "$PCE_SYNC_TARGET_DIR" ]; then
+  ARGS+=(--target-dir "$PCE_SYNC_TARGET_DIR")
+fi
 
 if [ -n "$PCE_SYNC_SCOPE_FILTER" ]; then
   ARGS+=(--scope-filter "$PCE_SYNC_SCOPE_FILTER")
@@ -71,12 +86,12 @@ if pce-memory "${ARGS[@]}"; then
   log "Sync push completed successfully"
 
   # 自動ステージング
-  if [ "$PCE_SYNC_AUTO_STAGE" = "true" ] && [ -d "$PCE_SYNC_TARGET_DIR" ]; then
+  if [ "$PCE_SYNC_AUTO_STAGE" = "true" ] && [ -d "$TARGET_DIR_EFFECTIVE" ]; then
     # 変更があるかチェック
-    if ! git diff --quiet "$PCE_SYNC_TARGET_DIR" 2>/dev/null || \
-       [ -n "$(git ls-files --others --exclude-standard "$PCE_SYNC_TARGET_DIR" 2>/dev/null)" ]; then
-      log "Staging changes in $PCE_SYNC_TARGET_DIR..."
-      git add "$PCE_SYNC_TARGET_DIR"
+    if ! git diff --quiet "$TARGET_DIR_EFFECTIVE" 2>/dev/null || \
+       [ -n "$(git ls-files --others --exclude-standard "$TARGET_DIR_EFFECTIVE" 2>/dev/null)" ]; then
+      log "Staging changes in $TARGET_DIR_EFFECTIVE..."
+      git add "$TARGET_DIR_EFFECTIVE"
     fi
   fi
 else

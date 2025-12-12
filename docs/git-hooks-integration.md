@@ -74,8 +74,8 @@ pce-memory sync pull --dry-run
 | 変数名                     | デフォルト    | 説明                                        |
 | -------------------------- | ------------- | ------------------------------------------- |
 | `PCE_SYNC_ENABLED`         | `false`       | `true`で同期を有効化                        |
-| `PCE_SYNC_TARGET_DIR`      | `.pce-shared` | pushのエクスポート先                        |
-| `PCE_SYNC_SOURCE_DIR`      | `.pce-shared` | pullのインポート元                          |
+| `PCE_SYNC_TARGET_DIR`      | `.pce-shared` | pushのエクスポート先（未指定時は<git_root>/.pce-shared） |
+| `PCE_SYNC_SOURCE_DIR`      | `.pce-shared` | pullのインポート元（未指定時は<git_root>/.pce-shared）   |
 | `PCE_SYNC_SCOPE_FILTER`    | -             | スコープフィルタ（例: `project,principle`） |
 | `PCE_SYNC_BOUNDARY_FILTER` | -             | 境界クラスフィルタ（例: `public,internal`） |
 | `PCE_SYNC_AUTO_STAGE`      | `true`        | push後に自動で`git add`                     |
@@ -114,7 +114,7 @@ export PCE_SYNC_ENABLED=true
 pce-memory sync push [options]
 
 Options:
-  --target-dir <path>      エクスポート先（デフォルト: .pce-shared）
+  --target-dir <path>      エクスポート先（デフォルト: <git_root>/.pce-shared）
   --scope-filter <scopes>  スコープフィルタ（カンマ区切り）
   --boundary-filter <bc>   境界クラスフィルタ（カンマ区切り）
   --since <ISO8601>        指定日時以降の変更のみ
@@ -141,7 +141,7 @@ pce-memory sync push --since 2025-01-01T00:00:00Z
 pce-memory sync pull [options]
 
 Options:
-  --source-dir <path>      インポート元（デフォルト: .pce-shared）
+  --source-dir <path>      インポート元（デフォルト: <git_root>/.pce-shared）
   --scope-filter <scopes>  スコープフィルタ（カンマ区切り）
   --boundary-filter <bc>   境界クラスフィルタ（カンマ区切り）
   --dry-run                変更をプレビューのみ
@@ -169,7 +169,7 @@ pce-memory sync pull --boundary-filter public
 pce-memory sync status [options]
 
 Options:
-  --target-dir <path>      確認対象（デフォルト: .pce-shared）
+  --target-dir <path>      確認対象（デフォルト: <git_root>/.pce-shared）
 ```
 
 出力例:

@@ -348,30 +348,34 @@ async function handleStatus(args: string[]): Promise<number> {
  */
 function showHelp(): void {
   console.log(`
-pce-memory sync - Git-based CRDT sync commands
+	pce-memory sync - Git-based CRDT sync commands
 
-Usage: pce-memory sync <command> [options]
+	Usage: pce-memory sync <command> [options]
 
 Commands:
   push      Export local DB to .pce-shared/
   pull      Import from .pce-shared/ to local DB
   status    Show sync directory status
 
-Global options:
-  -d, --db <path>          DuckDB file path (default: $PCE_DB or :memory:)
+	Global options:
+	  -d, --db <path>          DuckDB file path (default: $PCE_DB or :memory:)
 
-Options for push:
-  --target-dir <path>      Target directory (default: .pce-shared)
-  --scope-filter <scopes>  Comma-separated scopes (e.g., project,principle)
-  --boundary-filter <bc>   Comma-separated boundary classes (e.g., public,internal)
-  --since <ISO8601>        Export only items after this date
+	Notes:
+	  - If --target-dir/--source-dir is omitted and you're inside a Git repo,
+	    .pce-shared is resolved at the Git repository root.
 
-Options for pull:
-  --source-dir <path>      Source directory (default: .pce-shared)
-  --scope-filter <scopes>  Comma-separated scopes
-  --boundary-filter <bc>   Comma-separated boundary classes
-  --dry-run                Preview changes without importing
-  --since <ISO8601>        Import only items after this date
+	Options for push:
+	  --target-dir <path>      Target directory (default: .pce-shared)
+	  --scope-filter <scopes>  Comma-separated scopes (e.g., project,principle)
+	  --boundary-filter <bc>   Comma-separated boundary classes (e.g., public,internal)
+	  --since <ISO8601>        Export only items after this date
+
+	Options for pull:
+	  --source-dir <path>      Source directory (default: .pce-shared)
+	  --scope-filter <scopes>  Comma-separated scopes
+	  --boundary-filter <bc>   Comma-separated boundary classes
+	  --dry-run                Preview changes without importing
+	  --since <ISO8601>        Import only items after this date
 
 Options for status:
   --target-dir <path>      Target directory (default: .pce-shared)

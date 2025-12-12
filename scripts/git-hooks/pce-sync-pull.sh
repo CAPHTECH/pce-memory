@@ -9,7 +9,7 @@
 #
 # Environment Variables:
 #   PCE_SYNC_ENABLED     - "true" で有効化（デフォルト: false）
-#   PCE_SYNC_SOURCE_DIR  - インポート元ディレクトリ（デフォルト: .pce-shared）
+#   PCE_SYNC_SOURCE_DIR  - インポート元ディレクトリ（未指定時: <git_root>/.pce-shared）
 #   PCE_SYNC_DRY_RUN     - "true" でdry-runモード（デフォルト: false）
 #   PCE_SYNC_QUIET       - "true" で出力抑制（デフォルト: false）
 #
@@ -21,7 +21,7 @@ set -euo pipefail
 
 # 設定
 PCE_SYNC_ENABLED="${PCE_SYNC_ENABLED:-false}"
-PCE_SYNC_SOURCE_DIR="${PCE_SYNC_SOURCE_DIR:-.pce-shared}"
+PCE_SYNC_SOURCE_DIR="${PCE_SYNC_SOURCE_DIR:-}"
 PCE_SYNC_DRY_RUN="${PCE_SYNC_DRY_RUN:-false}"
 PCE_SYNC_QUIET="${PCE_SYNC_QUIET:-false}"
 
@@ -44,9 +44,21 @@ if [ "$PCE_SYNC_ENABLED" != "true" ]; then
   exit 0
 fi
 
+# git hooks は必ずリポジトリルートで実行する（サブディレクトリ起動の揺れを防ぐ）
+if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  if ! cd "$git_root"; then
+    warn "Failed to cd to git root: $git_root (continuing in $(pwd))"
+  fi
+fi
+
+SOURCE_DIR_EFFECTIVE="$PCE_SYNC_SOURCE_DIR"
+if [ -z "$SOURCE_DIR_EFFECTIVE" ]; then
+  SOURCE_DIR_EFFECTIVE=".pce-shared"
+fi
+
 # 同期ディレクトリの存在チェック
-if [ ! -d "$PCE_SYNC_SOURCE_DIR" ]; then
-  log "Sync directory not found: $PCE_SYNC_SOURCE_DIR (skipping pull)"
+if [ ! -d "$SOURCE_DIR_EFFECTIVE" ]; then
+  log "Sync directory not found: $SOURCE_DIR_EFFECTIVE (skipping pull)"
   exit 0
 fi
 
@@ -56,10 +68,13 @@ if ! command -v pce-memory &> /dev/null; then
   exit 0
 fi
 
-log "Starting sync pull from $PCE_SYNC_SOURCE_DIR..."
+log "Starting sync pull from $SOURCE_DIR_EFFECTIVE..."
 
 # Pull実行
-ARGS=(sync pull --source-dir "$PCE_SYNC_SOURCE_DIR")
+ARGS=(sync pull)
+if [ -n "$PCE_SYNC_SOURCE_DIR" ]; then
+  ARGS+=(--source-dir "$PCE_SYNC_SOURCE_DIR")
+fi
 
 if [ "$PCE_SYNC_DRY_RUN" = "true" ]; then
   ARGS+=(--dry-run)
