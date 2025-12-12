@@ -1196,11 +1196,12 @@ export async function handleSyncPull(args: Record<string, unknown>) {
     }
 
     // 引数の取得
-    const { source_dir, scope_filter, boundary_filter, dry_run } = args as {
+    const { source_dir, scope_filter, boundary_filter, dry_run, since } = args as {
       source_dir?: string;
       scope_filter?: string[];
       boundary_filter?: string[];
       dry_run?: boolean;
+      since?: string; // Phase 2: 増分インポート用ISO8601日時
     };
 
     // Pull実行オプションの構築
@@ -1210,6 +1211,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       ...(scope_filter && { scopeFilter: scope_filter as Scope[] }),
       ...(boundary_filter && { boundaryFilter: boundary_filter as BoundaryClass[] }),
       ...(dry_run !== undefined && { dryRun: dry_run }),
+      ...(since && { since: new Date(since) }), // Phase 2: since追加
     };
 
     // Pull実行
@@ -1255,6 +1257,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
           new: result.right.imported.claims.new,
           skipped_duplicate: result.right.imported.claims.skippedDuplicate,
           upgraded_boundary: result.right.imported.claims.upgradedBoundary,
+          skipped_by_since: result.right.imported.claims.skippedBySince, // Phase 2
         },
         entities: {
           new: result.right.imported.entities.new,
@@ -1267,6 +1270,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       },
       validation_errors: result.right.validationErrors,
       dry_run: result.right.dryRun,
+      manifest_updated: result.right.manifestUpdated, // Phase 2
       policy_version: result.right.policyVersion,
       state: getStateType(),
       request_id: reqId,
@@ -1315,13 +1319,21 @@ export async function handleSyncStatus(args: Record<string, unknown>) {
       );
     }
 
-    // 引数の取得
-    const { target_dir } = args as { target_dir?: string };
+    // 引数の取得と検証
+    const { target_dir } = args as { target_dir?: unknown };
+
+    // 型検証: target_dirはstring | undefinedのみ許可
+    if (target_dir !== undefined && typeof target_dir !== 'string') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'target_dir must be a string', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
 
     // Statusオプション構築
     const options: StatusOptions = {
       basePath: process.cwd(),
-      ...(target_dir && { targetDir: target_dir }),
+      ...(typeof target_dir === 'string' && { targetDir: target_dir }),
     };
 
     // Status実行
@@ -2005,6 +2017,11 @@ export const TOOL_DEFINITIONS = [
           type: 'boolean',
           description: 'Preview changes without applying (default: false)',
         },
+        since: {
+          type: 'string',
+          format: 'date-time',
+          description: 'Incremental import: only import claims with provenance.at >= since (ISO8601)',
+        },
       },
     },
     outputSchema: {
@@ -2019,8 +2036,9 @@ export const TOOL_DEFINITIONS = [
                 new: { type: 'integer', minimum: 0 },
                 skipped_duplicate: { type: 'integer', minimum: 0 },
                 upgraded_boundary: { type: 'integer', minimum: 0 },
+                skipped_by_since: { type: 'integer', minimum: 0, description: 'Skipped due to since filter' },
               },
-              required: ['new', 'skipped_duplicate', 'upgraded_boundary'],
+              required: ['new', 'skipped_duplicate', 'upgraded_boundary', 'skipped_by_since'],
             },
             entities: {
               type: 'object',
@@ -2054,6 +2072,7 @@ export const TOOL_DEFINITIONS = [
           description: 'List of validation errors encountered',
         },
         dry_run: { type: 'boolean', description: 'Whether this was a dry run' },
+        manifest_updated: { type: 'boolean', description: 'Whether manifest.json was updated with last_pull_at' },
         policy_version: { type: 'string', description: 'Policy version' },
         state: {
           type: 'string',
@@ -2066,6 +2085,7 @@ export const TOOL_DEFINITIONS = [
         'imported',
         'validation_errors',
         'dry_run',
+        'manifest_updated',
         'policy_version',
         'state',
         'request_id',

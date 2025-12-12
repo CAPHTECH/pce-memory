@@ -488,20 +488,20 @@ export async function executePull(
     }
 
     // 7. Phase 2: manifest.jsonのlast_pull_atを更新（dryRunでない場合のみ）
+    // Note: 既存のmanifestがある場合のみ更新（ない場合は作成しない - Pushで作成されるため）
     if (!dryRun) {
       const manifestPath = path.join(syncDir, 'manifest.json');
       const existingManifest = await readJsonFile<Record<string, unknown>>(manifestPath);
 
-      // 既存のmanifestがある場合は更新、ない場合は新規作成
-      const updatedManifest = E.isRight(existingManifest)
-        ? { ...existingManifest.right, last_pull_at: new Date().toISOString() }
-        : { last_pull_at: new Date().toISOString() };
-
-      const writeResult = await writeJsonFile(manifestPath, updatedManifest);
-      if (E.isRight(writeResult)) {
-        result.manifestUpdated = true;
+      // 既存のmanifestがある場合のみ更新（スキーマ必須フィールドを壊さないため）
+      if (E.isRight(existingManifest)) {
+        const updatedManifest = { ...existingManifest.right, last_pull_at: new Date().toISOString() };
+        const writeResult = await writeJsonFile(manifestPath, updatedManifest);
+        if (E.isRight(writeResult)) {
+          result.manifestUpdated = true;
+        }
       }
-      // manifest更新失敗はエラーとしない（メインのインポートは成功）
+      // manifest更新失敗・manifestなしはエラーとしない（メインのインポートは成功）
     }
 
     return E.right(result);

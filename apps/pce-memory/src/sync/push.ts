@@ -7,13 +7,8 @@ import * as path from 'node:path';
 import * as E from 'fp-ts/Either';
 import { syncPushError, type DomainError } from '../domain/errors.js';
 import { listClaimsByFilter, type Claim } from '../store/claims.js';
-import {
-  listAllEntities,
-  listEntitiesByFilter,
-  getEntitiesForClaim,
-  type Entity,
-} from '../store/entities.js';
-import { listAllRelations, listRelationsByFilter, type Relation } from '../store/relations.js';
+import { listAllEntities, getEntitiesForClaim, type Entity } from '../store/entities.js';
+import { listAllRelations, type Relation } from '../store/relations.js';
 import {
   DEFAULT_SCOPE_FILTER,
   DEFAULT_BOUNDARY_FILTER,
@@ -174,11 +169,9 @@ export async function executePush(
     }
 
     // 3. Entityをエクスポート（Claimに関連するもののみ）
-    // Phase 2: sinceパラメータ対応
+    // Note: sinceはClaimフィルタにのみ使用。参照されるEntity/Relationは常にエクスポート（参照整合性確保）
     if (includeEntities && exportedEntityIds.size > 0) {
-      const allEntities = options.since
-        ? await listEntitiesByFilter({ since: options.since })
-        : await listAllEntities();
+      const allEntities = await listAllEntities();
       for (const entity of allEntities) {
         if (!exportedEntityIds.has(entity.id)) {
           continue;
@@ -197,11 +190,9 @@ export async function executePush(
     }
 
     // 4. Relationをエクスポート（Entityに関連するもののみ）
-    // Phase 2: sinceパラメータ対応
+    // Note: sinceはClaimフィルタにのみ使用。参照されるEntity/Relationは常にエクスポート（参照整合性確保）
     if (includeRelations && exportedEntityIds.size > 0) {
-      const allRelations = options.since
-        ? await listRelationsByFilter({ since: options.since })
-        : await listAllRelations();
+      const allRelations = await listAllRelations();
       for (const relation of allRelations) {
         // src_idまたはdst_idがエクスポート対象のEntityに含まれる場合のみ
         if (!exportedEntityIds.has(relation.src_id) && !exportedEntityIds.has(relation.dst_id)) {
