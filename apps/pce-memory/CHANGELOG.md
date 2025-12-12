@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2025-12-13
+
+### Added
+
+- **MCP Prompts: sync_push / sync_pull** - Add dedicated prompts for sync operations
+  - `sync_push`: Guide for exporting local knowledge to `.pce-shared/`
+  - `sync_pull`: Guide for importing shared knowledge from `.pce-shared/`
+
+### Changed
+
+- **Translate MCP Prompts to English** - All prompt definitions and messages are now in English
+  - `recall_context`, `record_decision`, `sync_workflow`, `debug_assist`
+  - Improves compatibility with international users
+
 ## [0.7.3] - 2025-12-12
 
 ### Fixed
