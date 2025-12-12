@@ -1475,7 +1475,7 @@ export interface PromptMessage {
  */
 export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
   {
-    name: 'recall-context',
+    name: 'recall_context',
     description: 'タスク開始時に関連知識を想起するためのガイド',
     arguments: [
       {
@@ -1491,7 +1491,7 @@ export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
     ],
   },
   {
-    name: 'record-decision',
+    name: 'record_decision',
     description: '設計決定を記録するためのガイド',
     arguments: [
       {
@@ -1502,7 +1502,7 @@ export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
     ],
   },
   {
-    name: 'sync-workflow',
+    name: 'sync_workflow',
     description: 'Git同期ワークフローのガイド（push/pull/status）',
     arguments: [
       {
@@ -1513,7 +1513,7 @@ export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
     ],
   },
   {
-    name: 'debug-assist',
+    name: 'debug_assist',
     description: 'デバッグ時に関連知識を検索するためのガイド',
     arguments: [
       {
@@ -1533,7 +1533,7 @@ function generatePromptMessages(
   args?: Record<string, string>
 ): PromptMessage[] {
   switch (prompt.name) {
-    case 'recall-context': {
+    case 'recall_context': {
       const query = args?.['query'] || '<検索したいキーワード>';
       const scope = args?.['scope'] || 'project';
       return [
@@ -1578,7 +1578,7 @@ function generatePromptMessages(
       ];
     }
 
-    case 'record-decision': {
+    case 'record_decision': {
       const topic = args?.['topic'] || '<決定のトピック>';
       return [
         {
@@ -1632,7 +1632,7 @@ function generatePromptMessages(
       ];
     }
 
-    case 'sync-workflow': {
+    case 'sync_workflow': {
       const operation = args?.['operation'] || 'status';
       const operationGuides: Record<string, string> = {
         push: `## Push: ローカル知識のエクスポート
@@ -1739,7 +1739,7 @@ export PCE_SYNC_ENABLED=true
       ];
     }
 
-    case 'debug-assist': {
+    case 'debug_assist': {
       const errorMessage = args?.['error_message'] || '<エラーメッセージ>';
       return [
         {
