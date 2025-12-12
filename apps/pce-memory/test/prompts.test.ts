@@ -24,10 +24,10 @@ describe('MCP Prompts (Issue #16)', () => {
 
     it('期待されるPromptが含まれている', () => {
       const names = PROMPTS_DEFINITIONS.map((p) => p.name);
-      expect(names).toContain('recall-context');
-      expect(names).toContain('record-decision');
-      expect(names).toContain('sync-workflow');
-      expect(names).toContain('debug-assist');
+      expect(names).toContain('recall_context');
+      expect(names).toContain('record_decision');
+      expect(names).toContain('sync_workflow');
+      expect(names).toContain('debug_assist');
     });
   });
 
@@ -51,14 +51,14 @@ describe('MCP Prompts (Issue #16)', () => {
 
   describe('handleGetPrompt', () => {
     it('存在するPromptを取得できる', async () => {
-      const result = await handleGetPrompt({ name: 'recall-context' });
+      const result = await handleGetPrompt({ name: 'recall_context' });
       expect(result.description).toBeDefined();
       expect(result.messages).toBeDefined();
       expect(result.messages.length).toBeGreaterThan(0);
     });
 
     it('メッセージにroleとcontentがある', async () => {
-      const result = await handleGetPrompt({ name: 'recall-context' });
+      const result = await handleGetPrompt({ name: 'recall_context' });
       for (const msg of result.messages) {
         expect(msg.role).toMatch(/^(user|assistant)$/);
         expect(msg.content).toBeDefined();
@@ -69,7 +69,7 @@ describe('MCP Prompts (Issue #16)', () => {
 
     it('引数を渡すとメッセージに反映される', async () => {
       const result = await handleGetPrompt({
-        name: 'recall-context',
+        name: 'recall_context',
         arguments: { query: 'JWT認証', scope: 'project' },
       });
       // 引数がメッセージに含まれることを確認
@@ -89,14 +89,14 @@ describe('MCP Prompts (Issue #16)', () => {
 
     it('必須引数がない場合エラーを投げる', async () => {
       // record-decisionのtopicは必須
-      await expect(handleGetPrompt({ name: 'record-decision' })).rejects.toThrow(
+      await expect(handleGetPrompt({ name: 'record_decision' })).rejects.toThrow(
         'Required argument missing: topic'
       );
     });
 
     it('必須引数を渡すと成功する', async () => {
       const result = await handleGetPrompt({
-        name: 'record-decision',
+        name: 'record_decision',
         arguments: { topic: '状態管理ライブラリ選定' },
       });
       expect(result.messages.length).toBeGreaterThan(0);
@@ -107,7 +107,7 @@ describe('MCP Prompts (Issue #16)', () => {
 
   describe('sync-workflow prompt', () => {
     it('operationなしでデフォルトガイドを返す', async () => {
-      const result = await handleGetPrompt({ name: 'sync-workflow' });
+      const result = await handleGetPrompt({ name: 'sync_workflow' });
       expect(result.messages.length).toBeGreaterThan(0);
       const allText = result.messages.map((m) => m.content.text).join(' ');
       // statusがデフォルト
@@ -116,7 +116,7 @@ describe('MCP Prompts (Issue #16)', () => {
 
     it('operation=pushでpushガイドを返す', async () => {
       const result = await handleGetPrompt({
-        name: 'sync-workflow',
+        name: 'sync_workflow',
         arguments: { operation: 'push' },
       });
       const allText = result.messages.map((m) => m.content.text).join(' ');
@@ -126,7 +126,7 @@ describe('MCP Prompts (Issue #16)', () => {
 
     it('operation=pullでpullガイドを返す', async () => {
       const result = await handleGetPrompt({
-        name: 'sync-workflow',
+        name: 'sync_workflow',
         arguments: { operation: 'pull' },
       });
       const allText = result.messages.map((m) => m.content.text).join(' ');
@@ -138,7 +138,7 @@ describe('MCP Prompts (Issue #16)', () => {
   describe('debug-assist prompt', () => {
     it('エラーメッセージを引数で渡せる', async () => {
       const result = await handleGetPrompt({
-        name: 'debug-assist',
+        name: 'debug_assist',
         arguments: { error_message: 'ECONNREFUSED' },
       });
       const allText = result.messages.map((m) => m.content.text).join(' ');
