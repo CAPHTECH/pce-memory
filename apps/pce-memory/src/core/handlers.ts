@@ -48,6 +48,34 @@ import {
 } from '../state/layerScopeState.js';
 import { safeJsonStringify } from '../utils/serialization.js';
 
+// ========== Type Definitions ==========
+
+/**
+ * MCP Tool Result型
+ * structuredContent: MCP outputSchema対応のための構造化データ
+ */
+export type ToolResult = {
+  content: Array<{ type: string; text: string }>;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
+
+/**
+ * 統一されたToolResult生成ヘルパー
+ * content（後方互換性用テキスト）とstructuredContent（構造化データ）の両方を生成
+ */
+function createToolResult<T extends Record<string, unknown>>(
+  data: T,
+  options: { isError?: boolean; useSafeStringify?: boolean } = {}
+): ToolResult {
+  const text = options.useSafeStringify ? safeJsonStringify(data) : JSON.stringify(data);
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: data,
+    ...(options.isError && { isError: true }),
+  };
+}
+
 // ========== Utility Functions ==========
 
 function validateString(field: string, val: unknown, max: number) {
@@ -68,7 +96,7 @@ function err(code: ErrorCode, message: string, request_id: string) {
  */
 interface UpsertValidationResult {
   isValid: boolean;
-  errorResponse?: { content: Array<{ type: string; text: string }>; isError: boolean };
+  errorResponse?: ToolResult;
 }
 
 async function validateUpsertInput(
@@ -90,72 +118,40 @@ async function validateUpsertInput(
     const error = stateError('PolicyApplied or HasClaims', getStateType());
     return {
       isValid: false,
-      errorResponse: {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      },
+      errorResponse: createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      ),
     };
   }
 
   if (!isInActiveScope(scopeId)) {
     return {
       isValid: false,
-      errorResponse: {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', 'scope not active', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      },
+      errorResponse: createToolResult(
+        { ...err('STATE_ERROR', 'scope not active', reqId), trace_id: traceId },
+        { isError: true }
+      ),
     };
   }
 
   if (!(await checkAndConsume('tool'))) {
     return {
       isValid: false,
-      errorResponse: {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      },
+      errorResponse: createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      ),
     };
   }
 
   if (!text || !kind || !scope || !boundary_class || !content_hash) {
     return {
       isValid: false,
-      errorResponse: {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'missing fields', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      },
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', 'missing fields', reqId), trace_id: traceId },
+        { isError: true }
+      ),
     };
   }
 
@@ -167,15 +163,10 @@ async function validateUpsertInput(
     const msg = e instanceof Error ? e.message : String(e);
     return {
       isValid: false,
-      errorResponse: {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId }),
-          },
-        ],
-        isError: true,
-      },
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { isError: true }
+      ),
     };
   }
 
@@ -183,18 +174,10 @@ async function validateUpsertInput(
   if (!policy.boundary_classes[boundary_class]) {
     return {
       isValid: false,
-      errorResponse: {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'unknown boundary_class', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      },
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown boundary_class', reqId), trace_id: traceId },
+        { isError: true }
+      ),
     };
   }
 
@@ -267,18 +250,13 @@ export async function handlePolicyApply(args: Record<string, unknown>) {
       trace: traceId,
       policy_version: getPolicyVersion(),
     });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            ...err(result.left.code, result.left.message, reqId),
-            trace_id: traceId,
-          }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      {
+        ...err(result.left.code, result.left.message, reqId),
+        trace_id: traceId,
+      },
+      { isError: true }
+    );
   }
 
   await appendLog({
@@ -289,14 +267,7 @@ export async function handlePolicyApply(args: Record<string, unknown>) {
     trace: traceId,
     policy_version: getPolicyVersion(),
   });
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify({ ...result.right, request_id: reqId, trace_id: traceId }),
-      },
-    ],
-  };
+  return createToolResult({ ...result.right, request_id: reqId, trace_id: traceId });
 }
 
 export async function handleUpsert(args: Record<string, unknown>) {
@@ -317,18 +288,13 @@ export async function handleUpsert(args: Record<string, unknown>) {
   // TLA+ EnterScope: リクエストスコープを開始
   const scopeResult = enterRequestScope(reqId);
   if (E.isLeft(scopeResult)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            ...err('STATE_ERROR', scopeResult.left.message, reqId),
-            trace_id: traceId,
-          }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      {
+        ...err('STATE_ERROR', scopeResult.left.message, reqId),
+        trace_id: traceId,
+      },
+      { isError: true }
+    );
   }
   const scopeId = scopeResult.right;
 
@@ -392,22 +358,15 @@ export async function handleUpsert(args: Record<string, unknown>) {
           }
         : {};
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            id: claim.id,
-            is_new: isNew,
-            ...graphMemoryResult,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult({
+      id: claim.id,
+      is_new: isNew,
+      ...graphMemoryResult,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -418,15 +377,10 @@ export async function handleUpsert(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ ...err('UPSERT_FAILED', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('UPSERT_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   } finally {
     exitRequestScope(scopeId);
   }
@@ -446,78 +400,38 @@ export async function handleActivate(args: Record<string, unknown>) {
   try {
     if (!canDoActivate()) {
       const error = stateError('HasClaims or Ready', getStateType());
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     if (!(await checkAndConsume('activate'))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
     if (!Array.isArray(scope) || !Array.isArray(allow)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'scope/allow must be arrays', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'scope/allow must be arrays', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
     const invalidScope = scope.some(
       (s: string) => !['session', 'project', 'principle'].includes(s)
     );
     if (invalidScope) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'unknown scope', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown scope', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
     if (allow.some((a: unknown) => typeof a !== 'string')) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'allow must be string[]', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'allow must be string[]', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     const searchConfig = cursor !== undefined ? { cursor } : {};
@@ -549,24 +463,20 @@ export async function handleActivate(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
-    return {
-      content: [
-        {
-          type: 'text',
-          text: safeJsonStringify({
-            active_context_id: acId,
-            claims: scoredItems,
-            claims_count: claims.length,
-            next_cursor: searchResult.next_cursor,
-            has_more: searchResult.has_more,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult(
+      {
+        active_context_id: acId,
+        claims: scoredItems,
+        claims_count: claims.length,
+        next_cursor: searchResult.next_cursor,
+        has_more: searchResult.has_more,
+        policy_version: getPolicyVersion(),
+        state: getStateType(),
+        request_id: reqId,
+        trace_id: traceId,
+      },
+      { useSafeStringify: true }
+    );
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -577,15 +487,10 @@ export async function handleActivate(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ ...err('ACTIVATE_FAILED', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('ACTIVATE_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   }
 }
 
@@ -607,19 +512,12 @@ export async function handleBoundaryValidate(args: Record<string, unknown>) {
       trace: traceId,
       policy_version: getPolicyVersion(),
     });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            ...res,
-            policy_version: getPolicyVersion(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult({
+      ...res,
+      policy_version: getPolicyVersion(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -630,15 +528,10 @@ export async function handleBoundaryValidate(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ ...err('BOUNDARY_ERROR', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('BOUNDARY_ERROR', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   }
 }
 
@@ -653,62 +546,30 @@ export async function handleFeedback(args: Record<string, unknown>) {
   try {
     if (!canDoFeedback()) {
       const error = stateError('Ready', getStateType());
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     if (!(await checkAndConsume('tool'))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
     if (!claim_id || !signal) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'claim_id/signal required', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'claim_id/signal required', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
     const exists = await findClaimById(claim_id);
     if (!exists) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'claim not found', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'claim not found', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
     const feedbackInput: {
       claim_id: string;
@@ -733,20 +594,13 @@ export async function handleFeedback(args: Record<string, unknown>) {
       trace: traceId,
       policy_version: getPolicyVersion(),
     });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            ...res,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult({
+      ...res,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -757,15 +611,10 @@ export async function handleFeedback(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ ...err('FEEDBACK_FAILED', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('FEEDBACK_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   }
 }
 
@@ -786,65 +635,36 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
     // 状態検証（PolicyApplied以降で利用可能）
     if (!canDoUpsert()) {
       const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // レート制限チェック
     if (!(await checkAndConsume('tool'))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // バリデーション
     if (!id || !type || !name) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'id, type, name are required', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'id, type, name are required', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     if (!isValidEntityType(type)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', `type must be one of: ${ENTITY_TYPES.join(', ')}`, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', `type must be one of: ${ENTITY_TYPES.join(', ')}`, reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
     }
 
     // 文字列長バリデーション
@@ -853,15 +673,10 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
       validateString('name', name, 1024);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // Entity登録（exactOptionalPropertyTypes対応: undefinedを渡さない）
@@ -882,23 +697,16 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            id: entity.id,
-            type: entity.type,
-            name: entity.name,
-            canonical_key: entity.canonical_key,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult({
+      id: entity.id,
+      type: entity.type,
+      name: entity.name,
+      canonical_key: entity.canonical_key,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -909,15 +717,10 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ ...err('UPSERT_ENTITY_FAILED', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('UPSERT_ENTITY_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   }
 }
 
@@ -937,50 +740,29 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
     // 状態検証（PolicyApplied以降で利用可能）
     if (!canDoUpsert()) {
       const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // レート制限チェック
     if (!(await checkAndConsume('tool'))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // バリデーション
     if (!id || !src_id || !dst_id || !type) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', 'id, src_id, dst_id, type are required', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'id, src_id, dst_id, type are required', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
     }
 
     // 文字列長バリデーション
@@ -991,15 +773,10 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
       validateString('type', type, 256);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // Relation登録（exactOptionalPropertyTypes対応: undefinedを渡さない）
@@ -1021,24 +798,17 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            id: relation.id,
-            src_id: relation.src_id,
-            dst_id: relation.dst_id,
-            type: relation.type,
-            evidence_claim_id: relation.evidence_claim_id,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult({
+      id: relation.id,
+      src_id: relation.src_id,
+      dst_id: relation.dst_id,
+      type: relation.type,
+      evidence_claim_id: relation.evidence_claim_id,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -1049,15 +819,10 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({ ...err('UPSERT_RELATION_FAILED', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('UPSERT_RELATION_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   }
 }
 
@@ -1076,34 +841,18 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
     // 状態検証（PolicyApplied以降で利用可能）
     if (!canDoQuery()) {
       const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // レート制限チェック
     if (!(await checkAndConsume('tool'))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // バリデーション: 少なくとも1つのフィルターが必要
@@ -1113,38 +862,28 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
       canonical_key !== undefined ||
       claim_id !== undefined;
     if (!hasFilter) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err(
-                'VALIDATION_ERROR',
-                'at least one filter (id, type, canonical_key, claim_id) is required',
-                reqId
-              ),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'at least one filter (id, type, canonical_key, claim_id) is required',
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
     }
 
     // typeのバリデーション
     if (type !== undefined && !isValidEntityType(type)) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('VALIDATION_ERROR', `type must be one of: ${ENTITY_TYPES.join(', ')}`, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', `type must be one of: ${ENTITY_TYPES.join(', ')}`, reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
     }
 
     // クエリ実行
@@ -1167,21 +906,17 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
     });
 
     // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
-    return {
-      content: [
-        {
-          type: 'text',
-          text: safeJsonStringify({
-            entities,
-            count: entities.length,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult(
+      {
+        entities,
+        count: entities.length,
+        policy_version: getPolicyVersion(),
+        state: getStateType(),
+        request_id: reqId,
+        trace_id: traceId,
+      },
+      { useSafeStringify: true }
+    );
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -1192,15 +927,10 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: safeJsonStringify({ ...err('QUERY_ENTITY_FAILED', msg, reqId), trace_id: traceId }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('QUERY_ENTITY_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true, useSafeStringify: true }
+    );
   }
 }
 
@@ -1220,34 +950,18 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
     // 状態検証（PolicyApplied以降で利用可能）
     if (!canDoQuery()) {
       const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('STATE_ERROR', error.message, reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // レート制限チェック
     if (!(await checkAndConsume('tool'))) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err('RATE_LIMIT', 'rate limit exceeded', reqId),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
     }
 
     // バリデーション: 少なくとも1つのフィルターが必要
@@ -1258,22 +972,17 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
       type !== undefined ||
       evidence_claim_id !== undefined;
     if (!hasFilter) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              ...err(
-                'VALIDATION_ERROR',
-                'at least one filter (id, src_id, dst_id, type, evidence_claim_id) is required',
-                reqId
-              ),
-              trace_id: traceId,
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'at least one filter (id, src_id, dst_id, type, evidence_claim_id) is required',
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
     }
 
     // クエリ実行
@@ -1297,21 +1006,17 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
     });
 
     // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
-    return {
-      content: [
-        {
-          type: 'text',
-          text: safeJsonStringify({
-            relations,
-            count: relations.length,
-            policy_version: getPolicyVersion(),
-            state: getStateType(),
-            request_id: reqId,
-            trace_id: traceId,
-          }),
-        },
-      ],
-    };
+    return createToolResult(
+      {
+        relations,
+        count: relations.length,
+        policy_version: getPolicyVersion(),
+        state: getStateType(),
+        request_id: reqId,
+        trace_id: traceId,
+      },
+      { useSafeStringify: true }
+    );
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,
@@ -1322,18 +1027,10 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
       policy_version: getPolicyVersion(),
     });
     const msg = e instanceof Error ? e.message : String(e);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: safeJsonStringify({
-            ...err('QUERY_RELATION_FAILED', msg, reqId),
-            trace_id: traceId,
-          }),
-        },
-      ],
-      isError: true,
-    };
+    return createToolResult(
+      { ...err('QUERY_RELATION_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true, useSafeStringify: true }
+    );
   }
 }
 
@@ -1345,27 +1042,15 @@ export async function handleGetState(args: Record<string, unknown>) {
   const summary = getStateSummary(includeDetails);
   const layerScopeSummary = includeDetails ? getLayerScopeSummary() : undefined;
 
-  return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify({
-          ...summary,
-          ...(layerScopeSummary ? { layer_scope: layerScopeSummary } : {}),
-          request_id: reqId,
-          trace_id: traceId,
-        }),
-      },
-    ],
-  };
+  return createToolResult({
+    ...summary,
+    ...(layerScopeSummary ? { layer_scope: layerScopeSummary } : {}),
+    request_id: reqId,
+    trace_id: traceId,
+  });
 }
 
 // ========== Tool Dispatcher ==========
-
-export type ToolResult = {
-  content: Array<{ type: string; text: string }>;
-  isError?: boolean;
-};
 
 /**
  * ツール名に基づいてハンドラをディスパッチ
@@ -1396,17 +1081,10 @@ export async function dispatchTool(
     case 'pce.memory.state':
       return handleGetState(args);
     default:
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              error: { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` },
-            }),
-          },
-        ],
-        isError: true,
-      };
+      return createToolResult(
+        { error: { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` } },
+        { isError: true }
+      );
   }
 }
 
@@ -1421,6 +1099,20 @@ export const TOOL_DEFINITIONS = [
       properties: {
         yaml: { type: 'string', description: 'Policy YAML (uses default if omitted)' },
       },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['policy_version', 'state', 'request_id', 'trace_id'],
     },
   },
   {
@@ -1486,6 +1178,44 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['text', 'kind', 'scope', 'boundary_class', 'content_hash'],
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Claim ID' },
+        is_new: { type: 'boolean', description: 'Whether this is a new claim' },
+        graph_memory: {
+          type: 'object',
+          properties: {
+            entities: {
+              type: 'object',
+              properties: {
+                success: { type: 'integer', minimum: 0 },
+                failed: { type: 'integer', minimum: 0 },
+              },
+              required: ['success', 'failed'],
+            },
+            relations: {
+              type: 'object',
+              properties: {
+                success: { type: 'integer', minimum: 0 },
+                failed: { type: 'integer', minimum: 0 },
+              },
+              required: ['success', 'failed'],
+            },
+          },
+          description: 'Graph memory operation results (optional)',
+        },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['id', 'is_new', 'policy_version', 'state', 'request_id', 'trace_id'],
+    },
   },
   {
     name: 'pce.memory.activate',
@@ -1509,6 +1239,45 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['scope', 'allow'],
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        active_context_id: { type: 'string', description: 'Active context ID' },
+        claims: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              claim: { type: 'object', description: 'Claim data' },
+              score: { type: 'number', description: 'Relevance score' },
+              evidences: { type: 'array', items: { type: 'object' }, description: 'Evidence list' },
+            },
+          },
+          description: 'Scored claims with optional evidences',
+        },
+        claims_count: { type: 'integer', minimum: 0, description: 'Number of claims returned' },
+        next_cursor: { type: 'string', description: 'Pagination cursor for next page' },
+        has_more: { type: 'boolean', description: 'Whether more results exist' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: [
+        'active_context_id',
+        'claims',
+        'claims_count',
+        'has_more',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
   },
   {
     name: 'pce.memory.boundary.validate',
@@ -1521,6 +1290,22 @@ export const TOOL_DEFINITIONS = [
         scope: { type: 'string', enum: ['session', 'project', 'principle'] },
       },
       required: ['payload'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        allowed: { type: 'boolean', description: 'Whether the payload is allowed' },
+        redacted: { type: 'string', description: 'Redacted payload' },
+        violations: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of boundary violations',
+        },
+        policy_version: { type: 'string', description: 'Policy version' },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['allowed', 'redacted', 'policy_version', 'request_id', 'trace_id'],
     },
   },
   {
@@ -1535,6 +1320,27 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['claim_id', 'signal'],
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Feedback ID' },
+        claim_id: { type: 'string', description: 'Target claim ID' },
+        signal: {
+          type: 'string',
+          enum: ['helpful', 'harmful', 'outdated', 'duplicate'],
+          description: 'Feedback signal',
+        },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['id', 'claim_id', 'signal', 'policy_version', 'state', 'request_id', 'trace_id'],
+    },
   },
   {
     name: 'pce.memory.state',
@@ -1547,6 +1353,24 @@ export const TOOL_DEFINITIONS = [
           description: 'Debug mode: include runtime_state details (default: false)',
         },
       },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        policy_version: { type: 'string', description: 'Policy version' },
+        claim_count: { type: 'integer', minimum: 0, description: 'Number of claims' },
+        active_context_id: { type: 'string', description: 'Current active context ID' },
+        runtime_state: { type: 'object', description: 'Runtime state details (debug mode)' },
+        layer_scope: { type: 'object', description: 'Layer/scope state (debug mode)' },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['state', 'policy_version', 'request_id', 'trace_id'],
     },
   },
   // ========== Graph Memory Tools ==========
@@ -1571,6 +1395,28 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['id', 'type', 'name'],
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Entity ID' },
+        type: {
+          type: 'string',
+          enum: ['Actor', 'Artifact', 'Event', 'Concept'],
+          description: 'Entity type',
+        },
+        name: { type: 'string', description: 'Entity name' },
+        canonical_key: { type: 'string', description: 'Canonical key (if set)' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['id', 'type', 'name', 'policy_version', 'state', 'request_id', 'trace_id'],
+    },
   },
   {
     name: 'pce.memory.upsert.relation',
@@ -1589,6 +1435,34 @@ export const TOOL_DEFINITIONS = [
         },
       },
       required: ['id', 'src_id', 'dst_id', 'type'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Relation ID' },
+        src_id: { type: 'string', description: 'Source entity ID' },
+        dst_id: { type: 'string', description: 'Target entity ID' },
+        type: { type: 'string', description: 'Relation type' },
+        evidence_claim_id: { type: 'string', description: 'Evidence claim ID (if set)' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: [
+        'id',
+        'src_id',
+        'dst_id',
+        'type',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
   {
@@ -1613,6 +1487,37 @@ export const TOOL_DEFINITIONS = [
         },
       },
     },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        entities: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              type: { type: 'string', enum: ['Actor', 'Artifact', 'Event', 'Concept'] },
+              name: { type: 'string' },
+              canonical_key: { type: 'string' },
+              attrs: { type: 'object' },
+              created_at: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'type', 'name'],
+          },
+          description: 'Matching entities',
+        },
+        count: { type: 'integer', minimum: 0, description: 'Number of entities returned' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['entities', 'count', 'policy_version', 'state', 'request_id', 'trace_id'],
+    },
   },
   {
     name: 'pce.memory.query.relation',
@@ -1633,6 +1538,38 @@ export const TOOL_DEFINITIONS = [
           description: 'Max results (default: 50)',
         },
       },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        relations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              src_id: { type: 'string' },
+              dst_id: { type: 'string' },
+              type: { type: 'string' },
+              evidence_claim_id: { type: 'string' },
+              props: { type: 'object' },
+              created_at: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'src_id', 'dst_id', 'type'],
+          },
+          description: 'Matching relations',
+        },
+        count: { type: 'integer', minimum: 0, description: 'Number of relations returned' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['relations', 'count', 'policy_version', 'state', 'request_id', 'trace_id'],
     },
   },
 ];
