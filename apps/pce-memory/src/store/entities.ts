@@ -119,6 +119,21 @@ export async function findEntityById(id: string): Promise<Entity | undefined> {
 }
 
 /**
+ * 全Entityを取得（同期機能用）
+ *
+ * @param limit 取得上限（デフォルト10000）
+ * @returns Entity配列
+ */
+export async function listAllEntities(limit: number = 10000): Promise<Entity[]> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities ORDER BY created_at DESC LIMIT $1',
+    [limit]
+  );
+  return reader.getRowObjects() as unknown as Entity[];
+}
+
+/**
  * Entityクエリフィルター型
  */
 export interface EntityQueryFilters {

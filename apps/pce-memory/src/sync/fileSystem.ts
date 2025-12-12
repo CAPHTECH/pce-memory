@@ -98,7 +98,10 @@ export async function readJsonFile<T>(filePath: string): Promise<E.Either<Domain
  * @param data 書き込むデータ
  * @returns 成功時はRight(void)、失敗時はLeft(エラー)
  */
-export async function writeJsonFile<T>(filePath: string, data: T): Promise<E.Either<DomainError, void>> {
+export async function writeJsonFile<T>(
+  filePath: string,
+  data: T
+): Promise<E.Either<DomainError, void>> {
   try {
     // ディレクトリが存在することを確認
     const dir = path.dirname(filePath);
@@ -120,7 +123,10 @@ export async function writeJsonFile<T>(filePath: string, data: T): Promise<E.Eit
  * @param recursive サブディレクトリも検索するか
  * @returns JSONファイルパスの配列
  */
-export async function listJsonFiles(dirPath: string, recursive: boolean = false): Promise<string[]> {
+export async function listJsonFiles(
+  dirPath: string,
+  recursive: boolean = false
+): Promise<string[]> {
   const results: string[] = [];
 
   try {

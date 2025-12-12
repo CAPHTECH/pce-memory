@@ -39,6 +39,16 @@ import {
   transitionToReady,
 } from '../state/memoryState.js';
 
+// Sync機能のインポート
+import {
+  executePush,
+  executePull,
+  type PushOptions,
+  type PullOptions,
+  type Scope,
+  type BoundaryClass,
+} from '../sync/index.js';
+
 import {
   enterRequestScope,
   exitRequestScope,
@@ -1050,6 +1060,233 @@ export async function handleGetState(args: Record<string, unknown>) {
   });
 }
 
+// ========== Sync Handlers (Issue #18) ==========
+
+/**
+ * Sync Push: ローカルDBから.pce-shared/へエクスポート
+ */
+export async function handleSyncPush(args: Record<string, unknown>) {
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以降で利用可能）
+    if (!canDoQuery()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 引数の取得
+    const {
+      target_dir,
+      scope_filter,
+      boundary_filter,
+      since,
+      include_entities,
+      include_relations,
+    } = args as {
+      target_dir?: string;
+      scope_filter?: string[];
+      boundary_filter?: string[];
+      since?: string;
+      include_entities?: boolean;
+      include_relations?: boolean;
+    };
+
+    // Push実行オプションの構築
+    const options: PushOptions = {
+      basePath: process.cwd(),
+      ...(target_dir && { targetDir: target_dir }),
+      ...(scope_filter && { scopeFilter: scope_filter as Scope[] }),
+      ...(boundary_filter && { boundaryFilter: boundary_filter as BoundaryClass[] }),
+      ...(since && { since: new Date(since) }),
+      ...(include_entities !== undefined && { includeEntities: include_entities }),
+      ...(include_relations !== undefined && { includeRelations: include_relations }),
+    };
+
+    // Push実行
+    const result = await executePush(options);
+
+    if (E.isLeft(result)) {
+      await appendLog({
+        id: `log_${reqId}`,
+        op: 'sync_push',
+        ok: false,
+        req: reqId,
+        trace: traceId,
+        policy_version: getPolicyVersion(),
+      });
+      return createToolResult(
+        { ...err('SYNC_PUSH_FAILED', result.left.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_push',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      exported: result.right.exported,
+      target_dir: result.right.targetDir,
+      manifest_updated: result.right.manifestUpdated,
+      policy_version: result.right.policyVersion,
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_push',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('SYNC_PUSH_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  }
+}
+
+/**
+ * Sync Pull: .pce-shared/からローカルDBへインポート
+ */
+export async function handleSyncPull(args: Record<string, unknown>) {
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    // 状態検証（PolicyApplied以降で利用可能）
+    if (!canDoQuery()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // レート制限チェック
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 引数の取得
+    const { source_dir, scope_filter, boundary_filter, dry_run } = args as {
+      source_dir?: string;
+      scope_filter?: string[];
+      boundary_filter?: string[];
+      dry_run?: boolean;
+    };
+
+    // Pull実行オプションの構築
+    const options: PullOptions = {
+      basePath: process.cwd(),
+      ...(source_dir && { sourceDir: source_dir }),
+      ...(scope_filter && { scopeFilter: scope_filter as Scope[] }),
+      ...(boundary_filter && { boundaryFilter: boundary_filter as BoundaryClass[] }),
+      ...(dry_run !== undefined && { dryRun: dry_run }),
+    };
+
+    // Pull実行
+    const result = await executePull(options);
+
+    if (E.isLeft(result)) {
+      await appendLog({
+        id: `log_${reqId}`,
+        op: 'sync_pull',
+        ok: false,
+        req: reqId,
+        trace: traceId,
+        policy_version: getPolicyVersion(),
+      });
+      return createToolResult(
+        { ...err('SYNC_PULL_FAILED', result.left.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // 新しいClaimがインポートされた場合は状態遷移
+    const totalNewClaims = result.right.imported.claims.new;
+
+    if (totalNewClaims > 0 && !result.right.dryRun) {
+      // totalNewClaims回分、状態遷移を行う（claimCountを増加させるため）
+      for (let i = 0; i < totalNewClaims; i++) {
+        transitionToHasClaims(true);
+      }
+    }
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_pull',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      imported: {
+        claims: {
+          new: result.right.imported.claims.new,
+          skipped_duplicate: result.right.imported.claims.skippedDuplicate,
+          upgraded_boundary: result.right.imported.claims.upgradedBoundary,
+        },
+        entities: {
+          new: result.right.imported.entities.new,
+          skipped_duplicate: result.right.imported.entities.skippedDuplicate,
+        },
+        relations: {
+          new: result.right.imported.relations.new,
+          skipped_duplicate: result.right.imported.relations.skippedDuplicate,
+        },
+      },
+      validation_errors: result.right.validationErrors,
+      dry_run: result.right.dryRun,
+      policy_version: result.right.policyVersion,
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'sync_pull',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('SYNC_PULL_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  }
+}
+
 // ========== Tool Dispatcher ==========
 
 /**
@@ -1080,6 +1317,11 @@ export async function dispatchTool(
       return handleFeedback(args);
     case 'pce.memory.state':
       return handleGetState(args);
+    // Sync Tools (Issue #18)
+    case 'pce.memory.sync.push':
+      return handleSyncPush(args);
+    case 'pce.memory.sync.pull':
+      return handleSyncPull(args);
     default:
       return createToolResult(
         { error: { code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` } },
@@ -1570,6 +1812,170 @@ export const TOOL_DEFINITIONS = [
         trace_id: { type: 'string', description: 'Trace identifier for debugging' },
       },
       required: ['relations', 'count', 'policy_version', 'state', 'request_id', 'trace_id'],
+    },
+  },
+  // ========== Sync Tools (Issue #18) ==========
+  {
+    name: 'pce.memory.sync.push',
+    description:
+      'Export local claims/entities/relations to .pce-shared/ directory for Git-based CRDT sync',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target_dir: {
+          type: 'string',
+          description: 'Target directory path (default: .pce-shared)',
+        },
+        scope_filter: {
+          type: 'array',
+          items: { type: 'string', enum: ['session', 'project', 'principle'] },
+          description: 'Filter by scope (default: ["project", "principle"])',
+        },
+        boundary_filter: {
+          type: 'array',
+          items: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
+          description:
+            'Filter by boundary_class (default: ["public", "internal"], secret is always excluded)',
+        },
+        since: {
+          type: 'string',
+          format: 'date-time',
+          description: 'Export only claims created/updated after this time (ISO8601)',
+        },
+        include_entities: {
+          type: 'boolean',
+          description: 'Include entities in export (default: true)',
+        },
+        include_relations: {
+          type: 'boolean',
+          description: 'Include relations in export (default: true)',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        exported: {
+          type: 'object',
+          properties: {
+            claims: { type: 'integer', minimum: 0 },
+            entities: { type: 'integer', minimum: 0 },
+            relations: { type: 'integer', minimum: 0 },
+          },
+          required: ['claims', 'entities', 'relations'],
+        },
+        target_dir: { type: 'string', description: 'Actual target directory path' },
+        manifest_updated: { type: 'boolean', description: 'Whether manifest.json was updated' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'exported',
+        'target_dir',
+        'manifest_updated',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  {
+    name: 'pce.memory.sync.pull',
+    description:
+      'Import claims/entities/relations from .pce-shared/ directory with CRDT merge strategy',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_dir: {
+          type: 'string',
+          description: 'Source directory path (default: .pce-shared)',
+        },
+        scope_filter: {
+          type: 'array',
+          items: { type: 'string', enum: ['session', 'project', 'principle'] },
+          description: 'Filter by scope (default: all)',
+        },
+        boundary_filter: {
+          type: 'array',
+          items: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
+          description: 'Filter by boundary_class (default: all except secret)',
+        },
+        dry_run: {
+          type: 'boolean',
+          description: 'Preview changes without applying (default: false)',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        imported: {
+          type: 'object',
+          properties: {
+            claims: {
+              type: 'object',
+              properties: {
+                new: { type: 'integer', minimum: 0 },
+                skipped_duplicate: { type: 'integer', minimum: 0 },
+                upgraded_boundary: { type: 'integer', minimum: 0 },
+              },
+              required: ['new', 'skipped_duplicate', 'upgraded_boundary'],
+            },
+            entities: {
+              type: 'object',
+              properties: {
+                new: { type: 'integer', minimum: 0 },
+                skipped_duplicate: { type: 'integer', minimum: 0 },
+              },
+              required: ['new', 'skipped_duplicate'],
+            },
+            relations: {
+              type: 'object',
+              properties: {
+                new: { type: 'integer', minimum: 0 },
+                skipped_duplicate: { type: 'integer', minimum: 0 },
+              },
+              required: ['new', 'skipped_duplicate'],
+            },
+          },
+          required: ['claims', 'entities', 'relations'],
+        },
+        validation_errors: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              file: { type: 'string' },
+              error: { type: 'string' },
+            },
+            required: ['file', 'error'],
+          },
+          description: 'List of validation errors encountered',
+        },
+        dry_run: { type: 'boolean', description: 'Whether this was a dry run' },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'imported',
+        'validation_errors',
+        'dry_run',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
 ];

@@ -22,7 +22,12 @@ export type ErrorCode =
   | 'LAYER_MISSING_DEPENDENCY'
   | 'SCOPE_NOT_ACTIVE'
   | 'CLAIM_NOT_FOUND'
-  | 'DB_ERROR';
+  | 'DB_ERROR'
+  // Sync関連エラー (Issue #18)
+  | 'SYNC_PUSH_FAILED' // push実行エラー
+  | 'SYNC_PULL_FAILED' // pull実行エラー
+  | 'SYNC_VALIDATION_ERROR' // JSONスキーマ/content_hash検証エラー
+  | 'SYNC_PATH_ERROR'; // パストラバーサル等のパスエラー
 
 // ドメインエラー型
 export interface DomainError {
@@ -60,3 +65,16 @@ export const layerCycleError = (from: string, to: string): DomainError =>
 
 export const scopeNotActiveError = (scopeId: string): DomainError =>
   domainError('SCOPE_NOT_ACTIVE', `scope not active: ${scopeId}`);
+
+// Sync関連エラー生成関数 (Issue #18)
+export const syncPushError = (message: string, cause?: unknown): DomainError =>
+  domainError('SYNC_PUSH_FAILED', message, cause);
+
+export const syncPullError = (message: string, cause?: unknown): DomainError =>
+  domainError('SYNC_PULL_FAILED', message, cause);
+
+export const syncValidationError = (message: string, cause?: unknown): DomainError =>
+  domainError('SYNC_VALIDATION_ERROR', message, cause);
+
+export const syncPathError = (message: string): DomainError =>
+  domainError('SYNC_PATH_ERROR', message);
