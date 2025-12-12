@@ -9,17 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **MCP SDK を 1.24.3 に更新** - Claude Code prompts互換性向上
-  - v1.0.4 から v1.24.3 へアップグレード
-  - プロトコルバージョンおよびcapabilities対応の改善
-- **SERVER_VERSION のハードコード問題を修正** (Issue #23)
-  - package.json から動的にバージョンを取得するよう変更
+- **Update MCP SDK to 1.24.3** - Improve Claude Code prompts compatibility
+  - Upgrade from v1.0.4 to v1.24.3
+  - Improve protocol version and capabilities support
+- **Fix hardcoded SERVER_VERSION** (Issue #23)
+  - Dynamically retrieve version from package.json
 
 ## [0.7.1] - 2025-12-12
 
 ### Fixed
 
-- **prompt名をアンダースコアに変更** - Claude Codeスラッシュコマンドとの互換性向上
+- **Rename prompts to use underscores** - Improve Claude Code slash command compatibility
   - `recall-context` → `recall_context`
   - `record-decision` → `record_decision`
   - `sync-workflow` → `sync_workflow`
@@ -29,29 +29,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **MCP Prompts対応** (Issue #16) - 定型プロンプトテンプレートを提供
-  - `recall_context`: タスク開始時の関連知識想起
-  - `record_decision`: 設計決定の記録支援
-  - `sync_workflow`: Git同期ワークフローガイド
-  - `debug_assist`: デバッグ時の関連知識検索
-  - MCP Protocol Prompts仕様に準拠
+- **MCP Prompts support** (Issue #16) - Provide prompt templates for common workflows
+  - `recall_context`: Recall related knowledge at task start
+  - `record_decision`: Assist recording design decisions
+  - `sync_workflow`: Guide for Git sync workflow
+  - `debug_assist`: Search related knowledge during debugging
+  - Compliant with MCP Protocol Prompts specification
 
-- **Git-based CRDT同期機能** (Issue #18) - チーム間での知識同期を実現
-  - `pce.memory.sync.push` MCPツール: ローカルDBから`.pce-shared/`へエクスポート
-  - `pce.memory.sync.pull` MCPツール: `.pce-shared/`からインポート（増分同期対応）
-  - `pce.memory.sync.status` MCPツール: 同期ステータス確認
-  - CLIコマンド: `pce-memory sync push/pull/status`
-  - Git hooks統合: pre-commit, post-mergeによる自動同期
-  - G-Set CRDTに基づいた衝突検出・解決
-  - boundary_classマージ戦略（格上げのみ許可）
-  - dry_runモードでの事前確認機能
-  - TLA+/Alloy形式検証 (`docs/spec/tlaplus/sync_crdt.tla`, `docs/spec/alloy/sync_conflict.als`)
-  - 統合ガイド (`docs/git-hooks-integration.md`)
+- **Git-based CRDT sync** (Issue #18) - Enable knowledge synchronization across teams
+  - `pce.memory.sync.push` MCP tool: Export local DB to `.pce-shared/`
+  - `pce.memory.sync.pull` MCP tool: Import from `.pce-shared/` (incremental sync supported)
+  - `pce.memory.sync.status` MCP tool: Check sync status
+  - CLI commands: `pce-memory sync push/pull/status`
+  - Git hooks integration: Auto-sync via pre-commit, post-merge
+  - G-Set CRDT-based conflict detection and resolution
+  - boundary_class merge strategy (upgrade only)
+  - dry_run mode for preview
+  - TLA+/Alloy formal verification (`docs/spec/tlaplus/sync_crdt.tla`, `docs/spec/alloy/sync_conflict.als`)
+  - Integration guide (`docs/git-hooks-integration.md`)
 
 ### Fixed
 
-- hybridSearchテストのCI安定性を改善
-- Critical Reviewで指摘されたバリデーション・エラーハンドリングの問題を修正
+- Improve CI stability for hybridSearch tests
+- Fix validation and error handling issues identified by Critical Review
 
 ## [0.6.0] - 2025-12-12
 
