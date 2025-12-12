@@ -1476,49 +1476,81 @@ export interface PromptMessage {
 export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
   {
     name: 'recall_context',
-    description: 'タスク開始時に関連知識を想起するためのガイド',
+    description: 'Guide for recalling relevant knowledge before starting a task',
     arguments: [
       {
         name: 'query',
-        description: '検索クエリ（例: "認証", "API設計"）',
+        description: 'Search query (e.g., "authentication", "API design")',
         required: false,
       },
       {
         name: 'scope',
-        description: 'スコープ（session/project/principle）',
+        description: 'Scope (session/project/principle)',
         required: false,
       },
     ],
   },
   {
     name: 'record_decision',
-    description: '設計決定を記録するためのガイド',
+    description: 'Guide for recording design decisions',
     arguments: [
       {
         name: 'topic',
-        description: '決定のトピック（例: "状態管理ライブラリ選定"）',
+        description: 'Decision topic (e.g., "state management library selection")',
         required: true,
       },
     ],
   },
   {
     name: 'sync_workflow',
-    description: 'Git同期ワークフローのガイド（push/pull/status）',
+    description: 'Guide for Git sync workflow (push/pull/status)',
     arguments: [
       {
         name: 'operation',
-        description: '操作タイプ（push/pull/status）',
+        description: 'Operation type (push/pull/status)',
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'sync_push',
+    description: 'Guide for exporting local knowledge to .pce-shared/ directory',
+    arguments: [
+      {
+        name: 'scope_filter',
+        description: 'Filter by scope (e.g., "project,principle")',
+        required: false,
+      },
+      {
+        name: 'boundary_filter',
+        description: 'Filter by boundary class (e.g., "public,internal")',
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'sync_pull',
+    description: 'Guide for importing shared knowledge from .pce-shared/ directory',
+    arguments: [
+      {
+        name: 'dry_run',
+        description: 'Preview changes without applying (true/false)',
+        required: false,
+      },
+      {
+        name: 'since',
+        description: 'Incremental import from date (ISO8601)',
         required: false,
       },
     ],
   },
   {
     name: 'debug_assist',
-    description: 'デバッグ時に関連知識を検索するためのガイド',
+    description: 'Guide for searching related knowledge during debugging',
     arguments: [
       {
         name: 'error_message',
-        description: 'エラーメッセージまたはキーワード',
+        description: 'Error message or keyword',
         required: false,
       },
     ],
@@ -1526,7 +1558,7 @@ export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
 ];
 
 /**
- * Promptメッセージを生成
+ * Generate prompt messages
  */
 function generatePromptMessages(
   prompt: PromptDefinition,
@@ -1534,21 +1566,21 @@ function generatePromptMessages(
 ): PromptMessage[] {
   switch (prompt.name) {
     case 'recall_context': {
-      const query = args?.['query'] || '<検索したいキーワード>';
+      const query = args?.['query'] || '<keyword to search>';
       const scope = args?.['scope'] || 'project';
       return [
         {
           role: 'user',
           content: {
             type: 'text',
-            text: `タスクを開始する前に、関連する知識を想起したいです。検索クエリ: "${query}"`,
+            text: `Before starting a task, I want to recall relevant knowledge. Search query: "${query}"`,
           },
         },
         {
           role: 'assistant',
           content: {
             type: 'text',
-            text: `pce.memory.activate を使用して関連知識を想起します。
+            text: `Use pce.memory.activate to recall relevant knowledge.
 
 \`\`\`json
 {
@@ -1559,74 +1591,74 @@ function generatePromptMessages(
 }
 \`\`\`
 
-## 使い方のポイント
+## Usage Tips
 
-1. **scope選択**:
-   - \`session\`: 今回の会話限定の情報
-   - \`project\`: プロジェクト固有のパターン・規約
-   - \`principle\`: 普遍的な原則（SOLID、TDD等）
+1. **Scope Selection**:
+   - \`session\`: Information limited to current conversation
+   - \`project\`: Project-specific patterns and conventions
+   - \`principle\`: Universal principles (SOLID, TDD, etc.)
 
-2. **検索クエリのコツ**:
-   - 複数のキーワードをスペース区切りで指定（OR検索）
-   - 具体的なキーワードを使う（"認証" より "JWT 認証"）
+2. **Query Tips**:
+   - Use space-separated keywords (OR search)
+   - Use specific keywords ("JWT authentication" rather than "auth")
 
-3. **想起後のアクション**:
-   - 有用だった知識には \`feedback\` で \`helpful\` を送信
-   - 古い情報には \`outdated\` を送信`,
+3. **Post-recall Actions**:
+   - Send \`helpful\` feedback for useful knowledge
+   - Send \`outdated\` for stale information`,
           },
         },
       ];
     }
 
     case 'record_decision': {
-      const topic = args?.['topic'] || '<決定のトピック>';
+      const topic = args?.['topic'] || '<decision topic>';
       return [
         {
           role: 'user',
           content: {
             type: 'text',
-            text: `設計決定を記録したいです。トピック: "${topic}"`,
+            text: `I want to record a design decision. Topic: "${topic}"`,
           },
         },
         {
           role: 'assistant',
           content: {
             type: 'text',
-            text: `pce.memory.upsert を使用して設計決定を記録します。
+            text: `Use pce.memory.upsert to record the design decision.
 
 \`\`\`json
 {
-  "text": "${topic}に関する決定: <決定内容を記述>",
+  "text": "Decision on ${topic}: <describe the decision>",
   "kind": "fact",
   "scope": "project",
   "boundary_class": "internal",
-  "content_hash": "sha256:<テキストのSHA256ハッシュ>",
+  "content_hash": "sha256:<SHA256 hash of text>",
   "provenance": {
-    "at": "<現在のISO8601日時>",
+    "at": "<current ISO8601 datetime>",
     "actor": "claude",
     "note": "ADR-XXXX / Issue #YYY"
   }
 }
 \`\`\`
 
-## 記録のポイント
+## Recording Guidelines
 
-1. **kind選択**:
-   - \`fact\`: アーキテクチャ決定、技術的制約
-   - \`preference\`: コーディングスタイル、ツール選択
-   - \`task\`: 進行中の作業、TODO
-   - \`policy_hint\`: セキュリティ要件、運用ルール
+1. **Kind Selection**:
+   - \`fact\`: Architecture decisions, technical constraints
+   - \`preference\`: Coding styles, tool choices
+   - \`task\`: Work in progress, TODOs
+   - \`policy_hint\`: Security requirements, operational rules
 
-2. **boundary_class**:
-   - \`public\`: 公開可能な情報
-   - \`internal\`: 社内限定
-   - \`pii\`: 個人情報を含む
-   - \`secret\`: 認証情報（記録しないことを推奨）
+2. **Boundary Class**:
+   - \`public\`: Publicly shareable information
+   - \`internal\`: Internal use only
+   - \`pii\`: Contains personal information
+   - \`secret\`: Credentials (not recommended to store)
 
-3. **provenance**:
-   - \`at\`: 必須。記録日時
-   - \`actor\`: 記録者（claude/user）
-   - \`note\`: ADR番号やIssue番号への参照`,
+3. **Provenance**:
+   - \`at\`: Required. Recording timestamp
+   - \`actor\`: Recorder (claude/user)
+   - \`note\`: Reference to ADR number or Issue number`,
           },
         },
       ];
@@ -1635,9 +1667,9 @@ function generatePromptMessages(
     case 'sync_workflow': {
       const operation = args?.['operation'] || 'status';
       const operationGuides: Record<string, string> = {
-        push: `## Push: ローカル知識のエクスポート
+        push: `## Push: Export Local Knowledge
 
-pce.memory.sync.push を使用して、ローカルDBの知識を .pce-shared/ へエクスポートします。
+Use pce.memory.sync.push to export knowledge from the local DB to .pce-shared/.
 
 \`\`\`json
 {
@@ -1646,19 +1678,19 @@ pce.memory.sync.push を使用して、ローカルDBの知識を .pce-shared/ �
 }
 \`\`\`
 
-### オプション
-- \`target_dir\`: エクスポート先（デフォルト: .pce-shared）
-- \`scope_filter\`: スコープでフィルタ
-- \`boundary_filter\`: boundary_classでフィルタ（secretは常に除外）
-- \`since\`: 指定日時以降の変更のみエクスポート
+### Options
+- \`target_dir\`: Export destination (default: .pce-shared)
+- \`scope_filter\`: Filter by scope
+- \`boundary_filter\`: Filter by boundary_class (secret is always excluded)
+- \`since\`: Export only changes after the specified datetime
 
-### 注意事項
-- secret境界の情報は自動的に除外されます
-- piiは明示的に指定した場合のみ含まれます`,
+### Notes
+- Information with secret boundary is automatically excluded
+- pii is only included when explicitly specified`,
 
-        pull: `## Pull: 共有知識のインポート
+        pull: `## Pull: Import Shared Knowledge
 
-pce.memory.sync.pull を使用して、.pce-shared/ から知識をインポートします。
+Use pce.memory.sync.pull to import knowledge from .pce-shared/.
 
 \`\`\`json
 {
@@ -1666,31 +1698,31 @@ pce.memory.sync.pull を使用して、.pce-shared/ から知識をインポー�
 }
 \`\`\`
 
-### オプション
-- \`source_dir\`: インポート元（デフォルト: .pce-shared）
-- \`scope_filter\`: スコープでフィルタ
-- \`boundary_filter\`: boundary_classでフィルタ
-- \`dry_run\`: trueで変更をプレビュー（実際には適用しない）
-- \`since\`: 増分インポート（指定日時以降のみ）
+### Options
+- \`source_dir\`: Import source (default: .pce-shared)
+- \`scope_filter\`: Filter by scope
+- \`boundary_filter\`: Filter by boundary_class
+- \`dry_run\`: Preview changes without applying when true
+- \`since\`: Incremental import (only after the specified datetime)
 
-### CRDTマージ戦略
-- 同じcontent_hashのClaimは重複としてスキップ
-- boundary_classは格上げのみ（public→internal）、格下げは不可
-- 衝突は自動解決（boundary_upgrade）またはスキップ`,
+### CRDT Merge Strategy
+- Claims with same content_hash are skipped as duplicates
+- boundary_class can only be upgraded (public→internal), not downgraded
+- Conflicts are auto-resolved (boundary_upgrade) or skipped`,
 
-        status: `## Status: 同期状態の確認
+        status: `## Status: Check Sync State
 
-pce.memory.sync.status を使用して、同期ディレクトリの状態を確認します。
+Use pce.memory.sync.status to check the state of the sync directory.
 
 \`\`\`json
 {}
 \`\`\`
 
-### 確認できる情報
-- \`exists\`: ディレクトリの存在
-- \`manifest\`: バージョン、最終push/pull日時
-- \`files\`: claims/entities/relationsのファイル数
-- \`validation\`: JSONスキーマバリデーション結果`,
+### Available Information
+- \`exists\`: Directory existence
+- \`manifest\`: Version, last push/pull timestamps
+- \`files\`: File counts for claims/entities/relations
+- \`validation\`: JSON schema validation results`,
       };
 
       return [
@@ -1698,7 +1730,7 @@ pce.memory.sync.status を使用して、同期ディレクトリの状態を確
           role: 'user',
           content: {
             type: 'text',
-            text: `Git同期機能の使い方を教えてください。操作: ${operation}`,
+            text: `Tell me how to use Git sync functionality. Operation: ${operation}`,
           },
         },
         {
@@ -1707,19 +1739,19 @@ pce.memory.sync.status を使用して、同期ディレクトリの状態を確
             type: 'text',
             text:
               operationGuides[operation] ||
-              `# Git-based CRDT同期
+              `# Git-based CRDT Sync
 
-pce-memoryは、Git経由でチーム間の知識を同期できます。
+pce-memory allows synchronizing knowledge across teams via Git.
 
-## 基本ワークフロー
+## Basic Workflow
 
-1. **status** - 現在の同期状態を確認
-2. **pull** - 共有知識をインポート（dry_run: trueで事前確認）
-3. **作業** - 知識を記録・更新
-4. **push** - ローカル知識をエクスポート
-5. **git commit/push** - 変更をGitで共有
+1. **status** - Check current sync state
+2. **pull** - Import shared knowledge (dry_run: true for preview)
+3. **work** - Record and update knowledge
+4. **push** - Export local knowledge
+5. **git commit/push** - Share changes via Git
 
-## CLI コマンド
+## CLI Commands
 
 \`\`\`bash
 pce-memory sync status
@@ -1727,9 +1759,9 @@ pce-memory sync pull --dry-run
 pce-memory sync push
 \`\`\`
 
-## Git Hooks統合
+## Git Hooks Integration
 
-pre-commit, post-mergeフックで自動同期:
+Automatic sync with pre-commit and post-merge hooks:
 \`\`\`bash
 ./scripts/git-hooks/install-hooks.sh
 export PCE_SYNC_ENABLED=true
@@ -1739,21 +1771,140 @@ export PCE_SYNC_ENABLED=true
       ];
     }
 
-    case 'debug_assist': {
-      const errorMessage = args?.['error_message'] || '<エラーメッセージ>';
+    case 'sync_push': {
+      const scopeFilter = args?.['scope_filter'] || 'project,principle';
+      const boundaryFilter = args?.['boundary_filter'] || 'public,internal';
       return [
         {
           role: 'user',
           content: {
             type: 'text',
-            text: `デバッグ中にエラーが発生しました: "${errorMessage}"`,
+            text: `I want to export local knowledge to share with the team.`,
           },
         },
         {
           role: 'assistant',
           content: {
             type: 'text',
-            text: `pce.memory.activate を使用して、過去の類似問題や解決策を検索します。
+            text: `Use pce.memory.sync.push to export knowledge to .pce-shared/ directory.
+
+\`\`\`json
+{
+  "scope_filter": ["${scopeFilter.split(',').join('", "')}"],
+  "boundary_filter": ["${boundaryFilter.split(',').join('", "')}"],
+  "include_entities": true,
+  "include_relations": true
+}
+\`\`\`
+
+## Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| \`target_dir\` | .pce-shared | Export destination directory |
+| \`scope_filter\` | project, principle | Filter by scope (session excluded by default) |
+| \`boundary_filter\` | public, internal | Filter by boundary class |
+| \`since\` | - | Export only claims updated after this ISO8601 datetime |
+| \`include_entities\` | true | Include graph entities in export |
+| \`include_relations\` | true | Include graph relations in export |
+
+## Security Notes
+
+- \`secret\` boundary is **always excluded** from export
+- \`pii\` is only included when explicitly specified in boundary_filter
+- Review exported files before committing to Git
+
+## After Push
+
+\`\`\`bash
+# Stage the exported files
+git add .pce-shared/
+
+# Commit and push
+git commit -m "chore: update shared knowledge"
+git push
+\`\`\``,
+          },
+        },
+      ];
+    }
+
+    case 'sync_pull': {
+      const since = args?.['since'] || '';
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `I want to import shared knowledge from the team.`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `Use pce.memory.sync.pull to import knowledge from .pce-shared/ directory.
+
+## Step 1: Preview Changes (Recommended)
+
+\`\`\`json
+{
+  "dry_run": true
+}
+\`\`\`
+
+## Step 2: Apply Changes
+
+\`\`\`json
+{
+  "dry_run": false${since ? `,\n  "since": "${since}"` : ''}
+}
+\`\`\`
+
+## Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| \`source_dir\` | .pce-shared | Import source directory |
+| \`scope_filter\` | all | Filter by scope |
+| \`boundary_filter\` | all except secret | Filter by boundary class |
+| \`dry_run\` | false | Preview without applying changes |
+| \`since\` | - | Incremental import from ISO8601 datetime |
+
+## CRDT Merge Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Same content_hash exists | Skip (duplicate) |
+| boundary_class differs | Upgrade only (public→internal) |
+| Entity/relation conflict | Skip with warning |
+
+## Best Practices
+
+1. **Always dry_run first**: Preview changes before applying
+2. **Use incremental import**: Specify \`since\` for large knowledge bases
+3. **Review conflicts**: Check skipped items in the result
+4. **Pull before push**: Avoid overwriting team's changes`,
+          },
+        },
+      ];
+    }
+
+    case 'debug_assist': {
+      const errorMessage = args?.['error_message'] || '<error message>';
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `An error occurred during debugging: "${errorMessage}"`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `Use pce.memory.activate to search for past similar issues and solutions.
 
 \`\`\`json
 {
@@ -1764,23 +1915,23 @@ export PCE_SYNC_ENABLED=true
 }
 \`\`\`
 
-## デバッグ時の知識活用
+## Leveraging Knowledge During Debugging
 
-1. **エラーメッセージで検索**: 過去に同じエラーを解決した記録があるか確認
-2. **関連コンポーネントで検索**: エラーが発生したモジュールの既知の問題を確認
-3. **解決後は記録**: 新しい解決策は \`upsert\` で記録
+1. **Search by error message**: Check if there's a record of solving the same error before
+2. **Search by related component**: Check known issues for the module where the error occurred
+3. **Record after resolution**: Use \`upsert\` to record new solutions
 
-## 検索クエリのコツ
+## Query Tips
 
-- エラーコードを含める（例: "ECONNREFUSED", "TypeError"）
-- ライブラリ名を含める（例: "DuckDB lock"）
-- 症状を含める（例: "タイムアウト", "メモリリーク"）
+- Include error codes (e.g., "ECONNREFUSED", "TypeError")
+- Include library names (e.g., "DuckDB lock")
+- Include symptoms (e.g., "timeout", "memory leak")
 
-## 解決策の記録例
+## Example of Recording a Solution
 
 \`\`\`json
 {
-  "text": "DuckDB 'Could not set lock on file' エラー: server.close()でソケットを明示的にクローズする必要がある",
+  "text": "DuckDB 'Could not set lock on file' error: Need to explicitly close socket with server.close()",
   "kind": "fact",
   "scope": "project",
   "boundary_class": "internal"
@@ -1797,14 +1948,14 @@ export PCE_SYNC_ENABLED=true
           role: 'user',
           content: {
             type: 'text',
-            text: `${prompt.name} について教えてください`,
+            text: `Tell me about ${prompt.name}`,
           },
         },
         {
           role: 'assistant',
           content: {
             type: 'text',
-            text: prompt.description || 'このプロンプトの説明はありません。',
+            text: prompt.description || 'No description available for this prompt.',
           },
         },
       ];

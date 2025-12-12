@@ -1,63 +1,65 @@
 /**
- * MCP Prompts機能のテスト (Issue #16)
+ * MCP Prompts tests (Issue #16)
  *
- * handleListPrompts, handleGetPromptの単体テスト
+ * Unit tests for handleListPrompts, handleGetPrompt
  */
 import { describe, it, expect } from 'vitest';
 import { handleListPrompts, handleGetPrompt, PROMPTS_DEFINITIONS } from '../src/core/handlers';
 
 describe('MCP Prompts (Issue #16)', () => {
   describe('PROMPTS_DEFINITIONS', () => {
-    it('定義済みPromptsが存在する', () => {
+    it('has defined prompts', () => {
       expect(PROMPTS_DEFINITIONS.length).toBeGreaterThan(0);
     });
 
-    it('すべてのPromptにnameとdescriptionがある', () => {
+    it('all prompts have name and description', () => {
       for (const prompt of PROMPTS_DEFINITIONS) {
         expect(prompt.name).toBeDefined();
         expect(typeof prompt.name).toBe('string');
         expect(prompt.name.length).toBeGreaterThan(0);
-        // descriptionはオプションだが、定義済みのものにはすべてある
+        // description is optional but all defined prompts have it
         expect(prompt.description).toBeDefined();
       }
     });
 
-    it('期待されるPromptが含まれている', () => {
+    it('contains expected prompts', () => {
       const names = PROMPTS_DEFINITIONS.map((p) => p.name);
       expect(names).toContain('recall_context');
       expect(names).toContain('record_decision');
       expect(names).toContain('sync_workflow');
+      expect(names).toContain('sync_push');
+      expect(names).toContain('sync_pull');
       expect(names).toContain('debug_assist');
     });
   });
 
   describe('handleListPrompts', () => {
-    it('すべてのPromptsを返す', async () => {
+    it('returns all prompts', async () => {
       const result = await handleListPrompts({});
       expect(result.prompts).toBeDefined();
       expect(result.prompts.length).toBe(PROMPTS_DEFINITIONS.length);
     });
 
-    it('ページネーションcursorをサポートする', async () => {
-      // 最初のページ
+    it('supports pagination cursor', async () => {
+      // First page
       const page1 = await handleListPrompts({});
       expect(page1.prompts.length).toBe(PROMPTS_DEFINITIONS.length);
 
-      // カーソル指定（全件取得後なので空）
+      // Cursor specified (empty after getting all)
       const page2 = await handleListPrompts({ cursor: '10' });
       expect(page2.prompts.length).toBe(0);
     });
   });
 
   describe('handleGetPrompt', () => {
-    it('存在するPromptを取得できる', async () => {
+    it('retrieves existing prompt', async () => {
       const result = await handleGetPrompt({ name: 'recall_context' });
       expect(result.description).toBeDefined();
       expect(result.messages).toBeDefined();
       expect(result.messages.length).toBeGreaterThan(0);
     });
 
-    it('メッセージにroleとcontentがある', async () => {
+    it('messages have role and content', async () => {
       const result = await handleGetPrompt({ name: 'recall_context' });
       for (const msg of result.messages) {
         expect(msg.role).toMatch(/^(user|assistant)$/);
@@ -67,54 +69,54 @@ describe('MCP Prompts (Issue #16)', () => {
       }
     });
 
-    it('引数を渡すとメッセージに反映される', async () => {
+    it('reflects arguments in messages', async () => {
       const result = await handleGetPrompt({
         name: 'recall_context',
-        arguments: { query: 'JWT認証', scope: 'project' },
+        arguments: { query: 'JWT authentication', scope: 'project' },
       });
-      // 引数がメッセージに含まれることを確認
+      // Verify arguments are included in message
       const allText = result.messages.map((m) => m.content.text).join(' ');
-      expect(allText).toContain('JWT認証');
+      expect(allText).toContain('JWT authentication');
     });
 
-    it('存在しないPromptでエラーを投げる', async () => {
+    it('throws error for non-existent prompt', async () => {
       await expect(handleGetPrompt({ name: 'non-existent' })).rejects.toThrow(
         'Prompt not found: non-existent'
       );
     });
 
-    it('nameなしでエラーを投げる', async () => {
+    it('throws error without name', async () => {
       await expect(handleGetPrompt({})).rejects.toThrow('name is required');
     });
 
-    it('必須引数がない場合エラーを投げる', async () => {
-      // record-decisionのtopicは必須
+    it('throws error when required argument is missing', async () => {
+      // topic is required for record-decision
       await expect(handleGetPrompt({ name: 'record_decision' })).rejects.toThrow(
         'Required argument missing: topic'
       );
     });
 
-    it('必須引数を渡すと成功する', async () => {
+    it('succeeds with required arguments', async () => {
       const result = await handleGetPrompt({
         name: 'record_decision',
-        arguments: { topic: '状態管理ライブラリ選定' },
+        arguments: { topic: 'state management library selection' },
       });
       expect(result.messages.length).toBeGreaterThan(0);
       const allText = result.messages.map((m) => m.content.text).join(' ');
-      expect(allText).toContain('状態管理ライブラリ選定');
+      expect(allText).toContain('state management library selection');
     });
   });
 
-  describe('sync-workflow prompt', () => {
-    it('operationなしでデフォルトガイドを返す', async () => {
+  describe('sync_workflow prompt', () => {
+    it('returns default guide without operation', async () => {
       const result = await handleGetPrompt({ name: 'sync_workflow' });
       expect(result.messages.length).toBeGreaterThan(0);
       const allText = result.messages.map((m) => m.content.text).join(' ');
-      // statusがデフォルト
+      // status is default
       expect(allText).toContain('status');
     });
 
-    it('operation=pushでpushガイドを返す', async () => {
+    it('returns push guide with operation=push', async () => {
       const result = await handleGetPrompt({
         name: 'sync_workflow',
         arguments: { operation: 'push' },
@@ -124,7 +126,7 @@ describe('MCP Prompts (Issue #16)', () => {
       expect(allText).toContain('sync.push');
     });
 
-    it('operation=pullでpullガイドを返す', async () => {
+    it('returns pull guide with operation=pull', async () => {
       const result = await handleGetPrompt({
         name: 'sync_workflow',
         arguments: { operation: 'pull' },
@@ -135,8 +137,50 @@ describe('MCP Prompts (Issue #16)', () => {
     });
   });
 
-  describe('debug-assist prompt', () => {
-    it('エラーメッセージを引数で渡せる', async () => {
+  describe('sync_push prompt', () => {
+    it('returns push guide with default filters', async () => {
+      const result = await handleGetPrompt({ name: 'sync_push' });
+      expect(result.messages.length).toBeGreaterThan(0);
+      const allText = result.messages.map((m) => m.content.text).join(' ');
+      expect(allText).toContain('pce.memory.sync.push');
+      expect(allText).toContain('scope_filter');
+      expect(allText).toContain('boundary_filter');
+    });
+
+    it('reflects custom filters in messages', async () => {
+      const result = await handleGetPrompt({
+        name: 'sync_push',
+        arguments: { scope_filter: 'session,project', boundary_filter: 'public' },
+      });
+      const allText = result.messages.map((m) => m.content.text).join(' ');
+      expect(allText).toContain('session');
+      expect(allText).toContain('project');
+      expect(allText).toContain('public');
+    });
+  });
+
+  describe('sync_pull prompt', () => {
+    it('returns pull guide with dry_run recommendation', async () => {
+      const result = await handleGetPrompt({ name: 'sync_pull' });
+      expect(result.messages.length).toBeGreaterThan(0);
+      const allText = result.messages.map((m) => m.content.text).join(' ');
+      expect(allText).toContain('pce.memory.sync.pull');
+      expect(allText).toContain('dry_run');
+      expect(allText).toContain('CRDT');
+    });
+
+    it('includes since parameter when provided', async () => {
+      const result = await handleGetPrompt({
+        name: 'sync_pull',
+        arguments: { since: '2024-01-01T00:00:00Z' },
+      });
+      const allText = result.messages.map((m) => m.content.text).join(' ');
+      expect(allText).toContain('2024-01-01T00:00:00Z');
+    });
+  });
+
+  describe('debug_assist prompt', () => {
+    it('accepts error_message as argument', async () => {
       const result = await handleGetPrompt({
         name: 'debug_assist',
         arguments: { error_message: 'ECONNREFUSED' },
