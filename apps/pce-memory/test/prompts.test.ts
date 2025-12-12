@@ -8,7 +8,6 @@ import {
   handleListPrompts,
   handleGetPrompt,
   PROMPTS_DEFINITIONS,
-  type PromptDefinition,
 } from '../src/core/handlers';
 
 describe('MCP Prompts (Issue #16)', () => {
