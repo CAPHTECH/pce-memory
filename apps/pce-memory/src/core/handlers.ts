@@ -1444,6 +1444,428 @@ export async function dispatchTool(
   }
 }
 
+// ========== MCP Prompts (Issue #16) ==========
+
+/**
+ * Prompt定義型
+ */
+export interface PromptDefinition {
+  name: string;
+  description?: string;
+  arguments?: Array<{
+    name: string;
+    description?: string;
+    required?: boolean;
+  }>;
+}
+
+/**
+ * Promptメッセージ型
+ */
+export interface PromptMessage {
+  role: 'user' | 'assistant';
+  content: {
+    type: 'text';
+    text: string;
+  };
+}
+
+/**
+ * 定義済みPrompts一覧
+ */
+export const PROMPTS_DEFINITIONS: PromptDefinition[] = [
+  {
+    name: 'recall-context',
+    description: 'タスク開始時に関連知識を想起するためのガイド',
+    arguments: [
+      {
+        name: 'query',
+        description: '検索クエリ（例: "認証", "API設計"）',
+        required: false,
+      },
+      {
+        name: 'scope',
+        description: 'スコープ（session/project/principle）',
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'record-decision',
+    description: '設計決定を記録するためのガイド',
+    arguments: [
+      {
+        name: 'topic',
+        description: '決定のトピック（例: "状態管理ライブラリ選定"）',
+        required: true,
+      },
+    ],
+  },
+  {
+    name: 'sync-workflow',
+    description: 'Git同期ワークフローのガイド（push/pull/status）',
+    arguments: [
+      {
+        name: 'operation',
+        description: '操作タイプ（push/pull/status）',
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'debug-assist',
+    description: 'デバッグ時に関連知識を検索するためのガイド',
+    arguments: [
+      {
+        name: 'error_message',
+        description: 'エラーメッセージまたはキーワード',
+        required: false,
+      },
+    ],
+  },
+];
+
+/**
+ * Promptメッセージを生成
+ */
+function generatePromptMessages(
+  prompt: PromptDefinition,
+  args?: Record<string, string>
+): PromptMessage[] {
+  switch (prompt.name) {
+    case 'recall-context': {
+      const query = args?.['query'] || '<検索したいキーワード>';
+      const scope = args?.['scope'] || 'project';
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `タスクを開始する前に、関連する知識を想起したいです。検索クエリ: "${query}"`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `pce.memory.activate を使用して関連知識を想起します。
+
+\`\`\`json
+{
+  "q": "${query}",
+  "scope": ["${scope}"],
+  "allow": ["answer:*"],
+  "top_k": 10
+}
+\`\`\`
+
+## 使い方のポイント
+
+1. **scope選択**:
+   - \`session\`: 今回の会話限定の情報
+   - \`project\`: プロジェクト固有のパターン・規約
+   - \`principle\`: 普遍的な原則（SOLID、TDD等）
+
+2. **検索クエリのコツ**:
+   - 複数のキーワードをスペース区切りで指定（OR検索）
+   - 具体的なキーワードを使う（"認証" より "JWT 認証"）
+
+3. **想起後のアクション**:
+   - 有用だった知識には \`feedback\` で \`helpful\` を送信
+   - 古い情報には \`outdated\` を送信`,
+          },
+        },
+      ];
+    }
+
+    case 'record-decision': {
+      const topic = args?.['topic'] || '<決定のトピック>';
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `設計決定を記録したいです。トピック: "${topic}"`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `pce.memory.upsert を使用して設計決定を記録します。
+
+\`\`\`json
+{
+  "text": "${topic}に関する決定: <決定内容を記述>",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "content_hash": "sha256:<テキストのSHA256ハッシュ>",
+  "provenance": {
+    "at": "<現在のISO8601日時>",
+    "actor": "claude",
+    "note": "ADR-XXXX / Issue #YYY"
+  }
+}
+\`\`\`
+
+## 記録のポイント
+
+1. **kind選択**:
+   - \`fact\`: アーキテクチャ決定、技術的制約
+   - \`preference\`: コーディングスタイル、ツール選択
+   - \`task\`: 進行中の作業、TODO
+   - \`policy_hint\`: セキュリティ要件、運用ルール
+
+2. **boundary_class**:
+   - \`public\`: 公開可能な情報
+   - \`internal\`: 社内限定
+   - \`pii\`: 個人情報を含む
+   - \`secret\`: 認証情報（記録しないことを推奨）
+
+3. **provenance**:
+   - \`at\`: 必須。記録日時
+   - \`actor\`: 記録者（claude/user）
+   - \`note\`: ADR番号やIssue番号への参照`,
+          },
+        },
+      ];
+    }
+
+    case 'sync-workflow': {
+      const operation = args?.['operation'] || 'status';
+      const operationGuides: Record<string, string> = {
+        push: `## Push: ローカル知識のエクスポート
+
+pce.memory.sync.push を使用して、ローカルDBの知識を .pce-shared/ へエクスポートします。
+
+\`\`\`json
+{
+  "scope_filter": ["project", "principle"],
+  "boundary_filter": ["public", "internal"]
+}
+\`\`\`
+
+### オプション
+- \`target_dir\`: エクスポート先（デフォルト: .pce-shared）
+- \`scope_filter\`: スコープでフィルタ
+- \`boundary_filter\`: boundary_classでフィルタ（secretは常に除外）
+- \`since\`: 指定日時以降の変更のみエクスポート
+
+### 注意事項
+- secret境界の情報は自動的に除外されます
+- piiは明示的に指定した場合のみ含まれます`,
+
+        pull: `## Pull: 共有知識のインポート
+
+pce.memory.sync.pull を使用して、.pce-shared/ から知識をインポートします。
+
+\`\`\`json
+{
+  "dry_run": true
+}
+\`\`\`
+
+### オプション
+- \`source_dir\`: インポート元（デフォルト: .pce-shared）
+- \`scope_filter\`: スコープでフィルタ
+- \`boundary_filter\`: boundary_classでフィルタ
+- \`dry_run\`: trueで変更をプレビュー（実際には適用しない）
+- \`since\`: 増分インポート（指定日時以降のみ）
+
+### CRDTマージ戦略
+- 同じcontent_hashのClaimは重複としてスキップ
+- boundary_classは格上げのみ（public→internal）、格下げは不可
+- 衝突は自動解決（boundary_upgrade）またはスキップ`,
+
+        status: `## Status: 同期状態の確認
+
+pce.memory.sync.status を使用して、同期ディレクトリの状態を確認します。
+
+\`\`\`json
+{}
+\`\`\`
+
+### 確認できる情報
+- \`exists\`: ディレクトリの存在
+- \`manifest\`: バージョン、最終push/pull日時
+- \`files\`: claims/entities/relationsのファイル数
+- \`validation\`: JSONスキーマバリデーション結果`,
+      };
+
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Git同期機能の使い方を教えてください。操作: ${operation}`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text:
+              operationGuides[operation] ||
+              `# Git-based CRDT同期
+
+pce-memoryは、Git経由でチーム間の知識を同期できます。
+
+## 基本ワークフロー
+
+1. **status** - 現在の同期状態を確認
+2. **pull** - 共有知識をインポート（dry_run: trueで事前確認）
+3. **作業** - 知識を記録・更新
+4. **push** - ローカル知識をエクスポート
+5. **git commit/push** - 変更をGitで共有
+
+## CLI コマンド
+
+\`\`\`bash
+pce-memory sync status
+pce-memory sync pull --dry-run
+pce-memory sync push
+\`\`\`
+
+## Git Hooks統合
+
+pre-commit, post-mergeフックで自動同期:
+\`\`\`bash
+./scripts/git-hooks/install-hooks.sh
+export PCE_SYNC_ENABLED=true
+\`\`\``,
+          },
+        },
+      ];
+    }
+
+    case 'debug-assist': {
+      const errorMessage = args?.['error_message'] || '<エラーメッセージ>';
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `デバッグ中にエラーが発生しました: "${errorMessage}"`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: `pce.memory.activate を使用して、過去の類似問題や解決策を検索します。
+
+\`\`\`json
+{
+  "q": "${errorMessage}",
+  "scope": ["project", "session"],
+  "allow": ["answer:*"],
+  "top_k": 15
+}
+\`\`\`
+
+## デバッグ時の知識活用
+
+1. **エラーメッセージで検索**: 過去に同じエラーを解決した記録があるか確認
+2. **関連コンポーネントで検索**: エラーが発生したモジュールの既知の問題を確認
+3. **解決後は記録**: 新しい解決策は \`upsert\` で記録
+
+## 検索クエリのコツ
+
+- エラーコードを含める（例: "ECONNREFUSED", "TypeError"）
+- ライブラリ名を含める（例: "DuckDB lock"）
+- 症状を含める（例: "タイムアウト", "メモリリーク"）
+
+## 解決策の記録例
+
+\`\`\`json
+{
+  "text": "DuckDB 'Could not set lock on file' エラー: server.close()でソケットを明示的にクローズする必要がある",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal"
+}
+\`\`\``,
+          },
+        },
+      ];
+    }
+
+    default:
+      return [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `${prompt.name} について教えてください`,
+          },
+        },
+        {
+          role: 'assistant',
+          content: {
+            type: 'text',
+            text: prompt.description || 'このプロンプトの説明はありません。',
+          },
+        },
+      ];
+  }
+}
+
+/**
+ * prompts/list ハンドラ
+ */
+export async function handleListPrompts(args: Record<string, unknown>): Promise<{
+  prompts: PromptDefinition[];
+}> {
+  const { cursor } = args as { cursor?: string };
+
+  // ページネーション処理
+  const PAGE_SIZE = 10;
+  const startIdx = cursor ? parseInt(cursor, 10) : 0;
+  const prompts = PROMPTS_DEFINITIONS.slice(startIdx, startIdx + PAGE_SIZE);
+
+  return { prompts };
+}
+
+/**
+ * prompts/get ハンドラ
+ */
+export async function handleGetPrompt(args: Record<string, unknown>): Promise<{
+  description?: string;
+  messages: PromptMessage[];
+}> {
+  const { name, arguments: promptArgs } = args as {
+    name?: string;
+    arguments?: Record<string, string>;
+  };
+
+  if (!name) {
+    throw new Error('name is required');
+  }
+
+  const prompt = PROMPTS_DEFINITIONS.find((p) => p.name === name);
+  if (!prompt) {
+    throw new Error(`Prompt not found: ${name}`);
+  }
+
+  // 必須引数のバリデーション
+  if (prompt.arguments) {
+    for (const arg of prompt.arguments) {
+      if (arg.required && (!promptArgs || !(arg.name in promptArgs))) {
+        throw new Error(`Required argument missing: ${arg.name}`);
+      }
+    }
+  }
+
+  const messages = generatePromptMessages(prompt, promptArgs);
+
+  // exactOptionalPropertyTypes対応: undefinedは含めない
+  return {
+    ...(prompt.description !== undefined && { description: prompt.description }),
+    messages,
+  };
+}
+
 // ========== Tool Definitions ==========
 
 export const TOOL_DEFINITIONS = [
