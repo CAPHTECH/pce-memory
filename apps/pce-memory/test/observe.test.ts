@@ -481,4 +481,212 @@ describe('pce.memory.observe', () => {
     expect(data.effective_boundary_class).toBe('pii');
     expect(data.content_redacted).toBe(true);
   });
+
+  // === Claim昇格（extract）詳細テスト ===
+
+  it('extract: claim.textがcontentと一致する', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const testContent = 'テスト用のコンテンツ文字列';
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: testContent,
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    const claimId = (obsData.claim_ids as string[])[0]!;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT text FROM claims WHERE id = $1', [claimId]);
+    const rows = reader.getRowObjects() as { text: string }[];
+    expect(rows[0]?.text).toBe(testContent);
+  });
+
+  it('extract: claim属性が正しく設定される (kind=fact, scope=session)', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: '設計決定: APIはREST形式',
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    const claimId = (obsData.claim_ids as string[])[0]!;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll(
+      'SELECT kind, scope, boundary_class FROM claims WHERE id = $1',
+      [claimId]
+    );
+    const rows = reader.getRowObjects() as { kind: string; scope: string; boundary_class: string }[];
+    expect(rows[0]?.kind).toBe('fact');
+    expect(rows[0]?.scope).toBe('session');
+    expect(rows[0]?.boundary_class).toBe('internal'); // デフォルト
+  });
+
+  it('extract: boundary_classがeffectiveBoundaryClassに従う', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: '公開可能な情報です',
+      boundary_class: 'public',
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    const claimId = (obsData.claim_ids as string[])[0]!;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT boundary_class FROM claims WHERE id = $1', [
+      claimId,
+    ]);
+    const rows = reader.getRowObjects() as { boundary_class: string }[];
+    expect(rows[0]?.boundary_class).toBe('public');
+  });
+
+  it('extract: provenanceがobserveからclaimに引き継がれる', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const testProvenance = {
+      at: '2024-12-16T12:00:00Z',
+      actor: 'test-developer',
+      note: 'ADR-001で決定',
+    };
+
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'provenance引き継ぎテスト',
+      provenance: testProvenance,
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    const claimId = (obsData.claim_ids as string[])[0]!;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT provenance FROM claims WHERE id = $1', [
+      claimId,
+    ]);
+    const rows = reader.getRowObjects() as { provenance: string | null }[];
+    expect(rows[0]?.provenance).not.toBeNull();
+
+    const prov = JSON.parse(rows[0]!.provenance!);
+    expect(prov.at).toBe(testProvenance.at);
+    expect(prov.actor).toBe(testProvenance.actor);
+    expect(prov.note).toBe(testProvenance.note);
+  });
+
+  it('extract: PII検知時はリダクション済みtextでclaim生成', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const contentWithPII = '連絡先: pii-test@example.com です';
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: contentWithPII,
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    expect(obsData.effective_boundary_class).toBe('pii');
+    expect(obsData.claim_ids).toHaveLength(1);
+
+    const claimId = (obsData.claim_ids as string[])[0]!;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT text, boundary_class FROM claims WHERE id = $1', [
+      claimId,
+    ]);
+    const rows = reader.getRowObjects() as { text: string; boundary_class: string }[];
+
+    // claimのtextはリダクション済み
+    expect(rows[0]?.text).not.toContain('pii-test@example.com');
+    expect(rows[0]?.text).toContain('[REDACTED]');
+    expect(rows[0]?.boundary_class).toBe('pii');
+  });
+
+  it('extract: 同一contentは既存claimを再利用（重複防止）', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const sharedContent = '重複テスト用の同一コンテンツ';
+
+    // 1回目のobserve
+    const obs1 = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: sharedContent,
+      extract: { mode: 'single_claim_v0' },
+    });
+    const claimId1 = (obs1.structuredContent!.claim_ids as string[])[0]!;
+
+    // 2回目のobserve（同一content）
+    const obs2 = await dispatchTool('pce.memory.observe', {
+      source_type: 'tool',
+      source_id: 'tool:test',
+      content: sharedContent,
+      extract: { mode: 'single_claim_v0' },
+    });
+    const claimId2 = (obs2.structuredContent!.claim_ids as string[])[0]!;
+
+    // 同一claim_idが返される（content_hashで重複検知）
+    expect(claimId1).toBe(claimId2);
+
+    // observation_idは異なる
+    expect(obs1.structuredContent!.observation_id).not.toBe(obs2.structuredContent!.observation_id);
+  });
+
+  it('extract: Evidence詳細検証（source_type, source_id, snippet）', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const testContent = 'Evidence詳細検証テスト';
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: testContent,
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    const claimId = (obsData.claim_ids as string[])[0]!;
+    const observationId = obsData.observation_id;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll(
+      'SELECT source_type, source_id, snippet FROM evidence WHERE claim_id = $1',
+      [claimId]
+    );
+    const rows = reader.getRowObjects() as {
+      source_type: string;
+      source_id: string;
+      snippet: string;
+    }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.source_type).toBe('observation');
+    expect(rows[0]?.source_id).toBe(observationId);
+    // snippetはcontent digestとbytesを含む
+    expect(rows[0]?.snippet).toContain('bytes=');
+  });
+
+  it('extract: provenanceなしでもclaim生成可能', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const obs = await dispatchTool('pce.memory.observe', {
+      source_type: 'system',
+      content: 'provenance省略テスト',
+      extract: { mode: 'single_claim_v0' },
+    });
+
+    const obsData = obs.structuredContent!;
+    expect(obsData.claim_ids).toHaveLength(1);
+
+    const claimId = (obsData.claim_ids as string[])[0]!;
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT provenance FROM claims WHERE id = $1', [
+      claimId,
+    ]);
+    const rows = reader.getRowObjects() as { provenance: string | null }[];
+    // provenanceはnullまたは空
+    expect(rows[0]?.provenance === null || rows[0]?.provenance === '{}').toBe(true);
+  });
 });
