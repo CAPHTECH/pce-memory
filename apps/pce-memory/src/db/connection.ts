@@ -152,18 +152,44 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
 }
 
 /**
+ * 孤立した一時テーブルをクリーンアップ
+ *
+ * マイグレーション中にクラッシュした場合、`claim_vectors_new_*` パターンの
+ * テーブルが残存する可能性がある。起動時にこれらをクリーンアップする。
+ */
+async function cleanupOrphanedTempTables(conn: DuckDBConnection): Promise<void> {
+  const reader = await conn.runAndReadAll(`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_name LIKE 'claim_vectors_new_%'
+  `);
+  const rows = reader.getRowObjects() as unknown as Array<{ table_name: string }>;
+
+  for (const row of rows) {
+    console.error(`[DB] Cleaning up orphaned temp table: ${row.table_name}`);
+    await conn.run(`DROP TABLE IF EXISTS "${row.table_name}"`);
+  }
+}
+
+/**
  * claim_vectorsテーブルからFK制約を削除するマイグレーション
  *
  * DuckDBにはFK制約でUPDATE時にも誤ってエラーを発生させるバグがある。
  * 旧スキーマ（REFERENCES claims(id)付き）のDBを新スキーマ（FK制約なし）に移行する。
  *
- * copy-and-swap方式:
- * 1. 新スキーマで一時テーブルを作成
- * 2. 旧テーブルからデータをコピー
- * 3. 旧テーブルを削除
- * 4. 一時テーブルをリネーム
+ * copy-and-swap方式（トランザクション保護）:
+ * 1. 孤立した一時テーブルをクリーンアップ
+ * 2. トランザクション開始
+ * 3. 新スキーマで一時テーブルを作成
+ * 4. 旧テーブルからデータをコピー
+ * 5. 旧テーブルを削除
+ * 6. 一時テーブルをリネーム
+ * 7. コミット（失敗時はロールバック）
  */
 async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> {
+  // まず孤立した一時テーブルをクリーンアップ
+  await cleanupOrphanedTempTables(conn);
+
   if (!(await tableExists(conn, 'claim_vectors'))) return;
 
   // FK制約の有無を確認（DuckDBのduckdb_constraintsシステムテーブルを使用）
@@ -182,35 +208,44 @@ async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> 
 
   const tempName = `claim_vectors_new_${crypto.randomUUID().slice(0, 8)}`;
 
-  // Step 1: 新スキーマで一時テーブルを作成（FK制約なし）
-  await conn.run(`
-    CREATE TABLE ${tempName} (
-      claim_id TEXT PRIMARY KEY,
-      embedding DOUBLE[] NOT NULL,
-      model_version TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+  // トランザクションで原子性を保証
+  await conn.run('BEGIN TRANSACTION');
+  try {
+    // Step 1: 新スキーマで一時テーブルを作成（FK制約なし）
+    await conn.run(`
+      CREATE TABLE ${tempName} (
+        claim_id TEXT PRIMARY KEY,
+        embedding DOUBLE[] NOT NULL,
+        model_version TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-  // Step 2: 旧テーブルからデータをコピー
-  await conn.run(`
-    INSERT INTO ${tempName} (claim_id, embedding, model_version, created_at)
-    SELECT claim_id, embedding, model_version, created_at FROM claim_vectors
-  `);
+    // Step 2: 旧テーブルからデータをコピー
+    await conn.run(`
+      INSERT INTO ${tempName} (claim_id, embedding, model_version, created_at)
+      SELECT claim_id, embedding, model_version, created_at FROM claim_vectors
+    `);
 
-  // Step 3: 旧テーブルのインデックスを削除（存在する場合）
-  await conn.run('DROP INDEX IF EXISTS idx_claim_vectors_claim_id');
+    // Step 3: 旧テーブルのインデックスを削除（存在する場合）
+    await conn.run('DROP INDEX IF EXISTS idx_claim_vectors_claim_id');
 
-  // Step 4: 旧テーブルを削除
-  await conn.run('DROP TABLE claim_vectors');
+    // Step 4: 旧テーブルを削除
+    await conn.run('DROP TABLE claim_vectors');
 
-  // Step 5: 一時テーブルをリネーム
-  await conn.run(`ALTER TABLE ${tempName} RENAME TO claim_vectors`);
+    // Step 5: 一時テーブルをリネーム
+    await conn.run(`ALTER TABLE ${tempName} RENAME TO claim_vectors`);
 
-  // Step 6: インデックスを再作成
-  await conn.run('CREATE INDEX IF NOT EXISTS idx_claim_vectors_claim_id ON claim_vectors(claim_id)');
+    // Step 6: インデックスを再作成
+    await conn.run('CREATE INDEX IF NOT EXISTS idx_claim_vectors_claim_id ON claim_vectors(claim_id)');
 
-  console.error('[DB] claim_vectors FK migration completed');
+    await conn.run('COMMIT');
+    console.error('[DB] claim_vectors FK migration completed');
+  } catch (err) {
+    await conn.run('ROLLBACK');
+    console.error(`[DB] claim_vectors FK migration failed, rolled back: ${err}`);
+    throw err;
+  }
 }
 
 /**
