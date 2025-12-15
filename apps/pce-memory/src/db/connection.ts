@@ -237,7 +237,9 @@ async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> 
     await conn.run(`ALTER TABLE ${tempName} RENAME TO claim_vectors`);
 
     // Step 6: インデックスを再作成
-    await conn.run('CREATE INDEX IF NOT EXISTS idx_claim_vectors_claim_id ON claim_vectors(claim_id)');
+    await conn.run(
+      'CREATE INDEX IF NOT EXISTS idx_claim_vectors_claim_id ON claim_vectors(claim_id)'
+    );
 
     await conn.run('COMMIT');
     console.error('[DB] claim_vectors FK migration completed');
