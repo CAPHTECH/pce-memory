@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2025-12-16
+
+### Fixed
+
+- **DuckDB FK constraint bug** - Remove foreign key constraint from `claim_vectors` table that incorrectly triggered constraint errors during `UPDATE` on parent `claims` table (#32)
+- **TOCTOU race condition in critic.ts** - Replace SELECT-then-INSERT/UPDATE pattern with atomic UPSERT using `INSERT ON CONFLICT DO UPDATE RETURNING`
+
+### Added
+
+- **Automatic migration for existing databases** - Copy-and-swap migration with transaction protection to remove FK constraint from legacy databases
+- **Orphaned temp table cleanup** - `cleanupOrphanedTempTables()` removes stale `claim_vectors_new_*` tables from interrupted migrations
+
 ## [0.8.0] - 2025-12-16
 
 ### Added
