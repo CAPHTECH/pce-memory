@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2025-12-16
+
+### Added
+
+- **`pce.memory.observe` tool** (Issue #30) - Record raw observations with optional claim extraction
+  - `source_type`: chat / tool / file / http / system
+  - `extract.mode`: `noop` (record only) or `single_claim_v0` (promote to claim)
+  - Automatic boundary detection: PII (email/phone) → redaction, secret (API keys) → reject storage
+  - GC support: `scrub` (NULL content) or `delete` (remove row) after TTL expiration
+  - Evidence linking: observation → claim traceability
+  - Schema migration: observations table with content_digest, expires_at, gc_mode columns
+
+### Changed
+
+- **State machine**: observe operation transitions state appropriately (PolicyApplied → HasClaims when claims created)
+
 ## [0.7.5] - 2025-12-13
 
 ### Changed
