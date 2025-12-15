@@ -33,8 +33,9 @@ export function boundaryValidate(
   const classes = Object.values(bc);
   // wildcard("*")を持つboundary_classは最後のフォールバックとして扱う（publicが常に先勝ちしないようにする）
   const specific =
-    classes.find((c) => c.allow.some((a) => a !== '*' && allow.some((t) => allowTagMatches(a, t)))) ??
-    classes.find((c) => c.allow.some((a) => a === '*'));
+    classes.find((c) =>
+      c.allow.some((a) => a !== '*' && allow.some((t) => allowTagMatches(a, t)))
+    ) ?? classes.find((c) => c.allow.some((a) => a === '*'));
 
   const matched = specific;
   if (!matched) {

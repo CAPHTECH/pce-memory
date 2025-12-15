@@ -40,10 +40,9 @@ describe('pce.memory.observe', () => {
 
     // DBに保存されていること
     const conn = await getConnection();
-    const reader = await conn.runAndReadAll(
-      'SELECT id, content FROM observations WHERE id = $1',
-      [data.observation_id]
-    );
+    const reader = await conn.runAndReadAll('SELECT id, content FROM observations WHERE id = $1', [
+      data.observation_id,
+    ]);
     const rows = reader.getRowObjects() as unknown as { id: string; content: string | null }[];
     expect(rows[0]?.id).toBe(data.observation_id);
     expect(rows[0]?.content).toBe('hello observation');
@@ -98,8 +97,8 @@ describe('pce.memory.observe', () => {
     expect(Array.isArray(data.claim_ids)).toBe(true);
     expect(data.claim_ids).toHaveLength(0);
     expect(Array.isArray(data.warnings)).toBe(true);
-    expect((data.warnings as string[])).toContain('OBS_CONTENT_NOT_STORED_SECRET');
-    expect((data.warnings as string[])).toContain('EXTRACT_SKIPPED_SECRET');
+    expect(data.warnings as string[]).toContain('OBS_CONTENT_NOT_STORED_SECRET');
+    expect(data.warnings as string[]).toContain('EXTRACT_SKIPPED_SECRET');
 
     const conn = await getConnection();
     const reader = await conn.runAndReadAll('SELECT content FROM observations WHERE id = $1', [

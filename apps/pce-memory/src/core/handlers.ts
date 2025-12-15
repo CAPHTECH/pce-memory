@@ -421,7 +421,17 @@ export async function handleUpsert(args: Record<string, unknown>) {
 }
 
 export async function handleObserve(args: Record<string, unknown>) {
-  const { source_type, source_id, content, actor, tags, provenance, ttl_days, extract, boundary_class } = args as {
+  const {
+    source_type,
+    source_id,
+    content,
+    actor,
+    tags,
+    provenance,
+    ttl_days,
+    extract,
+    boundary_class,
+  } = args as {
     source_type?: unknown;
     source_id?: unknown;
     content?: unknown;
@@ -537,7 +547,10 @@ export async function handleObserve(args: Record<string, unknown>) {
           : undefined;
     if (requestedTtl !== undefined && (!Number.isFinite(requestedTtl) || requestedTtl < 1)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'ttl_days must be a positive number', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'ttl_days must be a positive number', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -557,7 +570,11 @@ export async function handleObserve(args: Record<string, unknown>) {
 
     // provenanceは任意。ただし存在する場合は at が必須
     if (provenance !== undefined) {
-      if (typeof provenance !== 'object' || provenance === null || typeof provenance.at !== 'string') {
+      if (
+        typeof provenance !== 'object' ||
+        provenance === null ||
+        typeof provenance.at !== 'string'
+      ) {
         return createToolResult(
           { ...err('VALIDATION_ERROR', 'provenance.at is required', reqId), trace_id: traceId },
           { isError: true }
@@ -580,7 +597,14 @@ export async function handleObserve(args: Record<string, unknown>) {
     })();
     if (requestedBoundaryClass === null) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'boundary_class must be one of public|internal|pii|secret', reqId), trace_id: traceId },
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'boundary_class must be one of public|internal|pii|secret',
+            reqId
+          ),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -610,7 +634,12 @@ export async function handleObserve(args: Record<string, unknown>) {
           ? 'pii'
           : requestedBoundaryClass;
 
-    const severity: Record<BoundaryClassInput, number> = { public: 0, internal: 1, pii: 2, secret: 3 };
+    const severity: Record<BoundaryClassInput, number> = {
+      public: 0,
+      internal: 1,
+      pii: 2,
+      secret: 3,
+    };
     const effectiveBoundaryClass: BoundaryClassInput =
       severity[detectedBoundaryClass] > severity[requestedBoundaryClass]
         ? detectedBoundaryClass
@@ -624,10 +653,16 @@ export async function handleObserve(args: Record<string, unknown>) {
         : 'redact';
 
     const modeByBoundary: ObsStoreMode =
-      effectiveBoundaryClass === 'secret' ? 'digest_only' : effectiveBoundaryClass === 'pii' ? 'redact' : envStoreMode;
+      effectiveBoundaryClass === 'secret'
+        ? 'digest_only'
+        : effectiveBoundaryClass === 'pii'
+          ? 'redact'
+          : envStoreMode;
 
     const effectiveStoreMode: ObsStoreMode =
-      process.env['NODE_ENV'] === 'production' && modeByBoundary === 'raw' ? 'redact' : modeByBoundary;
+      process.env['NODE_ENV'] === 'production' && modeByBoundary === 'raw'
+        ? 'redact'
+        : modeByBoundary;
 
     const contentToStore: string | null =
       effectiveStoreMode === 'digest_only'
@@ -671,7 +706,8 @@ export async function handleObserve(args: Record<string, unknown>) {
     await insertObservation(observationInput);
 
     const claimIds: string[] = [];
-    const effectiveExtractMode = mode === 'single_claim_v0' && effectiveBoundaryClass === 'secret' ? 'noop' : mode;
+    const effectiveExtractMode =
+      mode === 'single_claim_v0' && effectiveBoundaryClass === 'secret' ? 'noop' : mode;
     if (mode === 'single_claim_v0' && effectiveExtractMode === 'noop') {
       warnings.push('EXTRACT_SKIPPED_SECRET');
     }
@@ -681,7 +717,10 @@ export async function handleObserve(args: Record<string, unknown>) {
       if (effectiveBoundaryClass === 'secret') {
         // 防御的（ここには来ない想定）
         return createToolResult(
-          { ...err('VALIDATION_ERROR', 'secret content cannot be extracted', reqId), trace_id: traceId },
+          {
+            ...err('VALIDATION_ERROR', 'secret content cannot be extracted', reqId),
+            trace_id: traceId,
+          },
           { isError: true }
         );
       }
@@ -2480,7 +2519,14 @@ export const TOOL_DEFINITIONS = [
         request_id: { type: 'string', description: 'Unique request identifier' },
         trace_id: { type: 'string', description: 'Trace identifier for debugging' },
       },
-      required: ['observation_id', 'claim_ids', 'policy_version', 'state', 'request_id', 'trace_id'],
+      required: [
+        'observation_id',
+        'claim_ids',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
   {

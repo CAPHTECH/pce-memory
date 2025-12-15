@@ -72,4 +72,3 @@ describe('Schema migration: legacy observations', () => {
     expect(typeof obs.structuredContent?.observation_id).toBe('string');
   });
 });
-

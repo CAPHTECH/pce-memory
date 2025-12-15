@@ -67,4 +67,3 @@ describe('activate boundary filter', () => {
     expect(claims2).not.toContain(secretId);
   });
 });
-

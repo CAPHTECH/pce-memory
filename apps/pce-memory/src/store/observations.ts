@@ -82,7 +82,9 @@ export type ObservationGcMode = 'scrub' | 'delete';
 export async function gcExpiredObservations(mode: ObservationGcMode = 'scrub'): Promise<void> {
   const conn = await getConnection();
   if (mode === 'delete') {
-    await conn.run('DELETE FROM observations WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP');
+    await conn.run(
+      'DELETE FROM observations WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP'
+    );
     return;
   }
   await conn.run(

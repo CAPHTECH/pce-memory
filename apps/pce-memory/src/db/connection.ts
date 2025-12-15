@@ -18,7 +18,9 @@ async function getTableColumns(
     data_type: string;
     is_nullable: string;
   }>;
-  return new Map(rows.map((r) => [r.column_name, { data_type: r.data_type, is_nullable: r.is_nullable }]));
+  return new Map(
+    rows.map((r) => [r.column_name, { data_type: r.data_type, is_nullable: r.is_nullable }])
+  );
 }
 
 async function tableExists(conn: DuckDBConnection, tableName: string): Promise<boolean> {
@@ -58,7 +60,8 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
   if (!(await tableExists(conn, 'observations'))) return;
 
   const cols = await getTableColumns(conn, 'observations');
-  const isLegacy = !cols.has('content_digest') || !cols.has('expires_at') || !cols.has('content_length');
+  const isLegacy =
+    !cols.has('content_digest') || !cols.has('expires_at') || !cols.has('content_length');
   if (!isLegacy) return;
 
   // 旧スキーマ（docs/schema.mdなど）に基づくobservationsが存在する場合、
@@ -81,12 +84,12 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
       expires_at TIMESTAMP
     )
   `);
-  await conn.run('CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at)');
+  await conn.run(
+    'CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at)'
+  );
 
   // ベストエフォート移行（Observationは短期TTL想定のため、互換性優先で最低限コピー）
-  const legacyReader = await conn.runAndReadAll(
-    `SELECT * FROM ${legacyName} ORDER BY 1`
-  );
+  const legacyReader = await conn.runAndReadAll(`SELECT * FROM ${legacyName} ORDER BY 1`);
   const legacyRows = legacyReader.getRowObjects() as unknown as Array<Record<string, unknown>>;
 
   const defaultTtlDaysRaw = Number(process.env['PCE_OBS_TTL_DAYS'] ?? '30');
@@ -94,7 +97,8 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
     Number.isFinite(defaultTtlDaysRaw) && defaultTtlDaysRaw > 0 ? defaultTtlDaysRaw : 30;
 
   for (const row of legacyRows) {
-    const id = row['id'] !== undefined ? String(row['id']) : `obs_${crypto.randomUUID().slice(0, 8)}`;
+    const id =
+      row['id'] !== undefined ? String(row['id']) : `obs_${crypto.randomUUID().slice(0, 8)}`;
     const sourceType = typeof row['source_type'] === 'string' ? row['source_type'] : 'system';
     const sourceId = typeof row['source_id'] === 'string' ? row['source_id'] : null;
     const content = typeof row['content'] === 'string' ? row['content'] : '';
@@ -110,7 +114,18 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
 
     await conn.run(
       'INSERT INTO observations (id, source_type, source_id, content, content_digest, content_length, actor, tags, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::TIMESTAMP, $10::TIMESTAMP) ON CONFLICT DO NOTHING',
-      [id, sourceType, sourceId, content, digest, length, actor, tagsJson, createdAt.toISOString(), expiresAt]
+      [
+        id,
+        sourceType,
+        sourceId,
+        content,
+        digest,
+        length,
+        actor,
+        tagsJson,
+        createdAt.toISOString(),
+        expiresAt,
+      ]
     );
   }
 }

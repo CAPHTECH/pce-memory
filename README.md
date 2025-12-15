@@ -94,15 +94,15 @@ pnpm clean
 
 PCE Memoryは以下のMCPツールを提供します：
 
-| Tool                  | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `pce.memory.policy.apply` | ポリシー適用 (boundary/retrieval設定)        |
-| `pce.memory.observe`  | 観察を記録 (Observation → Claims)               |
-| `pce.memory.upsert`   | Claimを登録 (Long-term memory)                  |
-| `pce.memory.activate` | Active Contextを構成 (Query → AC)               |
-| `pce.memory.boundary.validate` | 境界チェック / redact-before-send      |
-| `pce.memory.feedback` | フィードバックを送信 (helpful/harmful/outdated) |
-| `pce.memory.state`    | 状態情報を取得 (state/policy_version)           |
+| Tool                           | Description                                     |
+| ------------------------------ | ----------------------------------------------- |
+| `pce.memory.policy.apply`      | ポリシー適用 (boundary/retrieval設定)           |
+| `pce.memory.observe`           | 観察を記録 (Observation → Claims)               |
+| `pce.memory.upsert`            | Claimを登録 (Long-term memory)                  |
+| `pce.memory.activate`          | Active Contextを構成 (Query → AC)               |
+| `pce.memory.boundary.validate` | 境界チェック / redact-before-send               |
+| `pce.memory.feedback`          | フィードバックを送信 (helpful/harmful/outdated) |
+| `pce.memory.state`             | 状態情報を取得 (state/policy_version)           |
 
 詳細は [docs/mcp-tools.md](docs/mcp-tools.md) を参照してください。
 

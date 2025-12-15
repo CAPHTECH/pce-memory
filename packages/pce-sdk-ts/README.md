@@ -42,6 +42,7 @@ MCPクライアント（例: `@modelcontextprotocol/sdk`）からは、以下の
 ```
 
 Notes:
+
 - `effective_boundary_class` / `warnings` が返る場合があります（例: secret検知時は保存・抽出がスキップされる）。
 
 ### `pce.memory.activate`

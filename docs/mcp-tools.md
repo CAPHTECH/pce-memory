@@ -147,7 +147,10 @@
   "properties": {
     "observation_id": { "type": "string", "pattern": "^obs_[A-Za-z0-9]+$" },
     "claim_ids": { "type": "array", "items": { "type": "string" } },
-    "effective_boundary_class": { "type": "string", "enum": ["public", "internal", "pii", "secret"] },
+    "effective_boundary_class": {
+      "type": "string",
+      "enum": ["public", "internal", "pii", "secret"]
+    },
     "content_stored": { "type": "boolean" },
     "content_redacted": { "type": "boolean" },
     "warnings": { "type": "array", "items": { "type": "string" } },
