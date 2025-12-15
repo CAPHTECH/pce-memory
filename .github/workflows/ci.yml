@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+# onnxruntime-node の postinstall が Linux/x64 で CUDA バイナリをダウンロードしようとして失敗するケースを回避
+env:
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 # 並列実行制限（同一ブランチの古いワークフローをキャンセル）
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
