@@ -152,6 +152,68 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
 }
 
 /**
+ * claim_vectorsテーブルからFK制約を削除するマイグレーション
+ *
+ * DuckDBにはFK制約でUPDATE時にも誤ってエラーを発生させるバグがある。
+ * 旧スキーマ（REFERENCES claims(id)付き）のDBを新スキーマ（FK制約なし）に移行する。
+ *
+ * copy-and-swap方式:
+ * 1. 新スキーマで一時テーブルを作成
+ * 2. 旧テーブルからデータをコピー
+ * 3. 旧テーブルを削除
+ * 4. 一時テーブルをリネーム
+ */
+async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'claim_vectors'))) return;
+
+  // FK制約の有無を確認（DuckDBのduckdb_constraintsシステムテーブルを使用）
+  const constraintReader = await conn.runAndReadAll(`
+    SELECT constraint_type
+    FROM duckdb_constraints()
+    WHERE table_name = 'claim_vectors'
+      AND constraint_type = 'FOREIGN KEY'
+  `);
+  const constraints = constraintReader.getRowObjects();
+
+  // FK制約がない場合はマイグレーション不要
+  if (constraints.length === 0) return;
+
+  console.error('[DB] Migrating claim_vectors to remove FK constraint...');
+
+  const tempName = `claim_vectors_new_${crypto.randomUUID().slice(0, 8)}`;
+
+  // Step 1: 新スキーマで一時テーブルを作成（FK制約なし）
+  await conn.run(`
+    CREATE TABLE ${tempName} (
+      claim_id TEXT PRIMARY KEY,
+      embedding DOUBLE[] NOT NULL,
+      model_version TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Step 2: 旧テーブルからデータをコピー
+  await conn.run(`
+    INSERT INTO ${tempName} (claim_id, embedding, model_version, created_at)
+    SELECT claim_id, embedding, model_version, created_at FROM claim_vectors
+  `);
+
+  // Step 3: 旧テーブルのインデックスを削除（存在する場合）
+  await conn.run('DROP INDEX IF EXISTS idx_claim_vectors_claim_id');
+
+  // Step 4: 旧テーブルを削除
+  await conn.run('DROP TABLE claim_vectors');
+
+  // Step 5: 一時テーブルをリネーム
+  await conn.run(`ALTER TABLE ${tempName} RENAME TO claim_vectors`);
+
+  // Step 6: インデックスを再作成
+  await conn.run('CREATE INDEX IF NOT EXISTS idx_claim_vectors_claim_id ON claim_vectors(claim_id)');
+
+  console.error('[DB] claim_vectors FK migration completed');
+}
+
+/**
  * DuckDB インスタンスを初期化（非同期）
  * 起動時に一度だけ呼び出す
  */
@@ -204,9 +266,10 @@ export async function getConnection(): Promise<DuckDBConnection> {
 export async function initSchema() {
   const conn = await getConnection();
 
-  // 過去バージョン互換のマイグレーション（Issue #30）
-  // - SCHEMA_SQL内のCREATE INDEXが旧observationsに対して失敗しないよう、先に実施する
-  await migrateLegacyObservations(conn);
+  // 過去バージョン互換のマイグレーション
+  // - SCHEMA_SQL内のCREATE INDEXが旧テーブルに対して失敗しないよう、先に実施する
+  await migrateLegacyObservations(conn); // Issue #30: observationsスキーマ変更
+  await migrateClaimVectorsDropFK(conn); // PR #32: DuckDB FK制約バグ対策
 
   const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())
