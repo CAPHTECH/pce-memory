@@ -132,6 +132,19 @@ async function main() {
       console.error('[Daemon] Observation GC failed (ignored):', e);
     }
 
+    // Issue #30 Review: 定期GC（1時間ごと）を設定
+    // 長時間稼働するデーモンでは期限切れObservationが蓄積するため、定期的に実行
+    const GC_INTERVAL_MS = 60 * 60 * 1000; // 1時間
+    const gcIntervalId = setInterval(async () => {
+      try {
+        await gcExpiredObservations('scrub');
+        console.error('[Daemon] Periodic observation GC completed');
+      } catch (e: unknown) {
+        console.error('[Daemon] Periodic observation GC failed (ignored):', e);
+      }
+    }, GC_INTERVAL_MS);
+    gcIntervalId.unref(); // プロセス終了をブロックしない
+
     // EmbeddingService初期化
     try {
       await initLocalProvider();

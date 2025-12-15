@@ -39,12 +39,8 @@ describe('Schema migration: legacy observations', () => {
     await initRateState();
     await resetRates();
 
-    // 旧テーブルが退避されている
-    const legacyTables = await conn.runAndReadAll(
-      "SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'observations_legacy_%'"
-    );
-    const legacyRows = legacyTables.getRowObjects() as unknown as Array<{ table_name: string }>;
-    expect(legacyRows.length).toBeGreaterThan(0);
+    // Issue #30 Review: copy-and-swap方式では旧テーブルは削除される
+    // 短期TTLのObservationデータなので、バックアップは不要
 
     // 新テーブルに必須カラムが存在し、データがコピーされている
     const reader = await conn.runAndReadAll(

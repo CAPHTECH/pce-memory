@@ -5,7 +5,7 @@
  * index.tsから抽出し、再利用可能にした。
  */
 
-import { boundaryValidate } from '@pce/boundary';
+import { boundaryValidate, allowTagMatches as boundaryAllowTagMatches } from '@pce/boundary';
 import { computeContentHash } from '@pce/embeddings';
 import { upsertClaim, upsertClaimWithEmbedding, findClaimById } from '../store/claims.js';
 import type { Provenance } from '../store/claims.js';
@@ -108,15 +108,9 @@ function err(code: ErrorCode, message: string, request_id: string) {
   return { error: { code, message }, request_id };
 }
 
-/**
- * allowタグの簡易マッチ（"tool:*" などの末尾ワイルドカードをサポート）
- */
-function allowTagMatches(pattern: string, tag: string): boolean {
-  if (pattern === '*' || tag === '*') return true;
-  if (pattern.endsWith('*')) return tag.startsWith(pattern.slice(0, -1));
-  if (tag.endsWith('*')) return pattern.startsWith(tag.slice(0, -1));
-  return pattern === tag;
-}
+// Issue #30 Review: allowTagMatchesを@pce/boundaryからインポートして重複排除
+// 後方互換性のためローカルエイリアスを維持
+const allowTagMatches = boundaryAllowTagMatches;
 
 function isAllowedByBoundary(allowList: string[], requestedAllow: string[]): boolean {
   return allowList.some((p) => requestedAllow.some((t) => allowTagMatches(p, t)));
@@ -530,6 +524,23 @@ export async function handleObserve(args: Record<string, unknown>) {
           { isError: true }
         );
       }
+      // Issue #30 Review: 各タグの長さとパターンを検証（JSONインジェクション/DB肥大化防止）
+      const TAG_MAX_LENGTH = 256;
+      const TAG_PATTERN = /^[\w\-:.@/]+$/; // 安全な文字セット（英数字、ハイフン、コロン、ドット、アット、スラッシュ）
+      for (const tag of tagsList) {
+        if (tag.length > TAG_MAX_LENGTH) {
+          return createToolResult(
+            { ...err('VALIDATION_ERROR', `tag too long (max ${TAG_MAX_LENGTH})`, reqId), trace_id: traceId },
+            { isError: true }
+          );
+        }
+        if (!TAG_PATTERN.test(tag)) {
+          return createToolResult(
+            { ...err('VALIDATION_ERROR', 'tag contains invalid characters', reqId), trace_id: traceId },
+            { isError: true }
+          );
+        }
+      }
     }
 
     // ttl_days（default + clamp）
@@ -687,7 +698,12 @@ export async function handleObserve(args: Record<string, unknown>) {
     }
 
     const observationId = `obs_${crypto.randomUUID().slice(0, 8)}`;
-    const contentDigest = `sha256:${computeContentHash(content)}`;
+    // Issue #30 Review: secretの場合はdigestも保存しない（短いシークレットのハッシュから推測されるリスク）
+    // 代わりに固定のプレースホルダを使用
+    const contentDigest =
+      effectiveBoundaryClass === 'secret'
+        ? 'sha256:REDACTED_SECRET'
+        : `sha256:${computeContentHash(content)}`;
     const contentLength = contentBytes;
     const expiresAt = new Date(Date.now() + ttlDays * 86_400_000).toISOString();
 

@@ -56,6 +56,17 @@ function toDateFromLegacyCreatedAt(value: unknown): Date | undefined {
   return undefined;
 }
 
+/**
+ * レガシーobservationsテーブルのマイグレーション
+ *
+ * Issue #30 Review: クラッシュ耐性を向上させるため「copy-and-swap」方式を採用
+ * 1. 新スキーマで一時テーブルを作成
+ * 2. 旧テーブルからデータをコピー
+ * 3. 旧テーブルを削除（バックアップとしてリネームではなく削除）
+ * 4. 一時テーブルをリネームして正式名にする
+ *
+ * これにより、クラッシュしても一時テーブルが残るだけで旧データは失われない
+ */
 async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> {
   if (!(await tableExists(conn, 'observations'))) return;
 
@@ -64,14 +75,11 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
     !cols.has('content_digest') || !cols.has('expires_at') || !cols.has('content_length');
   if (!isLegacy) return;
 
-  // 旧スキーマ（docs/schema.mdなど）に基づくobservationsが存在する場合、
-  // 新ツール実装が期待するカラム群へ移行する。
-  const legacyName = `observations_legacy_${crypto.randomUUID().slice(0, 8)}`;
-  await conn.run(`ALTER TABLE observations RENAME TO ${legacyName}`);
+  const tempName = `observations_new_${crypto.randomUUID().slice(0, 8)}`;
 
-  // 新スキーマのobservationsを作成
+  // Step 1: 新スキーマで一時テーブルを作成
   await conn.run(`
-    CREATE TABLE IF NOT EXISTS observations (
+    CREATE TABLE ${tempName} (
       id TEXT PRIMARY KEY,
       source_type TEXT NOT NULL,
       source_id TEXT,
@@ -84,12 +92,10 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
       expires_at TIMESTAMP
     )
   `);
-  await conn.run(
-    'CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at)'
-  );
+  await conn.run(`CREATE INDEX idx_${tempName}_expires_at ON ${tempName}(expires_at)`);
 
-  // ベストエフォート移行（Observationは短期TTL想定のため、互換性優先で最低限コピー）
-  const legacyReader = await conn.runAndReadAll(`SELECT * FROM ${legacyName} ORDER BY 1`);
+  // Step 2: 旧テーブルからデータをコピー
+  const legacyReader = await conn.runAndReadAll('SELECT * FROM observations ORDER BY 1');
   const legacyRows = legacyReader.getRowObjects() as unknown as Array<Record<string, unknown>>;
 
   const defaultTtlDaysRaw = Number(process.env['PCE_OBS_TTL_DAYS'] ?? '30');
@@ -113,7 +119,7 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
     const length = Buffer.byteLength(content, 'utf8');
 
     await conn.run(
-      'INSERT INTO observations (id, source_type, source_id, content, content_digest, content_length, actor, tags, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::TIMESTAMP, $10::TIMESTAMP) ON CONFLICT DO NOTHING',
+      `INSERT INTO ${tempName} (id, source_type, source_id, content, content_digest, content_length, actor, tags, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::TIMESTAMP, $10::TIMESTAMP) ON CONFLICT DO NOTHING`,
       [
         id,
         sourceType,
@@ -128,6 +134,19 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
       ]
     );
   }
+
+  // Step 3: 一時テーブルのインデックスを削除（DuckDBはテーブルリネーム時に依存関係エラーになるため）
+  await conn.run(`DROP INDEX IF EXISTS idx_${tempName}_expires_at`);
+
+  // Step 4: 旧テーブルを削除（copy-and-swap方式ではバックアップは不要）
+  // 短期TTLのObservationデータなので、移行失敗時は再生成される想定
+  await conn.run('DROP TABLE observations');
+
+  // Step 5: 一時テーブルをリネーム
+  await conn.run(`ALTER TABLE ${tempName} RENAME TO observations`);
+
+  // Step 6: 新しいインデックスを作成
+  await conn.run('CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at)');
 }
 
 /**

@@ -135,4 +135,115 @@ describe('pce.memory.observe', () => {
     const rows = reader.getRowObjects() as unknown as { content: string | null }[];
     expect(rows[0]?.content).toBeNull();
   });
+
+  // Issue #30 Review: Edge case tests追加
+
+  it('tags validation: 不正な文字を含むタグはエラーになる', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'test content',
+      tags: ['valid-tag', 'invalid<script>tag'],
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain('invalid characters');
+  });
+
+  it('tags validation: 長すぎるタグはエラーになる', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const longTag = 'a'.repeat(300); // 256文字を超える
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'test content',
+      tags: [longTag],
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain('tag too long');
+  });
+
+  it('secret検知時: content_digestがREDACTED_SECRETになる', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const secretText = `sk-${'A'.repeat(30)}`;
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: secretText,
+      extract: { mode: 'noop' },
+    });
+
+    const data = result.structuredContent!;
+    expect(data.effective_boundary_class).toBe('secret');
+
+    // DBのcontent_digestがREDACTED_SECRETになっていることを確認
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll(
+      'SELECT content_digest FROM observations WHERE id = $1',
+      [data.observation_id]
+    );
+    const rows = reader.getRowObjects() as unknown as { content_digest: string }[];
+    expect(rows[0]?.content_digest).toBe('sha256:REDACTED_SECRET');
+  });
+
+  it('GC(scrub): 期限切れ後にactor, source_id, tagsもNULL化される', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'will be scrubbed',
+      actor: 'test-user@example.com',
+      source_id: 'https://example.com/session/123',
+      tags: ['tag1', 'tag2'],
+      ttl_days: 1,
+      extract: { mode: 'noop' },
+    });
+    const data = result.structuredContent!;
+    const observationId = data.observation_id as string;
+
+    // expires_atを過去にする
+    const conn = await getConnection();
+    await conn.run(
+      "UPDATE observations SET expires_at = (CURRENT_TIMESTAMP - INTERVAL '1 day') WHERE id = $1",
+      [observationId]
+    );
+
+    await gcExpiredObservations('scrub');
+
+    const reader = await conn.runAndReadAll(
+      'SELECT content, actor, source_id, tags FROM observations WHERE id = $1',
+      [observationId]
+    );
+    const rows = reader.getRowObjects() as unknown as {
+      content: string | null;
+      actor: string | null;
+      source_id: string | null;
+      tags: unknown;
+    }[];
+    expect(rows[0]?.content).toBeNull();
+    expect(rows[0]?.actor).toBeNull();
+    expect(rows[0]?.source_id).toBeNull();
+    expect(rows[0]?.tags).toBeNull();
+  });
+
+  it('tags validation: 有効なタグパターンは許可される', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    // 許可される文字: [\w\-:.@/]
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'test content',
+      tags: ['valid-tag', 'user:name', 'path/to/resource', 'email@domain.com', 'under_score'],
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent?.observation_id).toBeDefined();
+  });
 });

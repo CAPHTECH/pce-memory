@@ -80,6 +80,17 @@ export async function main() {
     console.error(`[${SERVER_NAME}] Observation GC failed (ignored):`, sanitizeErrorMessage(e));
   }
 
+  // Issue #30 Review: 定期GC（1時間ごと）を設定
+  // stdioモードでも長時間接続される可能性があるため、定期的にGCを実行
+  const GC_INTERVAL_MS = 60 * 60 * 1000; // 1時間
+  setInterval(async () => {
+    try {
+      await gcExpiredObservations('scrub');
+    } catch {
+      // stdioモードではログを最小限に（GC失敗は無視）
+    }
+  }, GC_INTERVAL_MS).unref();
+
   // EmbeddingService初期化（ADR-0004 Hybrid Search用）
   try {
     await initLocalProvider();

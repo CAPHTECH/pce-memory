@@ -76,7 +76,8 @@ export type ObservationGcMode = 'scrub' | 'delete';
 
 /**
  * 期限切れObservationのGC
- * - scrub: contentをNULL化（推奨）
+ * - scrub: content, actor, source_id, tagsをNULL化（推奨）
+ *   → PIIがmetadataに含まれる可能性があるため、contentだけでなく関連フィールドも消去
  * - delete: row削除（監査目的での保持が不要な場合）
  */
 export async function gcExpiredObservations(mode: ObservationGcMode = 'scrub'): Promise<void> {
@@ -87,7 +88,13 @@ export async function gcExpiredObservations(mode: ObservationGcMode = 'scrub'): 
     );
     return;
   }
+  // Issue #30 Review: actor, source_id, tags にもPII（メールアドレス、URL含むユーザーID等）が
+  // 含まれる可能性があるため、TTL後はすべてNULL化してデータ最小化を徹底
   await conn.run(
-    'UPDATE observations SET content = NULL WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND content IS NOT NULL'
+    `UPDATE observations
+     SET content = NULL, actor = NULL, source_id = NULL, tags = NULL
+     WHERE expires_at IS NOT NULL
+       AND expires_at <= CURRENT_TIMESTAMP
+       AND (content IS NOT NULL OR actor IS NOT NULL OR source_id IS NOT NULL OR tags IS NOT NULL)`
   );
 }
