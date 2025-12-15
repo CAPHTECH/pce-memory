@@ -86,6 +86,98 @@
 
 ## 2. Tools
 
+### 2.0 `pce.memory.observe`
+
+**目的**: 生データ（Observation）を**短期TTLで保持**し、必要に応じて Claim に昇格して Evidence を残す（Issue #30）。
+
+- **Request Schema**
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "source_type": { "type": "string", "enum": ["chat", "tool", "file", "http", "system"] },
+    "source_id": { "type": "string" },
+    "content": { "type": "string" },
+    "boundary_class": { "type": "string", "enum": ["public", "internal", "pii", "secret"] },
+    "actor": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "actor": { "type": "string" },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+            "repo": { "type": "string" },
+            "url": { "type": "string", "format": "uri" },
+            "files": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "url": { "type": "string", "format": "uri" },
+        "note": { "type": "string" },
+        "signed": { "type": "boolean" }
+      },
+      "required": ["at"]
+    },
+    "ttl_days": { "type": "number", "minimum": 1 },
+    "extract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["noop", "single_claim_v0"] }
+      }
+    }
+  },
+  "required": ["source_type", "content"]
+}
+```
+
+- **Response Schema**
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "observation_id": { "type": "string", "pattern": "^obs_[A-Za-z0-9]+$" },
+    "claim_ids": { "type": "array", "items": { "type": "string" } },
+    "effective_boundary_class": {
+      "type": "string",
+      "enum": ["public", "internal", "pii", "secret"]
+    },
+    "content_stored": { "type": "boolean" },
+    "content_redacted": { "type": "boolean" },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "policy_version": { "type": "string" },
+    "state": { "type": "string", "enum": ["Uninitialized", "PolicyApplied", "HasClaims", "Ready"] },
+    "request_id": { "type": "string" },
+    "trace_id": { "type": "string" }
+  },
+  "required": ["observation_id", "claim_ids", "policy_version", "state", "request_id", "trace_id"]
+}
+```
+
+- **Notes**
+  - `boundary_class` は任意（省略時は `internal`）。ただし入力内容に応じて **自動的に引き上げ**される場合がある（`effective_boundary_class`）。
+  - `PCE_OBS_MAX_BYTES`（既定 `65536`）で `content` の最大バイト数を制限する。
+  - `PCE_OBS_STORE_MODE`（`raw|redact|digest_only`、既定 `redact`）で保存モードを制御する。
+    - `digest_only`: `content` を保存しない（`content_stored=false`）
+    - `redact`: PIIを簡易redactした内容を保存する（必要時 `content_redacted=true`）
+    - `raw`: 生の `content` を保存する（※運用上は慎重に。`NODE_ENV=production` では `raw` 指定でも `redact` にフォールバック）
+  - `ttl_days` は env/policy により clamp される（デフォルト例: 30日、最大例: 90日）。
+  - `extract.mode=single_claim_v0` は配線確認用の暫定モード（Observation.content を 1 Claim 化）。
+  - **Secret検知**（例: API key / private key block / JWT など）時は fail-safe として:
+    - `effective_boundary_class=secret`
+    - `content` は保存しない（digest-only）
+    - `extract.mode=single_claim_v0` を指定されても `noop` にフォールバックし、`warnings` を返す
+  - 期限後は Observation.content を削除/スクラブし、digest/メタデータのみ保持する運用を推奨（GCは起動時 + best-effortで実行）。
+
 ### 2.1 `pce.memory.activate`
 
 **目的**: クエリとポリシーに基づき **アクティブコンテキスト（AC）** を構成（関数 `r(q, C^L, B, policy, critic)`）。

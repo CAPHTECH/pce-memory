@@ -189,3 +189,21 @@ CREATE TABLE IF NOT EXISTS evidence (
   recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_claim ON evidence(claim_id);
+
+-- ========== Observations（Issue #30） ==========
+
+-- Observationテーブル（短期TTL保持）
+-- Note: content は TTL 期限後に scrub（NULL化）されうる
+CREATE TABLE IF NOT EXISTS observations (
+  id TEXT PRIMARY KEY,
+  source_type TEXT NOT NULL,
+  source_id TEXT,
+  content TEXT,
+  content_digest TEXT NOT NULL,
+  content_length INTEGER NOT NULL,
+  actor TEXT,
+  tags JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at);

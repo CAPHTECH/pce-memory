@@ -26,6 +26,7 @@ import { initDb, initSchema } from './db/connection.js';
 import { setEmbeddingService } from './store/hybridSearch.js';
 import { setAuditLogPath } from './store/logs.js';
 import { initRateState } from './store/rate.js';
+import { gcExpiredObservations } from './store/observations.js';
 import { loadEnv } from './config/env.js';
 import { sanitizeErrorMessage } from './audit/filter.js';
 import * as E from 'fp-ts/Either';
@@ -71,6 +72,24 @@ export async function main() {
   await initDb();
   await initSchema();
   await initRateState();
+
+  // Observation GC（起動時に一度実行。失敗しても起動は継続）
+  try {
+    await gcExpiredObservations('scrub');
+  } catch (e: unknown) {
+    console.error(`[${SERVER_NAME}] Observation GC failed (ignored):`, sanitizeErrorMessage(e));
+  }
+
+  // Issue #30 Review: 定期GC（1時間ごと）を設定
+  // stdioモードでも長時間接続される可能性があるため、定期的にGCを実行
+  const GC_INTERVAL_MS = 60 * 60 * 1000; // 1時間
+  setInterval(async () => {
+    try {
+      await gcExpiredObservations('scrub');
+    } catch {
+      // stdioモードではログを最小限に（GC失敗は無視）
+    }
+  }, GC_INTERVAL_MS).unref();
 
   // EmbeddingService初期化（ADR-0004 Hybrid Search用）
   try {

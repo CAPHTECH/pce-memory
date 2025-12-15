@@ -22,37 +22,49 @@ pnpm add @pce/sdk-ts
 
 ## Usage
 
-```typescript
-import { createPCEClient } from '@pce/sdk-ts';
-import * as TE from 'fp-ts/TaskEither';
+現在の `@pce/sdk-ts` は **プレースホルダー** です（APIは未実装）。
 
-const client = await createPCEClient({
-  transport: 'stdio',
-  command: 'pce-memory',
-});
+MCPクライアント（例: `@modelcontextprotocol/sdk`）からは、以下のツール引数で呼び出せます。
 
-// Observe
-const result = await client.observe({
-  source: 'user_input',
-  content: 'User said: I prefer dark mode',
-  metadata: { session_id: 'sess_123' },
-})();
+### `pce.memory.observe`
 
-// Activate
-const ac = await client.activate({
-  query: 'user preferences',
-  scope: ['session', 'project'],
-  k: 5,
-})();
+```json
+{
+  "source_type": "chat",
+  "source_id": "conv_123",
+  "content": "User said: I prefer dark mode",
+  "boundary_class": "internal",
+  "actor": "user",
+  "tags": ["preference"],
+  "ttl_days": 30,
+  "extract": { "mode": "single_claim_v0" }
+}
+```
+
+Notes:
+
+- `effective_boundary_class` / `warnings` が返る場合があります（例: secret検知時は保存・抽出がスキップされる）。
+
+### `pce.memory.activate`
+
+```json
+{
+  "scope": ["session", "project"],
+  "allow": ["answer:task"],
+  "top_k": 5,
+  "include_meta": true
+}
 ```
 
 ## Supported Tools
 
-- `pce.memory.observe` - 観察の記録
+- `pce.memory.policy.apply` - ポリシー適用
+- `pce.memory.observe` - 観察の記録（短期TTL）
+- `pce.memory.upsert` - Claim登録
 - `pce.memory.activate` - Active Contextの構成
-- `pce.memory.search` - 検索のみ (AC作成なし)
+- `pce.memory.boundary.validate` - 境界チェック
 - `pce.memory.feedback` - フィードバック送信
-- `pce.memory.status` - 統計情報取得
+- `pce.memory.state` - 状態取得
 
 ## Architecture
 

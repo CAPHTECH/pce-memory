@@ -81,6 +81,7 @@ const DEFAULT_TIMESTAMP_FIELDS = [
   'ts',
   'ts_eff',
   'recorded_at',
+  'expires_at',
   'last_reset',
 ];
 

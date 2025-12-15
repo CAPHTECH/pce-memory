@@ -21,6 +21,7 @@ import {
 } from '@pce/embeddings';
 import { setEmbeddingService } from '../store/hybridSearch.js';
 import { initRateState } from '../store/rate.js';
+import { gcExpiredObservations } from '../store/observations.js';
 import { initMemoryState } from '../state/memoryState.js';
 import { registerSystemLayer, getLayerScopeSummary } from '../state/layerScopeState.js';
 import * as E from 'fp-ts/Either';
@@ -123,6 +124,26 @@ async function main() {
     await initDb();
     await initSchema();
     await initRateState();
+
+    // Observation GC（起動時に一度実行。失敗しても起動は継続）
+    try {
+      await gcExpiredObservations('scrub');
+    } catch (e: unknown) {
+      console.error('[Daemon] Observation GC failed (ignored):', e);
+    }
+
+    // Issue #30 Review: 定期GC（1時間ごと）を設定
+    // 長時間稼働するデーモンでは期限切れObservationが蓄積するため、定期的に実行
+    const GC_INTERVAL_MS = 60 * 60 * 1000; // 1時間
+    const gcIntervalId = setInterval(async () => {
+      try {
+        await gcExpiredObservations('scrub');
+        console.error('[Daemon] Periodic observation GC completed');
+      } catch (e: unknown) {
+        console.error('[Daemon] Periodic observation GC failed (ignored):', e);
+      }
+    }, GC_INTERVAL_MS);
+    gcIntervalId.unref(); // プロセス終了をブロックしない
 
     // EmbeddingService初期化
     try {
