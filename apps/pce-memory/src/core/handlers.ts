@@ -2459,7 +2459,8 @@ export async function handleGetPrompt(args: Record<string, unknown>): Promise<{
 export const TOOL_DEFINITIONS = [
   {
     name: 'pce.memory.policy.apply',
-    description: 'Apply policy (invariants, usage tags, redact rules)',
+    description:
+      'Initialize memory system with policy configuration. Call once at session start before using other tools. Configures boundary rules, redaction patterns, and rate limits.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2483,7 +2484,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'pce.memory.observe',
-    description: 'Record an observation (short-term TTL) and optionally extract a claim',
+    description:
+      'Record a temporary observation with auto-expiry (default 30 days). Use for chat logs, tool outputs, file reads, API responses. Set extract.mode="single_claim_v0" to promote to permanent claim. Auto-detects and redacts PII/secrets.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2553,7 +2555,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'pce.memory.upsert',
-    description: 'Register a claim (knowledge fragment). Provenance required',
+    description:
+      'Register a permanent knowledge claim (never auto-deleted). Use for verified decisions, resolved errors, architectural patterns. Requires provenance.at timestamp. Prefer over observe for long-term, validated knowledge.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2655,7 +2658,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'pce.memory.activate',
-    description: 'Build active context (AC) based on query and policy',
+    description:
+      'Retrieve relevant knowledge for current task via hybrid search. Call before starting work to recall past decisions, patterns, and solutions. Returns ranked claims filtered by scope and boundary.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2717,7 +2721,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'pce.memory.boundary.validate',
-    description: 'Pre-generation boundary check / Redact-before-Send',
+    description:
+      'Validate and redact sensitive content before outputting to user. Checks for PII, secrets, and boundary policy violations. Returns sanitized payload safe for external use.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2746,7 +2751,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'pce.memory.feedback',
-    description: 'Update critic with signal (helpful/harmful/outdated/duplicate)',
+    description:
+      'Report knowledge quality after using activated claims. Send helpful when knowledge solved the problem, harmful if it caused errors, outdated if info was stale, duplicate if redundant.',
     inputSchema: {
       type: 'object',
       properties: {
