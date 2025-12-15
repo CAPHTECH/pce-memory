@@ -520,7 +520,11 @@ describe('pce.memory.observe', () => {
       'SELECT kind, scope, boundary_class FROM claims WHERE id = $1',
       [claimId]
     );
-    const rows = reader.getRowObjects() as { kind: string; scope: string; boundary_class: string }[];
+    const rows = reader.getRowObjects() as {
+      kind: string;
+      scope: string;
+      boundary_class: string;
+    }[];
     expect(rows[0]?.kind).toBe('fact');
     expect(rows[0]?.scope).toBe('session');
     expect(rows[0]?.boundary_class).toBe('internal'); // デフォルト
@@ -596,9 +600,10 @@ describe('pce.memory.observe', () => {
     const claimId = (obsData.claim_ids as string[])[0]!;
 
     const conn = await getConnection();
-    const reader = await conn.runAndReadAll('SELECT text, boundary_class FROM claims WHERE id = $1', [
-      claimId,
-    ]);
+    const reader = await conn.runAndReadAll(
+      'SELECT text, boundary_class FROM claims WHERE id = $1',
+      [claimId]
+    );
     const rows = reader.getRowObjects() as { text: string; boundary_class: string }[];
 
     // claimのtextはリダクション済み

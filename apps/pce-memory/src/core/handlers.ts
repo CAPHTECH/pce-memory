@@ -530,13 +530,19 @@ export async function handleObserve(args: Record<string, unknown>) {
       for (const tag of tagsList) {
         if (tag.length > TAG_MAX_LENGTH) {
           return createToolResult(
-            { ...err('VALIDATION_ERROR', `tag too long (max ${TAG_MAX_LENGTH})`, reqId), trace_id: traceId },
+            {
+              ...err('VALIDATION_ERROR', `tag too long (max ${TAG_MAX_LENGTH})`, reqId),
+              trace_id: traceId,
+            },
             { isError: true }
           );
         }
         if (!TAG_PATTERN.test(tag)) {
           return createToolResult(
-            { ...err('VALIDATION_ERROR', 'tag contains invalid characters', reqId), trace_id: traceId },
+            {
+              ...err('VALIDATION_ERROR', 'tag contains invalid characters', reqId),
+              trace_id: traceId,
+            },
             { isError: true }
           );
         }

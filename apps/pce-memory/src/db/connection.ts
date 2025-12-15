@@ -146,7 +146,9 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
   await conn.run(`ALTER TABLE ${tempName} RENAME TO observations`);
 
   // Step 6: 新しいインデックスを作成
-  await conn.run('CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at)');
+  await conn.run(
+    'CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at)'
+  );
 }
 
 /**

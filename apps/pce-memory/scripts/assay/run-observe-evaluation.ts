@@ -151,7 +151,14 @@ async function runTestCase(
           `Expected error code ${expected.error_code} but got ${(observeResult.error as { code?: string })?.code}`
         );
       }
-      return { id: testCase.id, description: testCase.description, passed: errors.length === 0, duration, errors, actual: observeResult };
+      return {
+        id: testCase.id,
+        description: testCase.description,
+        passed: errors.length === 0,
+        duration,
+        errors,
+        actual: observeResult,
+      };
     }
 
     // 成功ケースの検証
@@ -205,7 +212,11 @@ async function runTestCase(
     }
 
     // claim_retrievable の検証（activateで取得できるか）
-    if (expected.claim_retrievable && Array.isArray(observeResult.claim_ids) && observeResult.claim_ids.length > 0) {
+    if (
+      expected.claim_retrievable &&
+      Array.isArray(observeResult.claim_ids) &&
+      observeResult.claim_ids.length > 0
+    ) {
       const activateResult = await runner.callTool('pce.memory.activate', {
         scope: ['session'],
         allow: ['answer:task'],
@@ -216,7 +227,10 @@ async function runTestCase(
       const claimId = observeResult.claim_ids[0];
       const found = claims.some(
         (c: unknown) =>
-          c && typeof c === 'object' && 'claim' in c && (c as { claim?: { id?: string } }).claim?.id === claimId
+          c &&
+          typeof c === 'object' &&
+          'claim' in c &&
+          (c as { claim?: { id?: string } }).claim?.id === claimId
       );
 
       if (!found) {
@@ -227,7 +241,10 @@ async function runTestCase(
       if (expected.claim_has_evidence && found) {
         const matchedClaim = claims.find(
           (c: unknown) =>
-            c && typeof c === 'object' && 'claim' in c && (c as { claim?: { id?: string } }).claim?.id === claimId
+            c &&
+            typeof c === 'object' &&
+            'claim' in c &&
+            (c as { claim?: { id?: string } }).claim?.id === claimId
         ) as { evidences?: Array<{ source_type?: string; source_id?: string }> } | undefined;
 
         const evidences = matchedClaim?.evidences ?? [];
