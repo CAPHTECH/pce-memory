@@ -19,6 +19,7 @@ import type { Evidence } from '../store/evidence.js';
 import {
   gcExpiredObservations,
   insertObservation,
+  type InsertObservationInput,
   type ObservationSourceType,
 } from '../store/observations.js';
 import { analyzeTextSensitivity, redactPiiText } from '../audit/redactText.js';
@@ -655,17 +656,19 @@ export async function handleObserve(args: Record<string, unknown>) {
     const contentLength = contentBytes;
     const expiresAt = new Date(Date.now() + ttlDays * 86_400_000).toISOString();
 
-    await insertObservation({
+    const observationInput: InsertObservationInput = {
       id: observationId,
       source_type: source_type as ObservationSourceType,
-      source_id: typeof source_id === 'string' ? source_id : undefined,
       content: contentToStore,
       content_digest: contentDigest,
       content_length: contentLength,
-      actor: typeof actor === 'string' ? actor : undefined,
-      tags: tagsList,
       expires_at: expiresAt,
-    });
+    };
+    // exactOptionalPropertyTypes対応: undefinedを明示的に渡さない
+    if (typeof source_id === 'string') observationInput.source_id = source_id;
+    if (typeof actor === 'string') observationInput.actor = actor;
+    if (tagsList !== undefined) observationInput.tags = tagsList;
+    await insertObservation(observationInput);
 
     const claimIds: string[] = [];
     const effectiveExtractMode = mode === 'single_claim_v0' && effectiveBoundaryClass === 'secret' ? 'noop' : mode;
