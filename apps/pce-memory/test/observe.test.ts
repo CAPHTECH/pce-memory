@@ -246,4 +246,239 @@ describe('pce.memory.observe', () => {
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent?.observation_id).toBeDefined();
   });
+
+  // === 追加テスト: 状態・入力検証 ===
+
+  it('STATE_ERROR: Uninitializedでobserveするとエラー', async () => {
+    // policy.applyを呼ばずにobserve
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'test',
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('STATE_ERROR');
+  });
+
+  it('VALIDATION_ERROR: source_type未指定', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      content: 'test',
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('VALIDATION_ERROR: content未指定', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('VALIDATION_ERROR: boundary_class不正値', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'test',
+      boundary_class: 'invalid_class',
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain('boundary_class');
+  });
+
+  it('VALIDATION_ERROR: contentサイズ上限超過', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    // デフォルト上限は64KB
+    const largeContent = 'x'.repeat(100_000);
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: largeContent,
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain('too large');
+  });
+
+  // === 追加テスト: PII/GC ===
+
+  it('PII検知: メールアドレスがリダクションされDBに保存', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: '連絡先: test@example.com です',
+      extract: { mode: 'noop' },
+    });
+
+    const data = result.structuredContent!;
+    expect(data.effective_boundary_class).toBe('pii');
+    expect(data.content_stored).toBe(true);
+    expect(data.content_redacted).toBe(true);
+
+    // DBにリダクションされた値が保存されていることを確認
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT content FROM observations WHERE id = $1', [
+      data.observation_id,
+    ]);
+    const rows = reader.getRowObjects() as unknown as { content: string }[];
+    expect(rows[0]?.content).toContain('[REDACTED]');
+    expect(rows[0]?.content).not.toContain('test@example.com');
+  });
+
+  it('PII検知: 電話番号がリダクションされDBに保存', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: '電話: 090-1234-5678 まで',
+      extract: { mode: 'noop' },
+    });
+
+    const data = result.structuredContent!;
+    expect(data.effective_boundary_class).toBe('pii');
+    expect(data.content_redacted).toBe(true);
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT content FROM observations WHERE id = $1', [
+      data.observation_id,
+    ]);
+    const rows = reader.getRowObjects() as unknown as { content: string }[];
+    expect(rows[0]?.content).toContain('[REDACTED]');
+    expect(rows[0]?.content).not.toContain('090-1234-5678');
+  });
+
+  it('GC(delete): 期限切れ後に行が削除される', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'will be deleted',
+      ttl_days: 1,
+      extract: { mode: 'noop' },
+    });
+    const observationId = result.structuredContent!.observation_id as string;
+
+    const conn = await getConnection();
+    await conn.run(
+      "UPDATE observations SET expires_at = (CURRENT_TIMESTAMP - INTERVAL '1 day') WHERE id = $1",
+      [observationId]
+    );
+
+    await gcExpiredObservations('delete');
+
+    const reader = await conn.runAndReadAll('SELECT id FROM observations WHERE id = $1', [
+      observationId,
+    ]);
+    const rows = reader.getRowObjects() as unknown as { id: string }[];
+    expect(rows).toHaveLength(0);
+  });
+
+  // === 追加テスト: エッジケース ===
+
+  it('空content: 空文字列でもobserve可能', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: '',
+      extract: { mode: 'noop' },
+    });
+
+    // 空文字列はエラーになる（contentは必須）
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('日本語content: マルチバイト文字が正しく保存される', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const japaneseContent = 'これは日本語のテストです。絵文字も含む🎉';
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: japaneseContent,
+      extract: { mode: 'noop' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const data = result.structuredContent!;
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT content FROM observations WHERE id = $1', [
+      data.observation_id,
+    ]);
+    const rows = reader.getRowObjects() as unknown as { content: string }[];
+    expect(rows[0]?.content).toBe(japaneseContent);
+  });
+
+  it('重複observe: 同一contentでも別のobservation_idが生成される', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const content = 'duplicate content test';
+
+    const result1 = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content,
+      extract: { mode: 'noop' },
+    });
+
+    const result2 = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content,
+      extract: { mode: 'noop' },
+    });
+
+    expect(result1.structuredContent?.observation_id).not.toBe(
+      result2.structuredContent?.observation_id
+    );
+  });
+
+  it('source_type全種: 各source_typeでobserve可能', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const sourceTypes = ['chat', 'tool', 'file', 'http', 'system'] as const;
+
+    for (const sourceType of sourceTypes) {
+      const result = await dispatchTool('pce.memory.observe', {
+        source_type: sourceType,
+        content: `content for ${sourceType}`,
+        extract: { mode: 'noop' },
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent?.observation_id).toBeDefined();
+    }
+  });
+
+  it('boundary_class昇格: 明示的publicでもPII検知でpiiに昇格', async () => {
+    await dispatchTool('pce.memory.policy.apply', {});
+
+    const result = await dispatchTool('pce.memory.observe', {
+      source_type: 'chat',
+      content: 'public info with email: secret@example.com',
+      boundary_class: 'public',
+      extract: { mode: 'noop' },
+    });
+
+    const data = result.structuredContent!;
+    // PIIが検知されるとpiiに昇格
+    expect(data.effective_boundary_class).toBe('pii');
+    expect(data.content_redacted).toBe(true);
+  });
 });
