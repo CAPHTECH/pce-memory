@@ -6,6 +6,7 @@
  */
 
 import { boundaryValidate } from '@pce/boundary';
+import { computeContentHash } from '@pce/embeddings';
 import { upsertClaim, upsertClaimWithEmbedding, findClaimById } from '../store/claims.js';
 import type { Provenance } from '../store/claims.js';
 import { hybridSearchPaginated, getEmbeddingService } from '../store/hybridSearch.js';
@@ -13,8 +14,14 @@ import { upsertEntity, linkClaimEntity, queryEntities } from '../store/entities.
 import type { EntityInput, EntityQueryFilters } from '../store/entities.js';
 import { upsertRelation, queryRelations } from '../store/relations.js';
 import type { RelationInput, RelationQueryFilters } from '../store/relations.js';
-import { getEvidenceForClaims } from '../store/evidence.js';
+import { getEvidenceForClaims, insertEvidence } from '../store/evidence.js';
 import type { Evidence } from '../store/evidence.js';
+import {
+  gcExpiredObservations,
+  insertObservation,
+  type ObservationSourceType,
+} from '../store/observations.js';
+import { analyzeTextSensitivity, redactPiiText } from '../audit/redactText.js';
 import { saveActiveContext } from '../store/activeContext.js';
 import { recordFeedback } from '../store/feedback.js';
 import { appendLog } from '../store/logs.js';
@@ -98,6 +105,20 @@ function validateString(field: string, val: unknown, max: number) {
 
 function err(code: ErrorCode, message: string, request_id: string) {
   return { error: { code, message }, request_id };
+}
+
+/**
+ * allowタグの簡易マッチ（"tool:*" などの末尾ワイルドカードをサポート）
+ */
+function allowTagMatches(pattern: string, tag: string): boolean {
+  if (pattern === '*' || tag === '*') return true;
+  if (pattern.endsWith('*')) return tag.startsWith(pattern.slice(0, -1));
+  if (tag.endsWith('*')) return pattern.startsWith(tag.slice(0, -1));
+  return pattern === tag;
+}
+
+function isAllowedByBoundary(allowList: string[], requestedAllow: string[]): boolean {
+  return allowList.some((p) => requestedAllow.some((t) => allowTagMatches(p, t)));
 }
 
 // ========== Upsert Helper Functions ==========
@@ -398,6 +419,348 @@ export async function handleUpsert(args: Record<string, unknown>) {
   }
 }
 
+export async function handleObserve(args: Record<string, unknown>) {
+  const { source_type, source_id, content, actor, tags, provenance, ttl_days, extract, boundary_class } = args as {
+    source_type?: unknown;
+    source_id?: unknown;
+    content?: unknown;
+    actor?: unknown;
+    tags?: unknown;
+    provenance?: Provenance;
+    ttl_days?: unknown;
+    extract?: unknown;
+    boundary_class?: unknown;
+  };
+
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  // TLA+ EnterScope: リクエストスコープを開始
+  const scopeResult = enterRequestScope(reqId);
+  if (E.isLeft(scopeResult)) {
+    return createToolResult(
+      {
+        ...err('STATE_ERROR', scopeResult.left.message, reqId),
+        trace_id: traceId,
+      },
+      { isError: true }
+    );
+  }
+  const scopeId = scopeResult.right;
+
+  try {
+    if (!canDoUpsert()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!isInActiveScope(scopeId)) {
+      return createToolResult(
+        { ...err('STATE_ERROR', 'scope not active', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (typeof source_type !== 'string') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'source_type is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const allowedSourceTypes: ObservationSourceType[] = ['chat', 'tool', 'file', 'http', 'system'];
+    if (!allowedSourceTypes.includes(source_type as ObservationSourceType)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'invalid source_type', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (typeof content !== 'string' || content.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'content is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // サイズ制限（将来的にはpolicy/envで調整）
+    try {
+      if (source_id !== undefined) validateString('source_id', source_id, 2_048);
+      if (actor !== undefined) validateString('actor', actor, 512);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    let tagsList: string[] | undefined;
+    if (tags !== undefined) {
+      if (!Array.isArray(tags) || tags.some((t) => typeof t !== 'string')) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'tags must be string[]', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+      tagsList = tags as string[];
+      if (tagsList.length > 32) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'too many tags', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
+    // ttl_days（default + clamp）
+    const defaultTtlDaysRaw = Number(process.env['PCE_OBS_TTL_DAYS'] ?? '30');
+    const defaultTtlDays =
+      Number.isFinite(defaultTtlDaysRaw) && defaultTtlDaysRaw > 0 ? defaultTtlDaysRaw : 30;
+    const maxTtlDaysRaw = Number(process.env['PCE_OBS_TTL_DAYS_MAX'] ?? '90');
+    const maxTtlDays = Number.isFinite(maxTtlDaysRaw) && maxTtlDaysRaw > 0 ? maxTtlDaysRaw : 90;
+
+    const requestedTtl =
+      typeof ttl_days === 'number'
+        ? ttl_days
+        : typeof ttl_days === 'string'
+          ? Number(ttl_days)
+          : undefined;
+    if (requestedTtl !== undefined && (!Number.isFinite(requestedTtl) || requestedTtl < 1)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'ttl_days must be a positive number', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const ttlDays = Math.min(requestedTtl ?? defaultTtlDays, maxTtlDays);
+
+    const extractMode =
+      typeof extract === 'object' && extract !== null && 'mode' in extract
+        ? (extract as { mode?: unknown }).mode
+        : undefined;
+    const mode = (extractMode ?? 'noop') as 'noop' | 'single_claim_v0';
+    if (mode !== 'noop' && mode !== 'single_claim_v0') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'invalid extract.mode', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // provenanceは任意。ただし存在する場合は at が必須
+    if (provenance !== undefined) {
+      if (typeof provenance !== 'object' || provenance === null || typeof provenance.at !== 'string') {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'provenance.at is required', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
+    // ========== Observation Security（best-effort / fail-safe） ==========
+    const warnings: string[] = [];
+
+    const policy = getPolicy();
+    const allowedBoundaryClasses = ['public', 'internal', 'pii', 'secret'] as const;
+    type BoundaryClassInput = (typeof allowedBoundaryClasses)[number];
+
+    const requestedBoundaryClass: BoundaryClassInput | null = (() => {
+      if (boundary_class === undefined) return 'internal';
+      if (typeof boundary_class !== 'string') return null;
+      if (!allowedBoundaryClasses.includes(boundary_class as BoundaryClassInput)) return null;
+      return boundary_class as BoundaryClassInput;
+    })();
+    if (requestedBoundaryClass === null) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'boundary_class must be one of public|internal|pii|secret', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (!policy.boundary_classes[requestedBoundaryClass]) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown boundary_class', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const maxBytesRaw = Number(process.env['PCE_OBS_MAX_BYTES'] ?? '65536');
+    const maxBytes = Number.isFinite(maxBytesRaw) && maxBytesRaw > 0 ? maxBytesRaw : 65_536;
+    const contentBytes = Buffer.byteLength(content, 'utf8');
+    if (contentBytes > maxBytes) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'content too large', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const sensitivity = analyzeTextSensitivity(content);
+    const piiRedaction = redactPiiText(content);
+    const detectedBoundaryClass: BoundaryClassInput =
+      sensitivity.secret.length > 0
+        ? 'secret'
+        : sensitivity.pii.length > 0 || piiRedaction.hits.length > 0
+          ? 'pii'
+          : requestedBoundaryClass;
+
+    const severity: Record<BoundaryClassInput, number> = { public: 0, internal: 1, pii: 2, secret: 3 };
+    const effectiveBoundaryClass: BoundaryClassInput =
+      severity[detectedBoundaryClass] > severity[requestedBoundaryClass]
+        ? detectedBoundaryClass
+        : requestedBoundaryClass;
+
+    type ObsStoreMode = 'raw' | 'redact' | 'digest_only';
+    const storeModeRaw = String(process.env['PCE_OBS_STORE_MODE'] ?? 'redact').toLowerCase();
+    const envStoreMode: ObsStoreMode =
+      storeModeRaw === 'raw' || storeModeRaw === 'digest_only' || storeModeRaw === 'redact'
+        ? (storeModeRaw as ObsStoreMode)
+        : 'redact';
+
+    const modeByBoundary: ObsStoreMode =
+      effectiveBoundaryClass === 'secret' ? 'digest_only' : effectiveBoundaryClass === 'pii' ? 'redact' : envStoreMode;
+
+    const effectiveStoreMode: ObsStoreMode =
+      process.env['NODE_ENV'] === 'production' && modeByBoundary === 'raw' ? 'redact' : modeByBoundary;
+
+    const contentToStore: string | null =
+      effectiveStoreMode === 'digest_only'
+        ? null
+        : effectiveStoreMode === 'redact'
+          ? piiRedaction.redacted
+          : content;
+    const contentWasRedacted = contentToStore !== null && contentToStore !== content;
+
+    if (effectiveStoreMode !== 'raw' && sensitivity.secret.length > 0) {
+      warnings.push('OBS_CONTENT_NOT_STORED_SECRET');
+    }
+    if (contentWasRedacted) {
+      warnings.push('OBS_CONTENT_REDACTED');
+    }
+
+    // 期限切れObservationをGC（ベストエフォート）
+    try {
+      await gcExpiredObservations('scrub');
+    } catch {
+      // GC失敗はobserve本体を止めない（監査ログに頼る）
+    }
+
+    const observationId = `obs_${crypto.randomUUID().slice(0, 8)}`;
+    const contentDigest = `sha256:${computeContentHash(content)}`;
+    const contentLength = contentBytes;
+    const expiresAt = new Date(Date.now() + ttlDays * 86_400_000).toISOString();
+
+    await insertObservation({
+      id: observationId,
+      source_type: source_type as ObservationSourceType,
+      source_id: typeof source_id === 'string' ? source_id : undefined,
+      content: contentToStore,
+      content_digest: contentDigest,
+      content_length: contentLength,
+      actor: typeof actor === 'string' ? actor : undefined,
+      tags: tagsList,
+      expires_at: expiresAt,
+    });
+
+    const claimIds: string[] = [];
+    const effectiveExtractMode = mode === 'single_claim_v0' && effectiveBoundaryClass === 'secret' ? 'noop' : mode;
+    if (mode === 'single_claim_v0' && effectiveExtractMode === 'noop') {
+      warnings.push('EXTRACT_SKIPPED_SECRET');
+    }
+
+    if (effectiveExtractMode === 'single_claim_v0') {
+      // 暫定: Observation.contentをそのまま1Claim化（配線確認用）
+      if (effectiveBoundaryClass === 'secret') {
+        // 防御的（ここには来ない想定）
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'secret content cannot be extracted', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+
+      const claimText = effectiveBoundaryClass === 'pii' ? piiRedaction.redacted : content;
+      const claimHash = `sha256:${computeContentHash(claimText)}`;
+
+      const claimInput = {
+        text: claimText,
+        kind: 'fact',
+        scope: 'session',
+        boundary_class: effectiveBoundaryClass,
+        content_hash: claimHash,
+        ...(provenance !== undefined ? { provenance } : {}),
+      };
+
+      const embeddingService = getEmbeddingService();
+      const { claim, isNew } = embeddingService
+        ? await upsertClaimWithEmbedding(claimInput, embeddingService)
+        : await upsertClaim(claimInput);
+
+      // スコープへのリソース登録（claimのみ）
+      const addResult = addResourceToCurrentScope(scopeId, claim.id);
+      if (E.isLeft(addResult)) {
+        console.error(`[Handler] Failed to add resource to scope: ${addResult.left.message}`);
+      }
+
+      transitionToHasClaims(isNew);
+      claimIds.push(claim.id);
+
+      // Evidence: Claimの根拠としてObservationを記録（長期保持は最小限に寄せる）
+      const safeSnippet = `${contentDigest} bytes=${contentLength}`;
+      await insertEvidence({
+        id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+        claim_id: claim.id,
+        source_type: 'observation',
+        source_id: observationId,
+        snippet: safeSnippet,
+        at: provenance?.at ?? new Date().toISOString(),
+      });
+    }
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'observe',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      observation_id: observationId,
+      claim_ids: claimIds,
+      effective_boundary_class: effectiveBoundaryClass,
+      content_stored: contentToStore !== null,
+      content_redacted: contentWasRedacted,
+      ...(warnings.length > 0 ? { warnings } : {}),
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'observe',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  } finally {
+    exitRequestScope(scopeId);
+  }
+}
+
 export async function handleActivate(args: Record<string, unknown>) {
   const { scope, allow, top_k, q, cursor, include_meta } = args as {
     scope?: unknown;
@@ -448,7 +811,15 @@ export async function handleActivate(args: Record<string, unknown>) {
 
     const searchConfig = cursor !== undefined ? { cursor } : {};
     const searchResult = await hybridSearchPaginated(scope, top_k ?? 12, q, searchConfig);
-    const claims = searchResult.results.map((r) => r.claim);
+    const policy = getPolicy();
+    const allowTags = allow as string[];
+    const allowedResults = searchResult.results.filter((r) => {
+      const bc = policy.boundary_classes[r.claim.boundary_class];
+      if (!bc) return false;
+      return isAllowedByBoundary(bc.allow ?? [], allowTags);
+    });
+
+    const claims = allowedResults.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({ id: acId, claims });
 
@@ -458,7 +829,7 @@ export async function handleActivate(args: Record<string, unknown>) {
       evidenceMap = await getEvidenceForClaims(claimIds);
     }
 
-    const scoredItems = searchResult.results.map((r) => ({
+    const scoredItems = allowedResults.map((r) => ({
       claim: r.claim,
       score: r.score,
       evidences: evidenceMap?.get(r.claim.id) ?? [],
@@ -1411,6 +1782,8 @@ export async function dispatchTool(
   switch (name) {
     case 'pce.memory.policy.apply':
       return handlePolicyApply(args);
+    case 'pce.memory.observe':
+      return handleObserve(args);
     case 'pce.memory.upsert':
       return handleUpsert(args);
     case 'pce.memory.upsert.entity':
@@ -2042,6 +2415,69 @@ export const TOOL_DEFINITIONS = [
         trace_id: { type: 'string', description: 'Trace identifier for debugging' },
       },
       required: ['policy_version', 'state', 'request_id', 'trace_id'],
+    },
+  },
+  {
+    name: 'pce.memory.observe',
+    description: 'Record an observation (short-term TTL) and optionally extract a claim',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_type: { type: 'string', enum: ['chat', 'tool', 'file', 'http', 'system'] },
+        source_id: { type: 'string' },
+        content: { type: 'string' },
+        boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
+        actor: { type: 'string' },
+        tags: { type: 'array', items: { type: 'string' } },
+        provenance: {
+          type: 'object',
+          properties: {
+            at: { type: 'string', format: 'date-time' },
+            actor: { type: 'string' },
+            git: {
+              type: 'object',
+              properties: {
+                commit: { type: 'string' },
+                repo: { type: 'string' },
+                url: { type: 'string' },
+                files: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            url: { type: 'string' },
+            note: { type: 'string' },
+            signed: { type: 'boolean' },
+          },
+          required: ['at'],
+        },
+        ttl_days: { type: 'number', minimum: 1 },
+        extract: {
+          type: 'object',
+          properties: {
+            mode: { type: 'string', enum: ['noop', 'single_claim_v0'] },
+          },
+        },
+      },
+      required: ['source_type', 'content'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        observation_id: { type: 'string', description: 'Observation ID' },
+        claim_ids: { type: 'array', items: { type: 'string' }, description: 'Extracted claim IDs' },
+        effective_boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
+        content_stored: { type: 'boolean' },
+        content_redacted: { type: 'boolean' },
+        warnings: { type: 'array', items: { type: 'string' } },
+        policy_version: { type: 'string', description: 'Policy version' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+          description: 'Current state machine state',
+        },
+        request_id: { type: 'string', description: 'Unique request identifier' },
+        trace_id: { type: 'string', description: 'Trace identifier for debugging' },
+      },
+      required: ['observation_id', 'claim_ids', 'policy_version', 'state', 'request_id', 'trace_id'],
     },
   },
   {

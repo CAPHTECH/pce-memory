@@ -21,6 +21,7 @@ import {
 } from '@pce/embeddings';
 import { setEmbeddingService } from '../store/hybridSearch.js';
 import { initRateState } from '../store/rate.js';
+import { gcExpiredObservations } from '../store/observations.js';
 import { initMemoryState } from '../state/memoryState.js';
 import { registerSystemLayer, getLayerScopeSummary } from '../state/layerScopeState.js';
 import * as E from 'fp-ts/Either';
@@ -123,6 +124,13 @@ async function main() {
     await initDb();
     await initSchema();
     await initRateState();
+
+    // Observation GC（起動時に一度実行。失敗しても起動は継続）
+    try {
+      await gcExpiredObservations('scrub');
+    } catch (e: unknown) {
+      console.error('[Daemon] Observation GC failed (ignored):', e);
+    }
 
     // EmbeddingService初期化
     try {

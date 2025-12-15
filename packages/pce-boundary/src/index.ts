@@ -17,15 +17,26 @@ const SAFE_REDACT_PATTERNS: Record<string, RegExp> = {
   phone: /\b\d{2,4}[- ]?\d{2,4}[- ]?\d{3,4}\b/g,
 };
 
+function allowTagMatches(pattern: string, tag: string): boolean {
+  if (pattern === '*' || tag === '*') return true;
+  if (pattern.endsWith('*')) return tag.startsWith(pattern.slice(0, -1));
+  if (tag.endsWith('*')) return pattern.startsWith(tag.slice(0, -1));
+  return pattern === tag;
+}
+
 export function boundaryValidate(
   input: BoundaryValidateInput,
   policy: BoundaryPolicy
 ): BoundaryValidateResult {
   const { payload, allow, scope } = input;
   const bc = policy.boundary_classes;
-  const matched = Object.values(bc).find((c) =>
-    c.allow.some((a) => allow.includes(a) || a === '*')
-  );
+  const classes = Object.values(bc);
+  // wildcard("*")を持つboundary_classは最後のフォールバックとして扱う（publicが常に先勝ちしないようにする）
+  const specific =
+    classes.find((c) => c.allow.some((a) => a !== '*' && allow.some((t) => allowTagMatches(a, t)))) ??
+    classes.find((c) => c.allow.some((a) => a === '*'));
+
+  const matched = specific;
   if (!matched) {
     return { allowed: false, reason: 'BOUNDARY_DENIED' };
   }

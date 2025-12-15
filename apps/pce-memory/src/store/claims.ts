@@ -1,5 +1,5 @@
 import { getConnection } from '../db/connection.js';
-import type { EmbeddingService } from '@pce/embeddings';
+import type { EmbeddingService, SensitivityLevel } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
 import { saveClaimVector, splitQueryWords, buildWordOrCondition } from './hybridSearch.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
@@ -319,9 +319,16 @@ export async function upsertClaimWithEmbedding(
 
   // 2. 新規の場合のみ埋め込み生成・保存
   if (result.isNew) {
+    const sensitivity: SensitivityLevel =
+      c.boundary_class === 'public'
+        ? 'public'
+        : c.boundary_class === 'internal'
+          ? 'internal'
+          : 'confidential'; // pii/secret は redact-before-embed
+
     const embedResult = await embeddingService.embed({
       text: c.text,
-      sensitivity: 'internal',
+      sensitivity,
     })();
 
     // 埋め込み生成成功時のみ保存（失敗時はClaim登録だけ成功）

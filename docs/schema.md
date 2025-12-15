@@ -1,5 +1,8 @@
 ## 0. 方針と前提
 
+- 本ドキュメントは **設計メモ/草案** を含みます（DuckDB/SQLiteの記述が混在しています）。
+- **実装のソース・オブ・トゥルース** は `apps/pce-memory/src/db/schema.sql` とし、差分がある場合はそちらを優先してください。
+
 - 時刻：**TIMESTAMP（UTC）** を格納（アプリ側は必要に応じて epoch 秒に変換）
 
 ## 1. 初期セットアップ（任意拡張のロード例）
@@ -23,11 +26,19 @@ CREATE MACRO IF NOT EXISTS cos_sim(a, b) AS (
 ### 4.1 Observations（生観測）
 
 ```sql
-CREATE TABLE observations (
-  id          BIGINT PRIMARY KEY,
-  created_at    TIMESTAMP NOT NULL   -- UTC
-  -- その他のカラム
+CREATE TABLE IF NOT EXISTS observations (
+  id             TEXT PRIMARY KEY,
+  source_type    TEXT NOT NULL,  -- chat|tool|file|http|system
+  source_id      TEXT,
+  content        TEXT,           -- TTL期限後にNULLへscrubされうる
+  content_digest TEXT NOT NULL,  -- 監査/同一性確認用（sha256:...）
+  content_length INTEGER NOT NULL,
+  actor          TEXT,
+  tags           JSON,
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at     TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_observations_expires_at ON observations(expires_at);
 ```
 
 ### 4.2 Claims（抽出主張・検索対象）
