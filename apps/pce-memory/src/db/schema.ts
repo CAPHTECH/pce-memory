@@ -85,9 +85,10 @@ CREATE TABLE IF NOT EXISTS embedding_cache (
 
 -- Claim埋め込みベクトル保存テーブル
 -- TLA+ Inv_C_MergeComplete: ベクトル検索候補を保持
--- Note: DuckDBはFOREIGN KEY CASCADEをサポートしないため、参照制約のみ定義
+-- Note: DuckDBはFK制約でUPDATE時にも誤ってエラーを発生させるバグがあるため、
+--       FK制約は使用せず、アプリケーションレベルで整合性を保つ
 CREATE TABLE IF NOT EXISTS claim_vectors (
-  claim_id TEXT PRIMARY KEY REFERENCES claims(id),
+  claim_id TEXT PRIMARY KEY,
   embedding DOUBLE[] NOT NULL,
   model_version TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
