@@ -50,7 +50,6 @@ export async function recordFeedback(input: FeedbackInput): Promise<{ id: string
   // positive feedback (utility > 0) のみrecency_anchorを更新
   // negative feedbackではrecency_anchorを維持（ペナルティ効果を保持）
   const deltas = FEEDBACK_DELTAS[input.signal];
-
   await conn.run(
     `UPDATE claims SET
       utility = utility + $1,
