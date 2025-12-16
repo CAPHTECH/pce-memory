@@ -366,8 +366,14 @@ export async function closeDb(): Promise<void> {
       await cachedConnection.run('CHECKPOINT');
       console.error('[DB] Checkpoint completed');
     } catch (err) {
-      // CHECKPOINT失敗は警告のみ（:memory:DBやWAL未使用時など）
-      console.error(`[DB] Checkpoint failed (non-fatal): ${err}`);
+      // :memory:DBの場合はCHECKPOINT不要なのでスキップ扱い
+      // ファイルベースDBの場合はデータ永続化に影響する可能性があるため警告
+      const dbPath = process.env['PCE_DB'] ?? ':memory:';
+      if (dbPath === ':memory:') {
+        // in-memory DBではCHECKPOINTは不要（WALが存在しない）
+      } else {
+        console.error(`[DB] Checkpoint failed (non-fatal, data may not be fully persisted): ${err}`);
+      }
     }
 
     try {
