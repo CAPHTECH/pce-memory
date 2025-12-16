@@ -349,6 +349,7 @@ export async function resetDbAsync(): Promise<void> {
  * DuckDBロックを解放し、他のプロセスがDBにアクセスできるようにする
  *
  * @remarks
+ * - CHECKPOINT実行でWALをDBファイルにフラッシュ（データ永続化保証）
  * - cachedConnection.closeSync() でDuckDBファイルロックを解放
  * - DuckDBInstanceはcloseメソッドを持たないため、参照解放でGCに委ねる
  * - 複数回呼び出しても安全（冪等）
@@ -359,6 +360,24 @@ export async function resetDbAsync(): Promise<void> {
  */
 export async function closeDb(): Promise<void> {
   if (cachedConnection) {
+    try {
+      // WALをDBファイルにフラッシュしてからクローズ
+      // これにより、シャットダウン後の再起動時にWALリプレイ問題を回避
+      await cachedConnection.run('CHECKPOINT');
+      console.error('[DB] Checkpoint completed');
+    } catch (err) {
+      // :memory:DBの場合はCHECKPOINT不要なのでスキップ扱い
+      // ファイルベースDBの場合はデータ永続化に影響する可能性があるため警告
+      const dbPath = process.env['PCE_DB'] ?? ':memory:';
+      if (dbPath === ':memory:') {
+        // in-memory DBではCHECKPOINTは不要（WALが存在しない）
+      } else {
+        console.error(
+          `[DB] Checkpoint failed (non-fatal, data may not be fully persisted): ${err}`
+        );
+      }
+    }
+
     try {
       cachedConnection.closeSync();
     } catch (err) {
