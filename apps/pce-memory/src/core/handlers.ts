@@ -2666,9 +2666,15 @@ export const TOOL_DEFINITIONS = [
         scope: {
           type: 'array',
           items: { type: 'string', enum: ['session', 'project', 'principle'] },
+          description: 'Pace layer scopes to search',
         },
-        allow: { type: 'array', items: { type: 'string' } },
-        top_k: { type: 'integer', minimum: 1, maximum: 50 },
+        allow: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Policy allow tags to filter claims (e.g., ["answer:task", "tool:*"] or ["*"] for all). These are NOT boundary_class names. Default policy: public=["*"], internal=["answer:task", "tool:*"]',
+        },
+        top_k: { type: 'integer', minimum: 1, maximum: 50, description: 'Max claims to return' },
         q: { type: 'string', description: 'Search query string (partial match)' },
         cursor: { type: 'string', description: 'Pagination cursor' },
         include_meta: {
@@ -2726,9 +2732,18 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
-        payload: { type: 'string' },
-        allow: { type: 'array', items: { type: 'string' } },
-        scope: { type: 'string', enum: ['session', 'project', 'principle'] },
+        payload: { type: 'string', description: 'Content to validate and potentially redact' },
+        allow: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Policy allow tags for boundary check (e.g., ["answer:task"] or ["*"]). NOT boundary_class names.',
+        },
+        scope: {
+          type: 'string',
+          enum: ['session', 'project', 'principle'],
+          description: 'Pace layer scope for validation',
+        },
       },
       required: ['payload'],
     },
