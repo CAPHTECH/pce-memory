@@ -372,7 +372,9 @@ export async function closeDb(): Promise<void> {
       if (dbPath === ':memory:') {
         // in-memory DBではCHECKPOINTは不要（WALが存在しない）
       } else {
-        console.error(`[DB] Checkpoint failed (non-fatal, data may not be fully persisted): ${err}`);
+        console.error(
+          `[DB] Checkpoint failed (non-fatal, data may not be fully persisted): ${err}`
+        );
       }
     }
 
