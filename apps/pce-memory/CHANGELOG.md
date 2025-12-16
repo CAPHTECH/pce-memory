@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2025-12-16
+
+### Changed
+
+- **Improved MCP tool descriptions** - Enhanced descriptions for better LLM agent tool selection (#33)
+  - `pce.memory.policy.apply`: Clarified as session initialization step
+  - `pce.memory.observe`: Added TTL, extraction, and PII/secret handling details
+  - `pce.memory.upsert`: Differentiated from observe as permanent knowledge storage
+  - `pce.memory.activate`: Explained purpose as knowledge retrieval for current task
+  - `pce.memory.boundary.validate`: Clarified as pre-output security check
+  - `pce.memory.feedback`: Added usage guidance for each signal type
+
 ## [0.8.1] - 2025-12-16
 
 ### Fixed
