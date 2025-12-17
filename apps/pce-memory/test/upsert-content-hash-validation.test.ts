@@ -41,7 +41,8 @@ describe('handleUpsert content_hash validation', () => {
     });
 
     expect(result.isError).toBeUndefined();
-    const response = JSON.parse(result.content[0]!.text);
+    expect(result.content[0]).toBeDefined();
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
     expect(response.id).toBeDefined();
   });
 
@@ -58,7 +59,8 @@ describe('handleUpsert content_hash validation', () => {
     });
 
     expect(result.isError).toBe(true);
-    const response = JSON.parse(result.content[0]!.text);
+    expect(result.content[0]).toBeDefined();
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
     expect(response.error.code).toBe('VALIDATION_ERROR');
     expect(response.error.message).toContain('content_hash mismatch');
   });
@@ -77,12 +79,13 @@ describe('handleUpsert content_hash validation', () => {
     });
 
     expect(result.isError).toBe(true);
-    const response = JSON.parse(result.content[0]!.text);
+    expect(result.content[0]).toBeDefined();
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
     expect(response.error.code).toBe('VALIDATION_ERROR');
     expect(response.error.message).toContain('content_hash mismatch');
   });
 
-  it('error message includes expected and actual hash', async () => {
+  it('error message does not expose hash values for security', async () => {
     const text = 'Test content for hash comparison';
     const expectedHash = `sha256:${computeContentHash(text)}`;
     const wrongHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -96,8 +99,11 @@ describe('handleUpsert content_hash validation', () => {
     });
 
     expect(result.isError).toBe(true);
-    const response = JSON.parse(result.content[0]!.text);
-    expect(response.error.message).toContain(expectedHash);
-    expect(response.error.message).toContain(wrongHash);
+    expect(result.content[0]).toBeDefined();
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
+    // セキュリティ: エラーメッセージにハッシュ値を含めない
+    expect(response.error.message).not.toContain(expectedHash);
+    expect(response.error.message).not.toContain(wrongHash);
+    expect(response.error.message).toContain('content_hash mismatch');
   });
 });

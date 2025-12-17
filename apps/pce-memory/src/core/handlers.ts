@@ -207,7 +207,7 @@ async function validateUpsertInput(
         {
           ...err(
             'VALIDATION_ERROR',
-            `content_hash mismatch: expected ${expectedHash}, got ${content_hash}`,
+            'content_hash mismatch: provided hash does not match computed hash for text',
             reqId
           ),
           trace_id: traceId,
