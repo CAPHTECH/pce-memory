@@ -10,6 +10,7 @@ import { dispatchTool, TOOL_DEFINITIONS } from '../src/core/handlers';
 import { resetMemoryState } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
 import { resetRates, initRateState } from '../src/store/rate';
+import { computeContentHash } from '@pce/embeddings';
 
 // テスト前にDBと状態をリセット
 beforeEach(async () => {
@@ -93,12 +94,13 @@ describe('Output Schema - ハンドラ出力検証', () => {
     // 事前にpolicy.applyを実行
     await dispatchTool('pce.memory.policy.apply', {});
 
+    const text = 'テスト知識';
     const result = await dispatchTool('pce.memory.upsert', {
-      text: 'テスト知識',
+      text,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'internal',
-      content_hash: 'sha256:' + '0'.repeat(64),
+      content_hash: `sha256:${computeContentHash(text)}`,
     });
     const data = result.structuredContent!;
 
@@ -113,12 +115,13 @@ describe('Output Schema - ハンドラ出力検証', () => {
   it('pce.memory.activate: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとupsertを実行
     await dispatchTool('pce.memory.policy.apply', {});
+    const activateText = 'テスト知識activate';
     await dispatchTool('pce.memory.upsert', {
-      text: 'テスト知識',
+      text: activateText,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'internal',
-      content_hash: 'sha256:' + '1'.repeat(64),
+      content_hash: `sha256:${computeContentHash(activateText)}`,
     });
 
     const result = await dispatchTool('pce.memory.activate', {
@@ -153,12 +156,13 @@ describe('Output Schema - ハンドラ出力検証', () => {
   it('pce.memory.feedback: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとupsertを実行してclaimを作成
     await dispatchTool('pce.memory.policy.apply', {});
+    const feedbackText = 'テスト知識feedback';
     const upsertResult = await dispatchTool('pce.memory.upsert', {
-      text: 'テスト知識',
+      text: feedbackText,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'internal',
-      content_hash: 'sha256:' + '2'.repeat(64),
+      content_hash: `sha256:${computeContentHash(feedbackText)}`,
     });
     const claimId = upsertResult.structuredContent!.id as string;
 
