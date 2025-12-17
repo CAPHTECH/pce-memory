@@ -198,6 +198,25 @@ async function validateUpsertInput(
     };
   }
 
+  // content_hashとtextの一致検証（改竄防止）
+  const expectedHash = `sha256:${computeContentHash(text)}`;
+  if (content_hash !== expectedHash) {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            `content_hash mismatch: expected ${expectedHash}, got ${content_hash}`,
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      ),
+    };
+  }
+
   const policy = getPolicy();
   if (!policy.boundary_classes[boundary_class]) {
     return {

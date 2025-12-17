@@ -4,6 +4,7 @@ import { dispatchTool } from '../src/core/handlers';
 import { resetMemoryState } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
 import { resetRates, initRateState } from '../src/store/rate';
+import { computeContentHash } from '@pce/embeddings';
 
 beforeEach(async () => {
   await resetDbAsync();
@@ -20,26 +21,29 @@ describe('activate boundary filter', () => {
   it('allowに基づきboundary_classでフィルタされる', async () => {
     await dispatchTool('pce.memory.policy.apply', {});
 
+    const internalText = 'internal claim';
     const internal = await dispatchTool('pce.memory.upsert', {
-      text: 'internal claim',
+      text: internalText,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'internal',
-      content_hash: 'sha256:' + '0'.repeat(64),
+      content_hash: `sha256:${computeContentHash(internalText)}`,
     });
+    const piiText = 'pii claim';
     const pii = await dispatchTool('pce.memory.upsert', {
-      text: 'pii claim',
+      text: piiText,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'pii',
-      content_hash: 'sha256:' + '1'.repeat(64),
+      content_hash: `sha256:${computeContentHash(piiText)}`,
     });
+    const secretText = 'secret claim';
     const secret = await dispatchTool('pce.memory.upsert', {
-      text: 'secret claim',
+      text: secretText,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'secret',
-      content_hash: 'sha256:' + '2'.repeat(64),
+      content_hash: `sha256:${computeContentHash(secretText)}`,
     });
 
     const internalId = internal.structuredContent?.id as string;
