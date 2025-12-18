@@ -28,11 +28,11 @@
 | `logs`              | `apps/pce-memory/src/store/logs.ts`          | `AuditLog`, `appendLog()`, `recordAudit()`, `AuditFileRecord`       |
 | `rateState`         | `apps/pce-memory/src/store/rate.ts`          | `initRateState()`, `checkAndConsume()`, `setRate()`, `resetRates()` |
 | `critic`            | `apps/pce-memory/src/store/critic.ts`        | `updateCritic()`                                                    |
-| `Upsert`            | `apps/pce-memory/src/index.ts`               | `pce.memory.upsert` handler                                         |
-| `Activate`          | `apps/pce-memory/src/index.ts`               | `pce.memory.activate` handler                                       |
-| `BoundaryValidate`  | `apps/pce-memory/src/index.ts`               | `pce.memory.boundary.validate` handler                              |
-| `Feedback`          | `apps/pce-memory/src/index.ts`               | `pce.memory.feedback` handler                                       |
-| `ApplyPolicy`       | `apps/pce-memory/src/index.ts`               | `pce.memory.policy.apply` handler, `applyPolicy()`                  |
+| `Upsert`            | `apps/pce-memory/src/index.ts`               | `pce_memory_upsert` handler                                         |
+| `Activate`          | `apps/pce-memory/src/index.ts`               | `pce_memory_activate` handler                                       |
+| `BoundaryValidate`  | `apps/pce-memory/src/index.ts`               | `pce_memory_boundary_validate` handler                              |
+| `Feedback`          | `apps/pce-memory/src/index.ts`               | `pce_memory_feedback` handler                                       |
+| `ApplyPolicy`       | `apps/pce-memory/src/index.ts`               | `pce_memory_policy_apply` handler, `applyPolicy()`                  |
 | `RefillTick`        | `apps/pce-memory/src/store/rate.ts`          | 時間窓リセット: `checkAndConsume()` 内 `resetNeeded` ロジック       |
 | DB初期化            | `apps/pce-memory/src/db/connection.ts`       | `initDb()`, `initSchema()`, `getConnection()`                       |
 | 環境設定            | `apps/pce-memory/src/config/env.ts`          | `loadEnv()`, `Env`                                                  |

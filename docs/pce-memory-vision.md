@@ -90,21 +90,21 @@
 
 | Tool Name                      | Input (req)                                                                    | Output (resp)                                    | Purpose                                                |
 | ------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------ | -------------------- | -------------- | -------------------------- |
-| `pce.memory.search`            | `{ query, top_k?, scope?, allow? }`                                            | `[{ claim, scores, evidences, policy_version }]` | Recall known prerequisites, conventions, prohibitions  |
-| `pce.memory.activate`          | `{ q, scope?, allow? }`                                                        | `{ active_context_id, claims[] }`                | Compose AC from LCP (r function)                       |
-| `pce.memory.upsert`            | `{ text, kind?, scope?, boundary_class?, entities?, relations?, provenance? }` | `{ id }`                                         | Register important fragments (Observation/Claim/Graph) |
-| `pce.memory.feedback`          | `{ claim_id, signal: helpful                                                   | harmful                                          | outdated                                               | duplicate, score? }` | `{ ok: true }` | Evaluation loop via Critic |
-| `pce.memory.boundary.validate` | `{ payload, allow?, scope? }`                                                  | `{ allowed, reason, redacted? }`                 | Boundary check before generation / Redact-before-Send  |
-| `pce.memory.policy.apply`      | `{ yaml }`                                                                     | `{ version }`                                    | Apply policy (invariants, purpose tags)                |
+| `pce_memory_search`            | `{ query, top_k?, scope?, allow? }`                                            | `[{ claim, scores, evidences, policy_version }]` | Recall known prerequisites, conventions, prohibitions  |
+| `pce_memory_activate`          | `{ q, scope?, allow? }`                                                        | `{ active_context_id, claims[] }`                | Compose AC from LCP (r function)                       |
+| `pce_memory_upsert`            | `{ text, kind?, scope?, boundary_class?, entities?, relations?, provenance? }` | `{ id }`                                         | Register important fragments (Observation/Claim/Graph) |
+| `pce_memory_feedback`          | `{ claim_id, signal: helpful                                                   | harmful                                          | outdated                                               | duplicate, score? }` | `{ ok: true }` | Evaluation loop via Critic |
+| `pce_memory_boundary_validate` | `{ payload, allow?, scope? }`                                                  | `{ allowed, reason, redacted? }`                 | Boundary check before generation / Redact-before-Send  |
+| `pce_memory_policy_apply`      | `{ yaml }`                                                                     | `{ version }`                                    | Apply policy (invariants, purpose tags)                |
 
 > All tools include **Provenance** and **policy_version** in responses to ensure auditability.
 
 ### Representative Flow (Agent Side)
 
-1. **Activation**: Get AC via `pce.memory.activate` and attach to prompt header (prerequisite injection).
-2. **Generation**: Check with `pce.memory.boundary.validate` before generating candidates (redact if needed).
-3. **Upsert**: Save decisions and design rationale via `pce.memory.upsert`. Provenance (commit/URL) mandatory.
-4. **Feedback**: Return adoption/rejection results via `pce.memory.feedback` for next re-ranking.
+1. **Activation**: Get AC via `pce_memory_activate` and attach to prompt header (prerequisite injection).
+2. **Generation**: Check with `pce_memory_boundary_validate` before generating candidates (redact if needed).
+3. **Upsert**: Save decisions and design rationale via `pce_memory_upsert`. Provenance (commit/URL) mandatory.
+4. **Feedback**: Return adoption/rejection results via `pce_memory_feedback` for next re-ranking.
 
 ### AC Generation Function r Outline (Pseudo)
 

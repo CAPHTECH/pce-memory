@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING: Rename all MCP tool names from dot notation to underscore notation** - Following MCP community standard (snake_case)
+  - `pce.memory.policy.apply` → `pce_memory_policy_apply`
+  - `pce.memory.observe` → `pce_memory_observe`
+  - `pce.memory.upsert` → `pce_memory_upsert`
+  - `pce.memory.activate` → `pce_memory_activate`
+  - `pce.memory.boundary.validate` → `pce_memory_boundary_validate`
+  - `pce.memory.feedback` → `pce_memory_feedback`
+  - `pce.memory.state` → `pce_memory_state`
+  - `pce.memory.upsert.entity` → `pce_memory_upsert_entity`
+  - `pce.memory.upsert.relation` → `pce_memory_upsert_relation`
+  - `pce.memory.query.entity` → `pce_memory_query_entity`
+  - `pce.memory.query.relation` → `pce_memory_query_relation`
+  - `pce.memory.sync.push` → `pce_memory_sync_push`
+  - `pce.memory.sync.pull` → `pce_memory_sync_pull`
+  - `pce.memory.sync.status` → `pce_memory_sync_status`
+  - Clients must update tool invocations to use new names
+  - See [SEP-986](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986) for MCP naming conventions
+
 ## [0.9.1] - 2025-12-18
 
 ### Fixed

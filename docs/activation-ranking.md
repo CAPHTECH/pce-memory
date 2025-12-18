@@ -1,6 +1,6 @@
 # Activation & Ranking Spec (r, S, g) — pce‑memory v0.1
 
-> **目的**：MCP ツール `pce.memory.activate` / `pce.memory.search` が返す候補の **選別（Activation: r）**、**スコアリング（融合: S）**、**再ランク（g）** を定義する。DuckDB スキーマ（`schema.md`）/ 検索拡張（`search_extensions_duckdb.md`）/ 境界（`boundary-policy.md`）と整合する。
+> **目的**：MCP ツール `pce_memory_activate` / `pce_memory_search` が返す候補の **選別（Activation: r）**、**スコアリング（融合: S）**、**再ランク（g）** を定義する。DuckDB スキーマ（`schema.md`）/ 検索拡張（`search_extensions_duckdb.md`）/ 境界（`boundary-policy.md`）と整合する。
 
 - **前提**：`r(q, C^L, B, policy, critic)` は **AC（Active Context）** を構成する関数。境界（Boundary）による前置フィルタを必須とし、FTS/VSS の有無に応じて内部戦略を切替える。
 - **出力**：`active_contexts(id, scope, expires_at, policy_version, provenance)` と `active_context_items(ac_id, claim_id, rank, score)`、および UI/エージェント用の **説明用メタ**（s_text, s_vec, S, g, reason）を返す。
@@ -196,7 +196,7 @@ LEFT JOIN vec ON vec.id=ids.id;
 
 ---
 
-## 6. MCP 連携（`pce.memory.activate` / `pce.memory.search`）
+## 6. MCP 連携（`pce_memory_activate` / `pce_memory_search`）
 
 - `activate`：上記フローで AC を生成し、`active_contexts`/`active_context_items` を保存。レスポンスには `rank/score_final` に加え、`s_text/s_vec/S/g` のブレークダウンを **任意で**返す。
 - `search`：AC を作らず、`score_final` で上位 k を返す。`policy_version` と `provenance`、`request_id/trace_id` を必ず同梱。

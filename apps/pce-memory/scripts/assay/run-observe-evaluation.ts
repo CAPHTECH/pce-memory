@@ -2,7 +2,7 @@
 /**
  * Observe機能評価スクリプト
  *
- * pce.memory.observe の機能テストを実行し、結果をレポートする。
+ * pce_memory_observe の機能テストを実行し、結果をレポートする。
  * assay-kitとは独立した評価スクリプト。
  *
  * 使用方法:
@@ -133,7 +133,7 @@ async function runTestCase(
 
   try {
     // observe実行
-    const observeResult = await runner.callTool('pce.memory.observe', testCase.input);
+    const observeResult = await runner.callTool('pce_memory_observe', testCase.input);
     const duration = Date.now() - startTime;
 
     // 期待値の検証
@@ -217,7 +217,7 @@ async function runTestCase(
       Array.isArray(observeResult.claim_ids) &&
       observeResult.claim_ids.length > 0
     ) {
-      const activateResult = await runner.callTool('pce.memory.activate', {
+      const activateResult = await runner.callTool('pce_memory_activate', {
         scope: ['session'],
         allow: ['answer:task'],
         include_meta: true,
@@ -294,7 +294,7 @@ async function main() {
 
     // ポリシー適用
     console.log('📋 Applying policy...');
-    await runner.callTool('pce.memory.policy.apply', {});
+    await runner.callTool('pce_memory_policy_apply', {});
 
     console.log('✅ Server ready\n');
 

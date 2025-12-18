@@ -17,7 +17,7 @@
 
 ## いつ activate するか
 
-以下の状況で `pce.memory.activate` を呼び出してください：
+以下の状況で `pce_memory_activate` を呼び出してください：
 
 - **新しいタスクを開始するとき** - 関連する過去の決定を確認
 - **設計判断が必要なとき** - 既存のアーキテクチャ決定を参照
@@ -38,7 +38,7 @@
 
 ## いつ upsert するか
 
-以下の情報を `pce.memory.upsert` で記録してください：
+以下の情報を `pce_memory_upsert` で記録してください：
 
 ### kind: fact（事実）
 
@@ -103,7 +103,7 @@
 
 ## feedback を送るタイミング
 
-activateで取得した知識が役立ったかを `pce.memory.feedback` で報告してください：
+activateで取得した知識が役立ったかを `pce_memory_feedback` で報告してください：
 
 | signal      | いつ送るか                                |
 | ----------- | ----------------------------------------- |

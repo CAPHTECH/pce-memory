@@ -50,8 +50,8 @@ describe('Output Schema - 基本テスト', () => {
 });
 
 describe('Output Schema - 後方互換性テスト', () => {
-  it('pce.memory.policy.apply: contentとstructuredContentの両方が返される', async () => {
-    const result = await dispatchTool('pce.memory.policy.apply', {});
+  it('pce_memory_policy_apply: contentとstructuredContentの両方が返される', async () => {
+    const result = await dispatchTool('pce_memory_policy_apply', {});
 
     // 後方互換性: content配列は常に存在
     expect(result.content).toBeDefined();
@@ -67,8 +67,8 @@ describe('Output Schema - 後方互換性テスト', () => {
     expect(result.structuredContent).toEqual(contentData);
   });
 
-  it('pce.memory.state: contentとstructuredContentの両方が返される', async () => {
-    const result = await dispatchTool('pce.memory.state', {});
+  it('pce_memory_state: contentとstructuredContentの両方が返される', async () => {
+    const result = await dispatchTool('pce_memory_state', {});
 
     expect(result.content).toBeDefined();
     expect(result.structuredContent).toBeDefined();
@@ -79,8 +79,8 @@ describe('Output Schema - 後方互換性テスト', () => {
 });
 
 describe('Output Schema - ハンドラ出力検証', () => {
-  it('pce.memory.policy.apply: 出力がスキーマに準拠', async () => {
-    const result = await dispatchTool('pce.memory.policy.apply', {});
+  it('pce_memory_policy_apply: 出力がスキーマに準拠', async () => {
+    const result = await dispatchTool('pce_memory_policy_apply', {});
     const data = result.structuredContent!;
 
     // 必須フィールドの存在確認
@@ -90,12 +90,12 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.upsert: 出力がスキーマに準拠', async () => {
+  it('pce_memory_upsert: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyを実行
-    await dispatchTool('pce.memory.policy.apply', {});
+    await dispatchTool('pce_memory_policy_apply', {});
 
     const text = 'テスト知識';
-    const result = await dispatchTool('pce.memory.upsert', {
+    const result = await dispatchTool('pce_memory_upsert', {
       text,
       kind: 'fact',
       scope: 'session',
@@ -112,11 +112,11 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.activate: 出力がスキーマに準拠', async () => {
+  it('pce_memory_activate: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとupsertを実行
-    await dispatchTool('pce.memory.policy.apply', {});
+    await dispatchTool('pce_memory_policy_apply', {});
     const activateText = 'テスト知識activate';
-    await dispatchTool('pce.memory.upsert', {
+    await dispatchTool('pce_memory_upsert', {
       text: activateText,
       kind: 'fact',
       scope: 'session',
@@ -124,7 +124,7 @@ describe('Output Schema - ハンドラ出力検証', () => {
       content_hash: `sha256:${computeContentHash(activateText)}`,
     });
 
-    const result = await dispatchTool('pce.memory.activate', {
+    const result = await dispatchTool('pce_memory_activate', {
       scope: ['session'],
       allow: ['answer:task'],
     });
@@ -140,8 +140,8 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.boundary.validate: 出力がスキーマに準拠', async () => {
-    const result = await dispatchTool('pce.memory.boundary.validate', {
+  it('pce_memory_boundary_validate: 出力がスキーマに準拠', async () => {
+    const result = await dispatchTool('pce_memory_boundary_validate', {
       payload: 'テストペイロード',
     });
     const data = result.structuredContent!;
@@ -153,11 +153,11 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.feedback: 出力がスキーマに準拠', async () => {
+  it('pce_memory_feedback: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとupsertを実行してclaimを作成
-    await dispatchTool('pce.memory.policy.apply', {});
+    await dispatchTool('pce_memory_policy_apply', {});
     const feedbackText = 'テスト知識feedback';
-    const upsertResult = await dispatchTool('pce.memory.upsert', {
+    const upsertResult = await dispatchTool('pce_memory_upsert', {
       text: feedbackText,
       kind: 'fact',
       scope: 'session',
@@ -167,12 +167,12 @@ describe('Output Schema - ハンドラ出力検証', () => {
     const claimId = upsertResult.structuredContent!.id as string;
 
     // activateしてReady状態にする
-    await dispatchTool('pce.memory.activate', {
+    await dispatchTool('pce_memory_activate', {
       scope: ['session'],
       allow: ['answer:task'],
     });
 
-    const result = await dispatchTool('pce.memory.feedback', {
+    const result = await dispatchTool('pce_memory_feedback', {
       claim_id: claimId,
       signal: 'helpful',
     });
@@ -185,8 +185,8 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.state: 出力がスキーマに準拠', async () => {
-    const result = await dispatchTool('pce.memory.state', {});
+  it('pce_memory_state: 出力がスキーマに準拠', async () => {
+    const result = await dispatchTool('pce_memory_state', {});
     const data = result.structuredContent!;
 
     expect(['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready']).toContain(data.state);
@@ -195,11 +195,11 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.upsert.entity: 出力がスキーマに準拠', async () => {
+  it('pce_memory_upsert_entity: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyを実行
-    await dispatchTool('pce.memory.policy.apply', {});
+    await dispatchTool('pce_memory_policy_apply', {});
 
-    const result = await dispatchTool('pce.memory.upsert.entity', {
+    const result = await dispatchTool('pce_memory_upsert_entity', {
       id: 'ent_test_001',
       type: 'Concept',
       name: 'テストエンティティ',
@@ -215,21 +215,21 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.upsert.relation: 出力がスキーマに準拠', async () => {
+  it('pce_memory_upsert_relation: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとエンティティを作成
-    await dispatchTool('pce.memory.policy.apply', {});
-    await dispatchTool('pce.memory.upsert.entity', {
+    await dispatchTool('pce_memory_policy_apply', {});
+    await dispatchTool('pce_memory_upsert_entity', {
       id: 'ent_src',
       type: 'Concept',
       name: 'ソースエンティティ',
     });
-    await dispatchTool('pce.memory.upsert.entity', {
+    await dispatchTool('pce_memory_upsert_entity', {
       id: 'ent_dst',
       type: 'Concept',
       name: 'ターゲットエンティティ',
     });
 
-    const result = await dispatchTool('pce.memory.upsert.relation', {
+    const result = await dispatchTool('pce_memory_upsert_relation', {
       id: 'rel_test_001',
       src_id: 'ent_src',
       dst_id: 'ent_dst',
@@ -247,16 +247,16 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.query.entity: 出力がスキーマに準拠', async () => {
+  it('pce_memory_query_entity: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとエンティティを作成
-    await dispatchTool('pce.memory.policy.apply', {});
-    await dispatchTool('pce.memory.upsert.entity', {
+    await dispatchTool('pce_memory_policy_apply', {});
+    await dispatchTool('pce_memory_upsert_entity', {
       id: 'ent_query_test',
       type: 'Concept',
       name: 'クエリテストエンティティ',
     });
 
-    const result = await dispatchTool('pce.memory.query.entity', {
+    const result = await dispatchTool('pce_memory_query_entity', {
       type: 'Concept',
     });
     const data = result.structuredContent!;
@@ -269,27 +269,27 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
-  it('pce.memory.query.relation: 出力がスキーマに準拠', async () => {
+  it('pce_memory_query_relation: 出力がスキーマに準拠', async () => {
     // 事前にpolicy.applyとリレーションを作成
-    await dispatchTool('pce.memory.policy.apply', {});
-    await dispatchTool('pce.memory.upsert.entity', {
+    await dispatchTool('pce_memory_policy_apply', {});
+    await dispatchTool('pce_memory_upsert_entity', {
       id: 'ent_rel_src',
       type: 'Actor',
       name: 'リレーションソース',
     });
-    await dispatchTool('pce.memory.upsert.entity', {
+    await dispatchTool('pce_memory_upsert_entity', {
       id: 'ent_rel_dst',
       type: 'Artifact',
       name: 'リレーションターゲット',
     });
-    await dispatchTool('pce.memory.upsert.relation', {
+    await dispatchTool('pce_memory_upsert_relation', {
       id: 'rel_query_test',
       src_id: 'ent_rel_src',
       dst_id: 'ent_rel_dst',
       type: 'CREATED',
     });
 
-    const result = await dispatchTool('pce.memory.query.relation', {
+    const result = await dispatchTool('pce_memory_query_relation', {
       type: 'CREATED',
     });
     const data = result.structuredContent!;
@@ -306,7 +306,7 @@ describe('Output Schema - ハンドラ出力検証', () => {
 describe('Property: structuredContent整合性', () => {
   it('Property: contentとstructuredContentは常に同一データを表現する', async () => {
     // policy.applyを実行
-    const result = await dispatchTool('pce.memory.policy.apply', {});
+    const result = await dispatchTool('pce_memory_policy_apply', {});
 
     // contentをパースしてstructuredContentと比較
     const parsedContent = JSON.parse(result.content[0].text);
@@ -319,7 +319,7 @@ describe('Property: structuredContent整合性', () => {
 describe('Output Schema - エラー時の出力', () => {
   it('バリデーションエラー時もcontent配列が存在しisErrorがtrue', async () => {
     // policy.applyなしでupsertを実行（STATE_ERROR）
-    const result = await dispatchTool('pce.memory.upsert', {
+    const result = await dispatchTool('pce_memory_upsert', {
       text: 'テスト',
       kind: 'fact',
       scope: 'session',

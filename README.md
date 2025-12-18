@@ -96,17 +96,17 @@ PCE Memoryは以下のMCPツールを提供します：
 
 | Tool                           | Description                                     |
 | ------------------------------ | ----------------------------------------------- |
-| `pce.memory.policy.apply`      | ポリシー適用 (boundary/retrieval設定)           |
-| `pce.memory.observe`           | 観察を記録 (Observation → Claims)               |
-| `pce.memory.upsert`            | Claimを登録 (Long-term memory)                  |
-| `pce.memory.activate`          | Active Contextを構成 (Query → AC)               |
-| `pce.memory.boundary.validate` | 境界チェック / redact-before-send               |
-| `pce.memory.feedback`          | フィードバックを送信 (helpful/harmful/outdated) |
-| `pce.memory.state`             | 状態情報を取得 (state/policy_version)           |
+| `pce_memory_policy_apply`      | ポリシー適用 (boundary/retrieval設定)           |
+| `pce_memory_observe`           | 観察を記録 (Observation → Claims)               |
+| `pce_memory_upsert`            | Claimを登録 (Long-term memory)                  |
+| `pce_memory_activate`          | Active Contextを構成 (Query → AC)               |
+| `pce_memory_boundary_validate` | 境界チェック / redact-before-send               |
+| `pce_memory_feedback`          | フィードバックを送信 (helpful/harmful/outdated) |
+| `pce_memory_state`             | 状態情報を取得 (state/policy_version)           |
 
 詳細は [docs/mcp-tools.md](docs/mcp-tools.md) を参照してください。
 
-### Observation（`pce.memory.observe`）の保持とセキュリティ（要点）
+### Observation（`pce_memory_observe`）の保持とセキュリティ（要点）
 
 - Observation は短期TTLで保持し、期限後は `content` をスクラブ（NULL化）する運用を推奨します。
 - `PCE_OBS_TTL_DAYS` / `PCE_OBS_TTL_DAYS_MAX` で TTL を調整できます。

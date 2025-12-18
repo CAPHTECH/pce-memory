@@ -19,10 +19,10 @@ beforeEach(async () => {
 
 describe('activate boundary filter', () => {
   it('allowに基づきboundary_classでフィルタされる', async () => {
-    await dispatchTool('pce.memory.policy.apply', {});
+    await dispatchTool('pce_memory_policy_apply', {});
 
     const internalText = 'internal claim';
-    const internal = await dispatchTool('pce.memory.upsert', {
+    const internal = await dispatchTool('pce_memory_upsert', {
       text: internalText,
       kind: 'fact',
       scope: 'session',
@@ -30,7 +30,7 @@ describe('activate boundary filter', () => {
       content_hash: `sha256:${computeContentHash(internalText)}`,
     });
     const piiText = 'pii claim';
-    const pii = await dispatchTool('pce.memory.upsert', {
+    const pii = await dispatchTool('pce_memory_upsert', {
       text: piiText,
       kind: 'fact',
       scope: 'session',
@@ -38,7 +38,7 @@ describe('activate boundary filter', () => {
       content_hash: `sha256:${computeContentHash(piiText)}`,
     });
     const secretText = 'secret claim';
-    const secret = await dispatchTool('pce.memory.upsert', {
+    const secret = await dispatchTool('pce_memory_upsert', {
       text: secretText,
       kind: 'fact',
       scope: 'session',
@@ -50,7 +50,7 @@ describe('activate boundary filter', () => {
     const piiId = pii.structuredContent?.id as string;
     const secretId = secret.structuredContent?.id as string;
 
-    const ac1 = await dispatchTool('pce.memory.activate', {
+    const ac1 = await dispatchTool('pce_memory_activate', {
       scope: ['session'],
       allow: ['answer:task'],
       include_meta: false,
@@ -60,7 +60,7 @@ describe('activate boundary filter', () => {
     expect(claims1).not.toContain(piiId);
     expect(claims1).not.toContain(secretId);
 
-    const ac2 = await dispatchTool('pce.memory.activate', {
+    const ac2 = await dispatchTool('pce_memory_activate', {
       scope: ['session'],
       allow: ['tool:contact-lookup'],
       include_meta: false,

@@ -1889,34 +1889,34 @@ export async function dispatchTool(
   args: Record<string, unknown>
 ): Promise<ToolResult> {
   switch (name) {
-    case 'pce.memory.policy.apply':
+    case 'pce_memory_policy_apply':
       return handlePolicyApply(args);
-    case 'pce.memory.observe':
+    case 'pce_memory_observe':
       return handleObserve(args);
-    case 'pce.memory.upsert':
+    case 'pce_memory_upsert':
       return handleUpsert(args);
-    case 'pce.memory.upsert.entity':
+    case 'pce_memory_upsert_entity':
       return handleUpsertEntity(args);
-    case 'pce.memory.upsert.relation':
+    case 'pce_memory_upsert_relation':
       return handleUpsertRelation(args);
-    case 'pce.memory.query.entity':
+    case 'pce_memory_query_entity':
       return handleQueryEntity(args);
-    case 'pce.memory.query.relation':
+    case 'pce_memory_query_relation':
       return handleQueryRelation(args);
-    case 'pce.memory.activate':
+    case 'pce_memory_activate':
       return handleActivate(args);
-    case 'pce.memory.boundary.validate':
+    case 'pce_memory_boundary_validate':
       return handleBoundaryValidate(args);
-    case 'pce.memory.feedback':
+    case 'pce_memory_feedback':
       return handleFeedback(args);
-    case 'pce.memory.state':
+    case 'pce_memory_state':
       return handleGetState(args);
     // Sync Tools (Issue #18)
-    case 'pce.memory.sync.push':
+    case 'pce_memory_sync_push':
       return handleSyncPush(args);
-    case 'pce.memory.sync.pull':
+    case 'pce_memory_sync_pull':
       return handleSyncPull(args);
-    case 'pce.memory.sync.status':
+    case 'pce_memory_sync_status':
       return handleSyncStatus(args);
     default:
       return createToolResult(
@@ -2062,7 +2062,7 @@ function generatePromptMessages(
           role: 'assistant',
           content: {
             type: 'text',
-            text: `Use pce.memory.activate to recall relevant knowledge.
+            text: `Use pce_memory_activate to recall relevant knowledge.
 
 \`\`\`json
 {
@@ -2106,7 +2106,7 @@ function generatePromptMessages(
           role: 'assistant',
           content: {
             type: 'text',
-            text: `Use pce.memory.upsert to record the design decision.
+            text: `Use pce_memory_upsert to record the design decision.
 
 \`\`\`json
 {
@@ -2151,7 +2151,7 @@ function generatePromptMessages(
       const operationGuides: Record<string, string> = {
         push: `## Push: Export Local Knowledge
 
-Use pce.memory.sync.push to export knowledge from the local DB to .pce-shared/.
+Use pce_memory_sync_push to export knowledge from the local DB to .pce-shared/.
 
 \`\`\`json
 {
@@ -2172,7 +2172,7 @@ Use pce.memory.sync.push to export knowledge from the local DB to .pce-shared/.
 
         pull: `## Pull: Import Shared Knowledge
 
-Use pce.memory.sync.pull to import knowledge from .pce-shared/.
+Use pce_memory_sync_pull to import knowledge from .pce-shared/.
 
 \`\`\`json
 {
@@ -2194,7 +2194,7 @@ Use pce.memory.sync.pull to import knowledge from .pce-shared/.
 
         status: `## Status: Check Sync State
 
-Use pce.memory.sync.status to check the state of the sync directory.
+Use pce_memory_sync_status to check the state of the sync directory.
 
 \`\`\`json
 {}
@@ -2268,7 +2268,7 @@ export PCE_SYNC_ENABLED=true
           role: 'assistant',
           content: {
             type: 'text',
-            text: `Use pce.memory.sync.push to export knowledge to .pce-shared/ directory.
+            text: `Use pce_memory_sync_push to export knowledge to .pce-shared/ directory.
 
 \`\`\`json
 {
@@ -2325,7 +2325,7 @@ git push
           role: 'assistant',
           content: {
             type: 'text',
-            text: `Use pce.memory.sync.pull to import knowledge from .pce-shared/ directory.
+            text: `Use pce_memory_sync_pull to import knowledge from .pce-shared/ directory.
 
 ## Step 1: Preview Changes (Recommended)
 
@@ -2386,7 +2386,7 @@ git push
           role: 'assistant',
           content: {
             type: 'text',
-            text: `Use pce.memory.activate to search for past similar issues and solutions.
+            text: `Use pce_memory_activate to search for past similar issues and solutions.
 
 \`\`\`json
 {
@@ -2503,7 +2503,7 @@ export async function handleGetPrompt(args: Record<string, unknown>): Promise<{
 
 export const TOOL_DEFINITIONS = [
   {
-    name: 'pce.memory.policy.apply',
+    name: 'pce_memory_policy_apply',
     description:
       'Initialize memory system with policy configuration. Call once at session start before using other tools. Configures boundary rules, redaction patterns, and rate limits.',
     inputSchema: {
@@ -2528,7 +2528,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.observe',
+    name: 'pce_memory_observe',
     description:
       'Record a temporary observation with auto-expiry (default 30 days). Use for chat logs, tool outputs, file reads, API responses. Set extract.mode="single_claim_v0" to promote to permanent claim. Auto-detects and redacts PII/secrets.',
     inputSchema: {
@@ -2599,7 +2599,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.upsert',
+    name: 'pce_memory_upsert',
     description:
       'Register a permanent knowledge claim (never auto-deleted). Use for verified decisions, resolved errors, architectural patterns. Requires provenance.at timestamp. Prefer over observe for long-term, validated knowledge.',
     inputSchema: {
@@ -2711,7 +2711,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.activate',
+    name: 'pce_memory_activate',
     description:
       'Retrieve relevant knowledge for current task via hybrid search. Call before starting work to recall past decisions, patterns, and solutions. Returns ranked claims filtered by scope and boundary.',
     inputSchema: {
@@ -2780,7 +2780,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.boundary.validate',
+    name: 'pce_memory_boundary_validate',
     description:
       'Validate and redact sensitive content before outputting to user. Checks for PII, secrets, and boundary policy violations. Returns sanitized payload safe for external use.',
     inputSchema: {
@@ -2819,7 +2819,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.feedback',
+    name: 'pce_memory_feedback',
     description:
       'Report knowledge quality after using activated claims. Send helpful when knowledge solved the problem, harmful if it caused errors, outdated if info was stale, duplicate if redundant.',
     inputSchema: {
@@ -2854,7 +2854,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.state',
+    name: 'pce_memory_state',
     description: 'Get current state machine status (Uninitialized/PolicyApplied/HasClaims/Ready)',
     inputSchema: {
       type: 'object',
@@ -2886,7 +2886,7 @@ export const TOOL_DEFINITIONS = [
   },
   // ========== Graph Memory Tools ==========
   {
-    name: 'pce.memory.upsert.entity',
+    name: 'pce_memory_upsert_entity',
     description: 'Register an entity in graph memory (Actor/Artifact/Event/Concept)',
     inputSchema: {
       type: 'object',
@@ -2930,7 +2930,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.upsert.relation',
+    name: 'pce_memory_upsert_relation',
     description: 'Register a relation between entities in graph memory',
     inputSchema: {
       type: 'object',
@@ -2977,7 +2977,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.query.entity',
+    name: 'pce_memory_query_entity',
     description:
       'Query entities from graph memory. At least one filter is required: id, type, canonical_key, or claim_id. Use limit to control result count.',
     inputSchema: {
@@ -3032,7 +3032,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.query.relation',
+    name: 'pce_memory_query_relation',
     description:
       'Query relations from graph memory. At least one filter is required: id, src_id, dst_id, type, or evidence_claim_id. Use limit to control result count.',
     inputSchema: {
@@ -3086,7 +3086,7 @@ export const TOOL_DEFINITIONS = [
   },
   // ========== Sync Tools (Issue #18) ==========
   {
-    name: 'pce.memory.sync.push',
+    name: 'pce_memory_sync_push',
     description:
       'Export local claims/entities/relations to .pce-shared/ directory for Git-based CRDT sync',
     inputSchema: {
@@ -3156,7 +3156,7 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'pce.memory.sync.pull',
+    name: 'pce_memory_sync_pull',
     description:
       'Import claims/entities/relations from .pce-shared/ directory with CRDT merge strategy',
     inputSchema: {
@@ -3266,7 +3266,7 @@ export const TOOL_DEFINITIONS = [
   },
   // Phase 2: sync.status
   {
-    name: 'pce.memory.sync.status',
+    name: 'pce_memory_sync_status',
     description: 'Get sync directory status including manifest, file counts, and validation state',
     inputSchema: {
       type: 'object',

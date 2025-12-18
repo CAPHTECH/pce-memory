@@ -59,8 +59,8 @@ describe('Schema migration: legacy observations', () => {
     expect(rows[0]?.expires_at).toBeDefined();
 
     // observeが新スキーマで動作する
-    await dispatchTool('pce.memory.policy.apply', {});
-    const obs = await dispatchTool('pce.memory.observe', {
+    await dispatchTool('pce_memory_policy_apply', {});
+    const obs = await dispatchTool('pce_memory_observe', {
       source_type: 'chat',
       content: 'post-migration observation',
       extract: { mode: 'noop' },
