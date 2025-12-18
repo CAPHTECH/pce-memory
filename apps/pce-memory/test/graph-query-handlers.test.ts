@@ -508,3 +508,52 @@ describe('State and Rate Limit handling', () => {
     expect(response.error.code).toBe('RATE_LIMIT');
   });
 });
+
+describe('BigInt serialization in structuredContent', () => {
+  beforeEach(async () => {
+    await setupWithPolicy();
+  });
+
+  it('query.entity: structuredContentにBigIntが含まれない（JSON.stringifyが成功する）', async () => {
+    // Entity作成（created_atがBigIntで返される可能性がある）
+    await handleUpsertEntity({
+      id: 'ent_bigint_test',
+      type: 'Actor',
+      name: 'BigInt Test Entity',
+    });
+
+    const result = await handleQueryEntity({ id: 'ent_bigint_test' });
+
+    expect(result.isError).toBeUndefined();
+    // structuredContentがBigIntを含まないことを確認（JSON.stringifyが成功すること）
+    expect(() => JSON.stringify(result.structuredContent)).not.toThrow();
+    // created_atが文字列（ISO8601）に変換されていることを確認
+    const entities = (result.structuredContent as { entities: Array<{ created_at?: string }> })
+      .entities;
+    if (entities[0]?.created_at) {
+      expect(typeof entities[0].created_at).toBe('string');
+    }
+  });
+
+  it('query.relation: structuredContentにBigIntが含まれない（JSON.stringifyが成功する）', async () => {
+    // Relation作成（created_atがBigIntで返される可能性がある）
+    await handleUpsertRelation({
+      id: 'rel_bigint_test',
+      src_id: 'src_test',
+      dst_id: 'dst_test',
+      type: 'KNOWS',
+    });
+
+    const result = await handleQueryRelation({ id: 'rel_bigint_test' });
+
+    expect(result.isError).toBeUndefined();
+    // structuredContentがBigIntを含まないことを確認（JSON.stringifyが成功すること）
+    expect(() => JSON.stringify(result.structuredContent)).not.toThrow();
+    // created_atが文字列（ISO8601）に変換されていることを確認
+    const relations = (result.structuredContent as { relations: Array<{ created_at?: string }> })
+      .relations;
+    if (relations[0]?.created_at) {
+      expect(typeof relations[0].created_at).toBe('string');
+    }
+  });
+});
