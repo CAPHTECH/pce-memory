@@ -89,9 +89,13 @@ function createToolResult<T extends Record<string, unknown>>(
   options: { isError?: boolean; useSafeStringify?: boolean } = {}
 ): ToolResult {
   const text = options.useSafeStringify ? safeJsonStringify(data) : JSON.stringify(data);
+  // structuredContentもBigIntを含む可能性があるため、useSafeStringifyの場合は変換済みデータを使用
+  const structuredData = options.useSafeStringify
+    ? (JSON.parse(text) as Record<string, unknown>)
+    : data;
   return {
     content: [{ type: 'text', text }],
-    structuredContent: data,
+    structuredContent: structuredData,
     ...(options.isError && { isError: true }),
   };
 }
@@ -2974,7 +2978,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'pce.memory.query.entity',
-    description: 'Query entities from graph memory by ID, type, canonical_key, or claim_id',
+    description:
+      'Query entities from graph memory. At least one filter is required: id, type, canonical_key, or claim_id. Use limit to control result count.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -3029,7 +3034,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce.memory.query.relation',
     description:
-      'Query relations from graph memory by ID, src_id, dst_id, type, or evidence_claim_id',
+      'Query relations from graph memory. At least one filter is required: id, src_id, dst_id, type, or evidence_claim_id. Use limit to control result count.',
     inputSchema: {
       type: 'object',
       properties: {
