@@ -14,7 +14,7 @@
 - **応答**: すべての成功レスポンスは **`policy_version`** と **`provenance`**（可能な範囲）を含める。
 - **Idempotency**: `upsert` は **content_hash** で冪等。`feedback` は `(claim_id, ts_bucket)` で冪等。
 - **Logging**: すべての呼び出しは append-only 監査ログに記録（時刻・呼出・境界判定・由来）。
-- **Scoring / Retrieval**: `pce.memory.activate` / `pce.memory.search` は **policy (`retrieval.*`)** を読み取り、ハイブリッド結合（`alpha/k_*`）と再ランク（`use_quality`/`recency`）を適用する。スコアは `activation-ranking.md` の定義に従い **[0,1] 正規化**され、`score` は最終スコア（`combined*g`）を表す。必要に応じて詳細内訳は `include_meta:true` で返す。
+- **Scoring / Retrieval**: `pce_memory_activate` / `pce_memory_search` は **policy (`retrieval.*`)** を読み取り、ハイブリッド結合（`alpha/k_*`）と再ランク（`use_quality`/`recency`）を適用する。スコアは `activation-ranking.md` の定義に従い **[0,1] 正規化**され、`score` は最終スコア（`combined*g`）を表す。必要に応じて詳細内訳は `include_meta:true` で返す。
 
 ---
 
@@ -86,7 +86,7 @@
 
 ## 2. Tools
 
-### 2.0 `pce.memory.observe`
+### 2.0 `pce_memory_observe`
 
 **目的**: 生データ（Observation）を**短期TTLで保持**し、必要に応じて Claim に昇格して Evidence を残す（Issue #30）。
 
@@ -178,7 +178,7 @@
     - `extract.mode=single_claim_v0` を指定されても `noop` にフォールバックし、`warnings` を返す
   - 期限後は Observation.content を削除/スクラブし、digest/メタデータのみ保持する運用を推奨（GCは起動時 + best-effortで実行）。
 
-### 2.1 `pce.memory.activate`
+### 2.1 `pce_memory_activate`
 
 **目的**: クエリとポリシーに基づき **アクティブコンテキスト（AC）** を構成（関数 `r(q, C^L, B, policy, critic)`）。
 
@@ -256,7 +256,7 @@
 
 ---
 
-### 2.2 `pce.memory.search`
+### 2.2 `pce_memory_search`
 
 **目的**: 既知の前提・規約・禁止事項を想起（AC の取得無し）。
 
@@ -301,7 +301,7 @@
 
 ---
 
-### 2.3 `pce.memory.upsert`
+### 2.3 `pce_memory_upsert`
 
 **目的**: 重要な断片（Observation/Claim/Graph）を登録。**由来（provenance）必須**。
 
@@ -387,7 +387,7 @@
 
 ---
 
-### 2.4 `pce.memory.feedback`
+### 2.4 `pce_memory_feedback`
 
 **目的**: 採用/棄却/陳腐化/重複のシグナルで Critic を更新。
 
@@ -422,7 +422,7 @@
 
 ---
 
-### 2.5 `pce.memory.boundary.validate`
+### 2.5 `pce_memory_boundary_validate`
 
 **目的**: 生成前に境界チェック／**Redact-before-Send**。
 
@@ -462,7 +462,7 @@
 
 ---
 
-### 2.6 `pce.memory.policy.apply`
+### 2.6 `pce_memory_policy_apply`
 
 **目的**: ポリシーの適用（不変量・用途タグ・redact ルール）。**GitOps 承認推奨**。
 

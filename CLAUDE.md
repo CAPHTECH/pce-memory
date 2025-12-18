@@ -94,14 +94,14 @@ Uninitialized → PolicyApplied → HasClaims → Ready
 
 | Tool                           | Description                                        |
 | ------------------------------ | -------------------------------------------------- |
-| `pce.memory.policy.apply`      | Apply policy (initialization)                      |
-| `pce.memory.upsert`            | Register claim with entities/relations             |
-| `pce.memory.upsert.entity`     | Register graph entity                              |
-| `pce.memory.upsert.relation`   | Register graph relation                            |
-| `pce.memory.activate`          | Build active context (hybrid search)               |
-| `pce.memory.feedback`          | Update critic (helpful/harmful/outdated/duplicate) |
-| `pce.memory.boundary.validate` | Pre-generation boundary check                      |
-| `pce.memory.state`             | Get current state                                  |
+| `pce_memory_policy_apply`      | Apply policy (initialization)                      |
+| `pce_memory_upsert`            | Register claim with entities/relations             |
+| `pce_memory_upsert_entity`     | Register graph entity                              |
+| `pce_memory_upsert_relation`   | Register graph relation                            |
+| `pce_memory_activate`          | Build active context (hybrid search)               |
+| `pce_memory_feedback`          | Update critic (helpful/harmful/outdated/duplicate) |
+| `pce_memory_boundary_validate` | Pre-generation boundary check                      |
+| `pce_memory_state`             | Get current state                                  |
 
 ## Testing Approach
 

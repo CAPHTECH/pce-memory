@@ -1,7 +1,7 @@
 schemaVersion: "1.0.0"
 version: "v2024-12-16"
 name: pce-memory-observe-golden
-description: pce.memory.observe 機能評価用goldenset
+description: pce_memory_observe 機能評価用goldenset
 
 defaultParams:
   timeoutMs: 30000

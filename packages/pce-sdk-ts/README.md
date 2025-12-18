@@ -26,7 +26,7 @@ pnpm add @pce/sdk-ts
 
 MCPクライアント（例: `@modelcontextprotocol/sdk`）からは、以下のツール引数で呼び出せます。
 
-### `pce.memory.observe`
+### `pce_memory_observe`
 
 ```json
 {
@@ -45,7 +45,7 @@ Notes:
 
 - `effective_boundary_class` / `warnings` が返る場合があります（例: secret検知時は保存・抽出がスキップされる）。
 
-### `pce.memory.activate`
+### `pce_memory_activate`
 
 ```json
 {
@@ -58,13 +58,13 @@ Notes:
 
 ## Supported Tools
 
-- `pce.memory.policy.apply` - ポリシー適用
-- `pce.memory.observe` - 観察の記録（短期TTL）
-- `pce.memory.upsert` - Claim登録
-- `pce.memory.activate` - Active Contextの構成
-- `pce.memory.boundary.validate` - 境界チェック
-- `pce.memory.feedback` - フィードバック送信
-- `pce.memory.state` - 状態取得
+- `pce_memory_policy_apply` - ポリシー適用
+- `pce_memory_observe` - 観察の記録（短期TTL）
+- `pce_memory_upsert` - Claim登録
+- `pce_memory_activate` - Active Contextの構成
+- `pce_memory_boundary_validate` - 境界チェック
+- `pce_memory_feedback` - フィードバック送信
+- `pce_memory_state` - 状態取得
 
 ## Architecture
 

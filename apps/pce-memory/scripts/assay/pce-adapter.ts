@@ -124,14 +124,14 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
 
     // ポリシー適用
     console.log('📋 Applying policy...');
-    await this.callTool('pce.memory.policy.apply', {
+    await this.callTool('pce_memory_policy_apply', {
       policy: TEST_POLICY,
     });
 
     // テストデータ投入
     console.log(`📝 Upserting ${TEST_CLAIMS.length} test claims...`);
     for (const claim of TEST_CLAIMS) {
-      const result = await this.callTool('pce.memory.upsert', claim);
+      const result = await this.callTool('pce_memory_upsert', claim);
       // テストIDと生成されたclaim IDのマッピングを保存
       if (result && typeof result === 'object' && 'id' in result) {
         const generatedId = (result as { id: string }).id;
@@ -143,7 +143,7 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
   }
 
   /**
-   * クエリ実行: pce.memory.activateを呼び出しメトリクスを計算
+   * クエリ実行: pce_memory_activateを呼び出しメトリクスを計算
    */
   async execute(query: PceQuery, ctx: SearchAdapterContext): Promise<Metrics> {
     const startTime = Date.now();
@@ -153,7 +153,7 @@ export class PceMemorySearchAdapter implements SearchAdapter<PceQuery, Metrics> 
     }
 
     try {
-      const result = await this.callTool('pce.memory.activate', {
+      const result = await this.callTool('pce_memory_activate', {
         q: query.text,
         scope: ['session', 'project', 'principle'],
         allow: ['answer:task'],

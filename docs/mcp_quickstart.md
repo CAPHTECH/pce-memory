@@ -99,7 +99,7 @@ boundary_classes:
 ### 2.2 Claude Code / Codex（例）
 
 - それぞれの MCP 設定で **stdio** サーバを登録（上記と同等のコマンド/引数/環境変数）
-- ツール一覧に `pce.memory.*` が見えたら OK。
+- ツール一覧に `pce_memory_*` が見えたら OK。
 
 ---
 
@@ -109,7 +109,7 @@ boundary_classes:
 
 ### 3.1 policy.apply（最初だけ）
 
-**ツール**：`pce.memory.policy.apply`  
+**ツール**：`pce_memory_policy_apply`  
 **Payload**：
 
 ```json
@@ -122,7 +122,7 @@ boundary_classes:
 
 ### 3.2 upsert（既知の前提を 2 件登録）
 
-**ツール**：`pce.memory.upsert`  
+**ツール**：`pce_memory_upsert`  
 **Payload 例**：
 
 ```json
@@ -138,7 +138,7 @@ boundary_classes:
 
 ### 3.3 activate（AC を構成し、前提をまとめて取得）
 
-**ツール**：`pce.memory.activate`  
+**ツール**：`pce_memory_activate`  
 **Payload**：
 
 ```json
@@ -149,7 +149,7 @@ boundary_classes:
 
 ### 3.4 boundary.validate（生成前チェック＆マスク）
 
-**ツール**：`pce.memory.boundary.validate`  
+**ツール**：`pce_memory_boundary_validate`  
 **Payload**：
 
 ```json
@@ -160,7 +160,7 @@ boundary_classes:
 
 ### 3.5 feedback（採用/棄却を学習）
 
-**ツール**：`pce.memory.feedback`  
+**ツール**：`pce_memory_feedback`  
 **Payload**：
 
 ```json
@@ -204,12 +204,12 @@ boundary_classes:
   "name": "pce-memory",
   "version": "0.1.0",
   "tools": [
-    { "name": "pce.memory.activate" },
-    { "name": "pce.memory.search" },
-    { "name": "pce.memory.upsert" },
-    { "name": "pce.memory.feedback" },
-    { "name": "pce.memory.boundary.validate" },
-    { "name": "pce.memory.policy.apply" }
+    { "name": "pce_memory_activate" },
+    { "name": "pce_memory_search" },
+    { "name": "pce_memory_upsert" },
+    { "name": "pce_memory_feedback" },
+    { "name": "pce_memory_boundary_validate" },
+    { "name": "pce_memory_policy_apply" }
   ]
 }
 ```
@@ -225,7 +225,7 @@ boundary_classes:
 ### policy.apply（最初だけ）
 
 ```bash
-curl -s -X POST http://localhost:8787/tools/pce.memory.policy.apply \
+curl -s -X POST http://localhost:8787/tools/pce_memory_policy_apply \
  -H "Authorization: Bearer $PCE_TOKEN" -H 'Content-Type: application/json' \
  -d @<(cat <<'JSON'
 {"yaml":"$(python3 - <<'PY'
@@ -240,7 +240,7 @@ JSON
 ### upsert（既知の前提を 2 件登録）
 
 ```bash
-curl -s -X POST http://localhost:8787/tools/pce.memory.upsert \
+curl -s -X POST http://localhost:8787/tools/pce_memory_upsert \
  -H "Authorization: Bearer $PCE_TOKEN" -H 'Content-Type: application/json' \
  -d '{
   "text":"解約APIは POST /subscriptions/{id}/cancel（非同期・冪等）",
@@ -251,7 +251,7 @@ curl -s -X POST http://localhost:8787/tools/pce.memory.upsert \
 ```
 
 ```bash
-curl -s -X POST http://localhost:8787/tools/pce.memory.upsert \
+curl -s -X POST http://localhost:8787/tools/pce_memory_upsert \
  -H "Authorization: Bearer $PCE_TOKEN" -H 'Content-Type: application/json' \
  -d '{
   "text":"Stripe webhook は 10 分の時刻ドリフトを許容",
@@ -264,7 +264,7 @@ curl -s -X POST http://localhost:8787/tools/pce.memory.upsert \
 ### activate（AC を構成し、前提をまとめて取得）
 
 ```bash
-curl -s -X POST http://localhost:8787/tools/pce.memory.activate \
+curl -s -X POST http://localhost:8787/tools/pce_memory_activate \
  -H "Authorization: Bearer $PCE_TOKEN" -H 'Content-Type: application/json' \
  -d '{"q":"解約/返金 仕様","scope":["project"],"allow":["answer:task"],"top_k":12}'
 ```
@@ -272,7 +272,7 @@ curl -s -X POST http://localhost:8787/tools/pce.memory.activate \
 ### boundary.validate（生成前の境界チェック＆マスク）
 
 ```bash
-curl -s -X POST http://localhost:8787/tools/pce.memory.boundary.validate \
+curl -s -X POST http://localhost:8787/tools/pce_memory_boundary_validate \
  -H "Authorization: Bearer $PCE_TOKEN" -H 'Content-Type: application/json' \
  -d '{"payload":"連絡は ryo@example.com へ","allow":["answer:task"],"scope":"project"}'
 ```
@@ -280,7 +280,7 @@ curl -s -X POST http://localhost:8787/tools/pce.memory.boundary.validate \
 ### feedback（採用/棄却を学習）
 
 ```bash
-curl -s -X POST http://localhost:8787/tools/pce.memory.feedback \
+curl -s -X POST http://localhost:8787/tools/pce_memory_feedback \
  -H "Authorization: Bearer $PCE_TOKEN" -H 'Content-Type: application/json' \
  -d '{"claim_id":"clm_7k","signal":"helpful","score":1.0}'
 ```

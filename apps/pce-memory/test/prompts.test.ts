@@ -123,7 +123,7 @@ describe('MCP Prompts (Issue #16)', () => {
       });
       const allText = result.messages.map((m) => m.content.text).join(' ');
       expect(allText).toContain('Push');
-      expect(allText).toContain('sync.push');
+      expect(allText).toContain('pce_memory_sync_push');
     });
 
     it('returns pull guide with operation=pull', async () => {
@@ -142,7 +142,7 @@ describe('MCP Prompts (Issue #16)', () => {
       const result = await handleGetPrompt({ name: 'sync_push' });
       expect(result.messages.length).toBeGreaterThan(0);
       const allText = result.messages.map((m) => m.content.text).join(' ');
-      expect(allText).toContain('pce.memory.sync.push');
+      expect(allText).toContain('pce_memory_sync_push');
       expect(allText).toContain('scope_filter');
       expect(allText).toContain('boundary_filter');
     });
@@ -164,7 +164,7 @@ describe('MCP Prompts (Issue #16)', () => {
       const result = await handleGetPrompt({ name: 'sync_pull' });
       expect(result.messages.length).toBeGreaterThan(0);
       const allText = result.messages.map((m) => m.content.text).join(' ');
-      expect(allText).toContain('pce.memory.sync.pull');
+      expect(allText).toContain('pce_memory_sync_pull');
       expect(allText).toContain('dry_run');
       expect(allText).toContain('CRDT');
     });

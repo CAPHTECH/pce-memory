@@ -23,18 +23,18 @@
 
 ### 1.1 Retrieval / Activation
 
-- `pce.memory.search` / `pce.memory.activate` は **前置フィルタ**で `scope/allow/boundary_class` を照合。
+- `pce_memory_search` / `pce_memory_activate` は **前置フィルタ**で `scope/allow/boundary_class` を照合。
 - AC 生成関数 `r(q, C^L, B, policy, critic)` は、許可範囲内の断片のみを候補にする。
 - 返却は **read-only**、出典（evidences）と `policy_version` を必須。
 
 ### 1.2 Generation 前後
 
-- 生成 **前**：`pce.memory.boundary.validate(payload, allow?, scope?)` を必ず呼ぶ。
+- 生成 **前**：`pce_memory_boundary_validate(payload, allow?, scope?)` を必ず呼ぶ。
 - 生成 **後**：必要に応じて再度 `validate`、許可外の語や PII/Secret を自動 Redact。
 
 ### 1.3 Write（Upsert / Distill / Rollback）
 
-- `pce.memory.upsert` は `boundary_class` 必須。`secret` は原則拒否（例外は人手レビュー）。
+- `pce_memory_upsert` は `boundary_class` 必須。`secret` は原則拒否（例外は人手レビュー）。
 - **Distill（蒸留）**：AC→LCP 昇格時は I(B) を再検証し、由来を必須添付。
 - **Rollback（沈降）**：越境/誤り検知時に LCP の安全側へ巻戻す（監査ログと連動）。
 
@@ -112,7 +112,7 @@ retrieval:
 - `retrieval.rerank.use_quality`：`g` に `quality` を乗算するかのフラグ（既定 false）。
 - `retrieval.rerank.recency_half_life_days`：再ランク `recency` の半減期（既定 30 日）。
 - `retrieval.rerank.recency.half_life_days_by_kind`：`kind` 別の半減期。`fact=120, task=14, preference=90, policy_hint=365` を初期値とする。
-- **実装**：`pce.memory.activate` / `pce.memory.search` は、これらのパラメータを読み込み `r/S/g` の計算に反映する（詳細は `activation-ranking.md`）。
+- **実装**：`pce_memory_activate` / `pce_memory_search` は、これらのパラメータを読み込み `r/S/g` の計算に反映する（詳細は `activation-ranking.md`）。
 
 ### 2.x 合成・優先順位（precedence）
 
@@ -232,7 +232,7 @@ redact_policies:
 
 ## 5. MCP ツールと境界
 
-- **validate**：`pce.memory.boundary.validate(payload, allow?, scope?)`
+- **validate**：`pce_memory_boundary_validate(payload, allow?, scope?)`
   - `allowed: boolean`, `redacted?: string`, `reason`, `policy_version`
 - **activate/search**：`scope/allow` を必須化。候補は境界内の断片のみ。
   - `retrieval.*` パラメータ（hybrid/rerank）は `activate`/`search` 内のスコアリングに適用される（`activation-ranking.md` 参照）。

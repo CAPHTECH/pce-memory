@@ -90,21 +90,21 @@
 
 | Tool 名                        | 入力（req）                                                                    | 出力（resp）                                     | 目的                                      |
 | ------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------ | ----------------------------------------- | -------------------- | -------------- | ----------------------- |
-| `pce.memory.search`            | `{ query, top_k?, scope?, allow? }`                                            | `[{ claim, scores, evidences, policy_version }]` | 既知の前提・規約・禁止事項を想起          |
-| `pce.memory.activate`          | `{ q, scope?, allow? }`                                                        | `{ active_context_id, claims[] }`                | LCP から AC を構成（r 関数）              |
-| `pce.memory.upsert`            | `{ text, kind?, scope?, boundary_class?, entities?, relations?, provenance? }` | `{ id }`                                         | 重要断片の登録（Observation/Claim/Graph） |
-| `pce.memory.feedback`          | `{ claim_id, signal: helpful                                                   | harmful                                          | outdated                                  | duplicate, score? }` | `{ ok: true }` | Critic による評価ループ |
-| `pce.memory.boundary.validate` | `{ payload, allow?, scope? }`                                                  | `{ allowed, reason, redacted? }`                 | 生成前の境界チェック／Redact-before-Send  |
-| `pce.memory.policy.apply`      | `{ yaml }`                                                                     | `{ version }`                                    | ポリシー適用（不変量・用途タグ）          |
+| `pce_memory_search`            | `{ query, top_k?, scope?, allow? }`                                            | `[{ claim, scores, evidences, policy_version }]` | 既知の前提・規約・禁止事項を想起          |
+| `pce_memory_activate`          | `{ q, scope?, allow? }`                                                        | `{ active_context_id, claims[] }`                | LCP から AC を構成（r 関数）              |
+| `pce_memory_upsert`            | `{ text, kind?, scope?, boundary_class?, entities?, relations?, provenance? }` | `{ id }`                                         | 重要断片の登録（Observation/Claim/Graph） |
+| `pce_memory_feedback`          | `{ claim_id, signal: helpful                                                   | harmful                                          | outdated                                  | duplicate, score? }` | `{ ok: true }` | Critic による評価ループ |
+| `pce_memory_boundary_validate` | `{ payload, allow?, scope? }`                                                  | `{ allowed, reason, redacted? }`                 | 生成前の境界チェック／Redact-before-Send  |
+| `pce_memory_policy_apply`      | `{ yaml }`                                                                     | `{ version }`                                    | ポリシー適用（不変量・用途タグ）          |
 
 > すべてのツールは **Provenance** と **policy_version** をレスポンスに含め、監査可能性を担保する。
 
 ### 代表フロー（エージェント側）
 
-1. **Activation**：`pce.memory.activate` で AC を取得し、プロンプト先頭に貼る（前提注入）。
-2. **Generation**：候補案を生成する前に `pce.memory.boundary.validate` でチェック（必要なら redact）。
-3. **Upsert**：決定事項や設計の根拠を `pce.memory.upsert` で保存。由来（commit/URL）を必須に。
-4. **Feedback**：採用/棄却結果を `pce.memory.feedback` で返し、次回の再ランクに反映。
+1. **Activation**：`pce_memory_activate` で AC を取得し、プロンプト先頭に貼る（前提注入）。
+2. **Generation**：候補案を生成する前に `pce_memory_boundary_validate` でチェック（必要なら redact）。
+3. **Upsert**：決定事項や設計の根拠を `pce_memory_upsert` で保存。由来（commit/URL）を必須に。
+4. **Feedback**：採用/棄却結果を `pce_memory_feedback` で返し、次回の再ランクに反映。
 
 ### AC 生成関数 r の骨子（擬似）
 
