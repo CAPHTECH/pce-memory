@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2025-12-18
+
+### Added
+
+- **Optional content_hash in upsert** - `content_hash` parameter is now optional in `pce.memory.upsert` (#37)
+  - Auto-generates SHA256 hash from text when omitted
+  - Validates against provided hash when specified (existing behavior)
+  - Response now includes `content_hash` field for client reference
+  - Backward compatible: existing clients continue to work
+
 ## [0.8.5] - 2025-12-18
 
 ### Fixed
