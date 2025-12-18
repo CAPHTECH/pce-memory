@@ -28,6 +28,39 @@ beforeEach(async () => {
 });
 
 describe('handleUpsert content_hash validation', () => {
+  it('auto-generates content_hash when not provided', async () => {
+    const text = 'Test claim without explicit hash';
+    const expectedHash = `sha256:${computeContentHash(text)}`;
+
+    const result = await handleUpsert({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      // content_hash is intentionally omitted
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]).toBeDefined();
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
+    expect(response.id).toBeDefined();
+
+    // Verify the claim was stored with the correct auto-generated hash
+    // by trying to upsert with the same content - should return is_new: false
+    const duplicateResult = await handleUpsert({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: expectedHash,
+    });
+
+    expect(duplicateResult.isError).toBeUndefined();
+    const dupResponse = JSON.parse(duplicateResult.content[0]?.text ?? '{}');
+    expect(dupResponse.is_new).toBe(false);
+    expect(dupResponse.id).toBe(response.id);
+  });
+
   it('accepts valid content_hash matching text SHA256', async () => {
     const text = 'Test claim text';
     const correctHash = `sha256:${computeContentHash(text)}`;
@@ -105,5 +138,34 @@ describe('handleUpsert content_hash validation', () => {
     expect(response.error.message).not.toContain(expectedHash);
     expect(response.error.message).not.toContain(wrongHash);
     expect(response.error.message).toContain('content_hash mismatch');
+  });
+
+  it('returns content_hash in response when auto-generated', async () => {
+    const text = 'Test claim for hash response';
+    const expectedHash = `sha256:${computeContentHash(text)}`;
+
+    const result = await handleUpsert({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
+    expect(response.content_hash).toBe(expectedHash);
+  });
+
+  it('rejects empty text even without content_hash', async () => {
+    const result = await handleUpsert({
+      text: '',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+    });
+
+    expect(result.isError).toBe(true);
+    const response = JSON.parse(result.content[0]?.text ?? '{}');
+    expect(response.error.code).toBe('VALIDATION_ERROR');
   });
 });

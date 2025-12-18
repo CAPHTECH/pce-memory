@@ -125,6 +125,7 @@ function isAllowedByBoundary(allowList: string[], requestedAllow: string[]): boo
 interface UpsertValidationResult {
   isValid: boolean;
   errorResponse?: ToolResult;
+  resolvedHash?: string; // Auto-generated or validated content_hash
 }
 
 async function validateUpsertInput(
@@ -173,7 +174,7 @@ async function validateUpsertInput(
     };
   }
 
-  if (!text || !kind || !scope || !boundary_class || !content_hash) {
+  if (!text || !kind || !scope || !boundary_class) {
     return {
       isValid: false,
       errorResponse: createToolResult(
@@ -198,23 +199,32 @@ async function validateUpsertInput(
     };
   }
 
-  // content_hashとtextの一致検証（改竄防止）
-  const expectedHash = `sha256:${computeContentHash(text)}`;
-  if (content_hash !== expectedHash) {
-    return {
-      isValid: false,
-      errorResponse: createToolResult(
-        {
-          ...err(
-            'VALIDATION_ERROR',
-            'content_hash mismatch: provided hash does not match computed hash for text',
-            reqId
-          ),
-          trace_id: traceId,
-        },
-        { isError: true }
-      ),
-    };
+  // content_hash処理: 未指定時は自動生成、指定時は検証
+  const computedHash = `sha256:${computeContentHash(text)}`;
+  let resolvedHash: string;
+
+  if (content_hash) {
+    // 指定時: 一致検証（改竄防止）
+    if (content_hash !== computedHash) {
+      return {
+        isValid: false,
+        errorResponse: createToolResult(
+          {
+            ...err(
+              'VALIDATION_ERROR',
+              'content_hash mismatch: provided hash does not match computed hash for text',
+              reqId
+            ),
+            trace_id: traceId,
+          },
+          { isError: true }
+        ),
+      };
+    }
+    resolvedHash = content_hash;
+  } else {
+    // 未指定時: 自動生成
+    resolvedHash = computedHash;
   }
 
   const policy = getPolicy();
@@ -228,7 +238,7 @@ async function validateUpsertInput(
     };
   }
 
-  return { isValid: true };
+  return { isValid: true, resolvedHash };
 }
 
 /**
@@ -357,13 +367,24 @@ export async function handleUpsert(args: Record<string, unknown>) {
       return validation.errorResponse!;
     }
 
+    // Defensive guard for resolvedHash (should never happen if isValid is true)
+    if (!validation.resolvedHash) {
+      return createToolResult(
+        {
+          ...err('STATE_ERROR', 'resolvedHash missing after validation', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
     // Claim登録（EmbeddingServiceがあれば埋め込みも生成）
     const claimInput = {
       text: text!,
       kind: kind!,
       scope: scope!,
       boundary_class: boundary_class!,
-      content_hash: content_hash!,
+      content_hash: validation.resolvedHash,
       ...(provenance !== undefined ? { provenance } : {}),
     };
     const embeddingService = getEmbeddingService();
@@ -408,6 +429,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
     return createToolResult({
       id: claim.id,
       is_new: isNew,
+      content_hash: validation.resolvedHash,
       ...graphMemoryResult,
       policy_version: getPolicyVersion(),
       state: getStateType(),
@@ -2583,7 +2605,12 @@ export const TOOL_DEFINITIONS = [
         kind: { type: 'string', enum: ['fact', 'preference', 'task', 'policy_hint'] },
         scope: { type: 'string', enum: ['session', 'project', 'principle'] },
         boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
-        content_hash: { type: 'string', pattern: '^sha256:[0-9a-f]{64}$' },
+        content_hash: {
+          type: 'string',
+          pattern: '^sha256:[0-9a-f]{64}$',
+          description:
+            'Optional. SHA256 hash of text for deduplication. Auto-generated if omitted; validated against text if provided.',
+        },
         provenance: {
           type: 'object',
           properties: {
@@ -2634,13 +2661,17 @@ export const TOOL_DEFINITIONS = [
           },
         },
       },
-      required: ['text', 'kind', 'scope', 'boundary_class', 'content_hash'],
+      required: ['text', 'kind', 'scope', 'boundary_class'],
     },
     outputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Claim ID' },
         is_new: { type: 'boolean', description: 'Whether this is a new claim' },
+        content_hash: {
+          type: 'string',
+          description: 'SHA256 hash of text (auto-generated or provided)',
+        },
         graph_memory: {
           type: 'object',
           properties: {
