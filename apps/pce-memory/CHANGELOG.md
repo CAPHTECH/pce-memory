@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2025-12-18
+
+### Fixed
+
+- **BigInt serialization in structuredContent** - Fix MCP error when query.entity/relation returns timestamps (#38)
+  - `createToolResult` now converts BigInt values in structuredContent
+  - Prevents "Do not know how to serialize a BigInt" error
+
+### Changed
+
+- **Improved query tool descriptions** - Clarified filter requirements for `query.entity` and `query.relation`
+  - Description now states "At least one filter is required"
+  - Prevents LLM from calling without filters
+
+### Added
+
+- **BigInt serialization regression tests** - Added tests to verify structuredContent is JSON-serializable
+
 ## [0.9.0] - 2025-12-18
 
 ### Added
