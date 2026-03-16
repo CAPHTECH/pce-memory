@@ -1,0 +1,12 @@
+{
+  "name": "pce-memory-plugin",
+  "version": "0.1.0",
+  "description": "Persistent knowledge management with pce-memory MCP server",
+  "author": {
+    "name": "CAPH TECH Inc."
+  },
+  "repository": "https://github.com/rizumita/pce-memory",
+  "license": "MIT",
+  "keywords": ["memory", "knowledge", "pce", "graph", "sync"],
+  "skills": "./skills/"
+}
