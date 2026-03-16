@@ -1,0 +1,24 @@
+{
+  "name": "pce-memory-marketplace",
+  "owner": {
+    "name": "CAPH TECH Inc."
+  },
+  "metadata": {
+    "description": "Persistent knowledge management plugins for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "pce-memory-plugin",
+      "source": "./pce-memory-plugin",
+      "description": "Autonomous knowledge management with pce-memory MCP server",
+      "version": "0.1.0",
+      "author": {
+        "name": "CAPH TECH Inc."
+      },
+      "homepage": "https://github.com/CAPHTECH/pce-memory",
+      "repository": "https://github.com/CAPHTECH/pce-memory",
+      "license": "MIT",
+      "keywords": ["memory", "knowledge", "pce", "graph", "sync"]
+    }
+  ]
+}
