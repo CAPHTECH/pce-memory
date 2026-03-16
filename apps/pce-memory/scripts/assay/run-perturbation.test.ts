@@ -88,23 +88,28 @@ async function runConfig(
     );
     const retrievedIds = searchResult.results.map((c) => c.claim.id);
     const relevanceGrades = new Map<string, number>();
-    const relevantIds: string[] = [];
+    const relevantIdSet = new Set<string>();
+    const resolveId = (rawId: string): string => {
+      const mapped = testIdToClaimId.get(rawId);
+      if (!mapped) throw new Error(`Unknown expected claim reference "${rawId}" in query "${query.id}"`);
+      return mapped;
+    };
     if (Array.isArray(query.metadata?.expected)) {
       for (const item of query.metadata!.expected!) {
         if (typeof item === 'object' && 'path' in item && 'relevance' in item) {
-          const cid = testIdToClaimId.get(item.path) ?? item.path;
+          const cid = resolveId(item.path);
           relevanceGrades.set(cid, item.relevance);
-          if (item.relevance > 0) relevantIds.push(cid);
+          if (item.relevance > 0) relevantIdSet.add(cid);
         } else if (typeof item === 'string') {
-          const cid = testIdToClaimId.get(item) ?? item;
+          const cid = resolveId(item);
           relevanceGrades.set(cid, 1);
-          relevantIds.push(cid);
+          relevantIdSet.add(cid);
         }
       }
     }
     const metrics = evaluateRetrieval({
       items: retrievedIds.map((id, i) => ({ id, timestampMs: startTime + i * TIMESTAMP_INTERVAL_MS })),
-      relevant: relevantIds, k: config.top_k, startTimestampMs: startTime,
+      relevant: Array.from(relevantIdSet), k: config.top_k, startTimestampMs: startTime,
       ...(relevanceGrades.size > 0 && { relevanceGrades }),
     });
     results.push({ queryId: query.id, precision: metrics.precisionAtK, recall: metrics.recallAtK, mrr: metrics.mrr, ndcg: metrics.ndcg ?? 0 });
