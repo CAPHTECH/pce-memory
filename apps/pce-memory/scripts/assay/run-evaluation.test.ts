@@ -2,7 +2,7 @@
  * Vitest wrapper for goldenset evaluation.
  * vitestのモジュール解決（resolve.alias）を活用してfp-ts等のESM問題を回避。
  */
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -125,12 +125,16 @@ class StoreDirectAdapter implements SearchAdapter<PceQuery, Metrics> {
   private getExpectedIds(query: PceQuery): string[] {
     const expected = query.metadata?.expected;
     if (!Array.isArray(expected)) return [];
-    return expected
-      .map((item) => {
-        const testId = typeof item === 'string' ? item : item.path;
-        return this.testIdToClaimId.get(testId) ?? testId;
-      })
-      .filter(Boolean);
+    return expected.map((item) => {
+      const testId = typeof item === 'string' ? item : item.path;
+      return this.resolveExpectedId(testId);
+    });
+  }
+
+  private resolveExpectedId(rawId: string): string {
+    const mapped = this.testIdToClaimId.get(rawId);
+    if (!mapped) throw new Error(`Unknown expected claim reference "${rawId}"`);
+    return mapped;
   }
 
   private buildRelevanceGrades(query: PceQuery): {
@@ -138,21 +142,21 @@ class StoreDirectAdapter implements SearchAdapter<PceQuery, Metrics> {
     relevantIds: string[];
   } {
     const relevanceGrades = new Map<string, number>();
-    const relevantIds: string[] = [];
+    const relevantIdSet = new Set<string>();
     const expected = query.metadata?.expected;
-    if (!Array.isArray(expected)) return { relevanceGrades, relevantIds };
+    if (!Array.isArray(expected)) return { relevanceGrades, relevantIds: [] };
     for (const item of expected) {
       if (typeof item === 'object' && 'path' in item && 'relevance' in item) {
-        const claimId = this.testIdToClaimId.get(item.path) ?? item.path;
+        const claimId = this.resolveExpectedId(item.path);
         relevanceGrades.set(claimId, item.relevance);
-        if (item.relevance > 0) relevantIds.push(claimId);
+        if (item.relevance > 0) relevantIdSet.add(claimId);
       } else if (typeof item === 'string') {
-        const claimId = this.testIdToClaimId.get(item) ?? item;
+        const claimId = this.resolveExpectedId(item);
         relevanceGrades.set(claimId, 1);
-        relevantIds.push(claimId);
+        relevantIdSet.add(claimId);
       }
     }
-    return { relevanceGrades, relevantIds };
+    return { relevanceGrades, relevantIds: Array.from(relevantIdSet) };
   }
 }
 
@@ -192,5 +196,11 @@ describe('PCE-Memory Goldenset Evaluation', () => {
     console.log(`  MRR: ${(avg(mrrs) * 100).toFixed(1)}%`);
     console.log(`  nDCG: ${(avg(ndcgs) * 100).toFixed(1)}%`);
     console.log(`\n📄 Results: ${jsonPath}\n  ${mdPath}`);
+
+    // Quality gates
+    expect(result.overall.errorCount).toBe(0);
+    expect(result.overall.successCount).toBe(dataset.queries.length);
+    expect(avg(recalls)).toBeGreaterThan(0.5);
+    expect(avg(mrrs)).toBeGreaterThan(0.5);
   });
 });

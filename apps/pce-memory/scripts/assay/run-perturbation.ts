@@ -127,20 +127,25 @@ async function runConfig(
     // expectedからrelevant IDsを構築
     const expected = query.metadata?.expected;
     const relevanceGrades = new Map<string, number>();
-    const relevantIds: string[] = [];
+    const relevantIdSet = new Set<string>();
+    const resolveId = (rawId: string): string => {
+      const mapped = testIdToClaimId.get(rawId);
+      if (!mapped) throw new Error(`Unknown expected claim reference "${rawId}" in query "${query.id}"`);
+      return mapped;
+    };
 
     if (Array.isArray(expected)) {
       for (const item of expected) {
         if (typeof item === 'object' && 'path' in item && 'relevance' in item) {
-          const claimId = testIdToClaimId.get(item.path) ?? item.path;
+          const claimId = resolveId(item.path);
           relevanceGrades.set(claimId, item.relevance);
           if (item.relevance > 0) {
-            relevantIds.push(claimId);
+            relevantIdSet.add(claimId);
           }
         } else if (typeof item === 'string') {
-          const claimId = testIdToClaimId.get(item) ?? item;
+          const claimId = resolveId(item);
           relevanceGrades.set(claimId, 1);
-          relevantIds.push(claimId);
+          relevantIdSet.add(claimId);
         }
       }
     }
@@ -150,7 +155,7 @@ async function runConfig(
         id,
         timestampMs: startTime + i * TIMESTAMP_INTERVAL_MS,
       })),
-      relevant: relevantIds,
+      relevant: Array.from(relevantIdSet),
       k: config.top_k,
       startTimestampMs: startTime,
       ...(relevanceGrades.size > 0 && { relevanceGrades }),

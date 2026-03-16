@@ -9,8 +9,8 @@ defaultParams:
 
 queries:
   # === fact カテゴリ ===
-  # Note: Text-only fallback mode uses ILIKE substring match
-  # Query text must be exact substrings of claim text
+  # Note: fact/pref/task/cross queries use exact substrings (text-only fallback compatible).
+  # paraphrase/multi-hop/discrimination queries require embedding search.
   - id: fact-001-jwt
     text: "JWT認証"
     metadata:

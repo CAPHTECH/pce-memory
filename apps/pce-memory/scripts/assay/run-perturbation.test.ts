@@ -1,7 +1,7 @@
 /**
  * Vitest wrapper for perturbation test.
  */
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadDataset, evaluateRetrieval } from '../../external/assay-kit/packages/assay-kit/src/index.ts';
@@ -147,5 +147,16 @@ describe('PCE-Memory Parameter Perturbation', () => {
     const mdPath = join(resultsDir, `perturbation-${dateStr}.md`);
     writeFileSync(mdPath, lines.join('\n'));
     console.log(`\nResults: ${mdPath}`);
+
+    // Quality gates
+    expect(configResults).toHaveLength(CONFIGS.length);
+    for (const cr of configResults) {
+      expect(cr.results).toHaveLength(queries.length);
+      expect(Number.isFinite(cr.avgRecall)).toBe(true);
+      expect(Number.isFinite(cr.avgMrr)).toBe(true);
+    }
+    const baseline = configResults.find((c) => c.config.name === 'baseline');
+    expect(baseline).toBeDefined();
+    expect(baseline!.avgRecall).toBeGreaterThan(0.5);
   });
 });
