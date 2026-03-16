@@ -8,7 +8,7 @@ INPUT=$(cat)
 PROMPT=$(echo "$INPUT" | sed -n 's/.*"userPrompt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 # Base protocol (always injected)
-BASE="pce-memory autonomous operation: Record important design decisions with pce_memory_upsert. Send pce_memory_feedback when recalled knowledge was helpful/outdated. Record: architecture decisions, technical constraints, API specs, naming conventions, bug root causes. Do NOT record: minor fixes, obvious info, secrets. After context compaction, re-retrieve knowledge with pce_memory_activate if previously activated knowledge is no longer in conversation."
+BASE="pce-memory autonomous operation: Record important design decisions with pce_memory_upsert. Send pce_memory_feedback when recalled knowledge was helpful/outdated. Record: architecture decisions, technical constraints, API specs, naming conventions, bug root causes. Do NOT record: minor fixes, obvious info, secrets. After context compaction, re-retrieve knowledge with pce_memory_activate if previously activated knowledge is no longer in conversation. Always write upsert text and activate queries in English for consistent embedding search and team sync."
 
 # Task detection
 if echo "$PROMPT" | grep -qiE '(implement|add|create|build|fix|bug|error|design|refactor|debug|investigate|migrate|delete|remove|change|update|modify|test|review|deploy|configure|setup|install|upgrade)'; then
