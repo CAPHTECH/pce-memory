@@ -112,3 +112,119 @@ queries:
       expected:
         - path: "fact-duckdb-storage"
           relevance: 3
+
+  # === paraphrase queries (言い換え) ===
+  - id: para-001
+    text: "トークンベースの認証方式"
+    metadata:
+      category: paraphrase
+      intent: "JWT認証を別の言い方で検索"
+      expected:
+        - path: "fact-jwt-auth"
+          relevance: 3
+
+  - id: para-002
+    text: "組み込みデータベースでのデータ保存"
+    metadata:
+      category: paraphrase
+      intent: "DuckDB永続化を別の言い方で検索"
+      expected:
+        - path: "fact-duckdb-storage"
+          relevance: 3
+
+  - id: para-003
+    text: "関数型のエラー処理パターン"
+    metadata:
+      category: paraphrase
+      intent: "fp-ts Eitherを別の言い方で検索"
+      expected:
+        - path: "fact-fp-ts-error"
+          relevance: 3
+
+  - id: para-004
+    text: "テスト実行フレームワークの選定"
+    metadata:
+      category: paraphrase
+      intent: "Vitest選定を別の言い方で検索"
+      expected:
+        - path: "pref-vitest"
+          relevance: 3
+
+  - id: para-005
+    text: "関数名の命名ルール"
+    metadata:
+      category: paraphrase
+      intent: "ハンドラプレフィックスを別の言い方で検索"
+      expected:
+        - path: "pref-handler-prefix"
+          relevance: 3
+
+  # === multi-hop queries (複数claim横断) ===
+  - id: multi-001
+    text: "コード品質とテストの方針"
+    metadata:
+      category: multi-hop
+      intent: "品質・テスト関連の複数claimを検索"
+      expected:
+        - path: "pref-vitest"
+          relevance: 3
+        - path: "pref-functional-style"
+          relevance: 2
+        - path: "fact-fp-ts-error"
+          relevance: 2
+
+  - id: multi-002
+    text: "認証とセキュリティ保護"
+    metadata:
+      category: multi-hop
+      intent: "認証・セキュリティ関連の複数claimを検索"
+      expected:
+        - path: "fact-jwt-auth"
+          relevance: 3
+        - path: "hint-pii-protection"
+          relevance: 2
+
+  - id: multi-003
+    text: "データ保存と検索の仕組み"
+    metadata:
+      category: multi-hop
+      intent: "データ保存・検索関連の複数claimを検索"
+      expected:
+        - path: "fact-duckdb-storage"
+          relevance: 3
+        - path: "fact-hybrid-search"
+          relevance: 3
+
+  # === hard negative discrimination queries ===
+  - id: disc-001
+    text: "JWT認証トークンの有効期限設定"
+    metadata:
+      category: discrimination
+      intent: "JWT認証を検索しOAuth2を返さないことを検証"
+      expected:
+        - path: "fact-jwt-auth"
+          relevance: 3
+        - path: "neg-oauth2-flow"
+          relevance: 0
+
+  - id: disc-002
+    text: "DuckDBの永続化設定"
+    metadata:
+      category: discrimination
+      intent: "DuckDBを検索しSQLiteを返さないことを検証"
+      expected:
+        - path: "fact-duckdb-storage"
+          relevance: 3
+        - path: "neg-sqlite-storage"
+          relevance: 0
+
+  - id: disc-003
+    text: "fp-tsのEitherによる例外なしエラー処理"
+    metadata:
+      category: discrimination
+      intent: "fp-ts Eitherを検索しtry-catchを返さないことを検証"
+      expected:
+        - path: "fact-fp-ts-error"
+          relevance: 3
+        - path: "neg-imperative-error"
+          relevance: 0

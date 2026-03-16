@@ -25,6 +25,7 @@ import {
 import { analyzeTextSensitivity, redactPiiText } from '../audit/redactText.js';
 import { saveActiveContext } from '../store/activeContext.js';
 import { recordFeedback } from '../store/feedback.js';
+import { computeHealthReport } from '../store/health.js';
 import { appendLog } from '../store/logs.js';
 import { checkAndConsume } from '../store/rate.js';
 import { updateCritic } from '../store/critic.js';
@@ -43,6 +44,7 @@ import {
   canDoActivate,
   canDoFeedback,
   canDoQuery,
+  getActiveContextId,
   transitionToHasClaims,
   transitionToReady,
 } from '../state/memoryState.js';
@@ -1063,17 +1065,18 @@ export async function handleFeedback(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+    const activeContextId = getActiveContextId();
     const feedbackInput: {
       claim_id: string;
       signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
       score?: number;
+      active_context_id?: string;
     } = {
       claim_id,
       signal: signal as 'helpful' | 'harmful' | 'outdated' | 'duplicate',
+      ...(score !== undefined && { score }),
+      ...(activeContextId !== undefined && { active_context_id: activeContextId }),
     };
-    if (score !== undefined) {
-      feedbackInput.score = score;
-    }
     const res = await recordFeedback(feedbackInput);
     const delta = signal === 'helpful' ? 1 : signal === 'harmful' ? -1 : -0.5;
     await updateCritic(claim_id, delta, 0, 5);
@@ -1542,6 +1545,66 @@ export async function handleGetState(args: Record<string, unknown>) {
   });
 }
 
+// ========== Health Handler ==========
+
+/**
+ * 知識ベースの健全性レポートを生成
+ */
+export async function handleHealth(_args: Record<string, unknown>) {
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    if (!canDoQuery()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const report = await computeHealthReport();
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'health',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      ...report,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'health',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('HEALTH_FAILED', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  }
+}
+
 // ========== Sync Handlers (Issue #18) ==========
 
 /**
@@ -1911,6 +1974,8 @@ export async function dispatchTool(
       return handleFeedback(args);
     case 'pce_memory_state':
       return handleGetState(args);
+    case 'pce_memory_health':
+      return handleHealth(args);
     // Sync Tools (Issue #18)
     case 'pce_memory_sync_push':
       return handleSyncPush(args);
@@ -2882,6 +2947,63 @@ export const TOOL_DEFINITIONS = [
         trace_id: { type: 'string', description: 'Trace identifier for debugging' },
       },
       required: ['state', 'policy_version', 'request_id', 'trace_id'],
+    },
+  },
+  {
+    name: 'pce_memory_health',
+    description:
+      'Get knowledge base health report. Returns claim statistics, confidence distribution, feedback summary, utility distribution, and activation coverage. No parameters required.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        total_claims: { type: 'integer', minimum: 0, description: 'Total number of claims' },
+        by_kind: { type: 'object', description: 'Claim count by kind (fact/preference/task/policy_hint)' },
+        by_scope: { type: 'object', description: 'Claim count by scope (session/project/principle)' },
+        confidence_bands: {
+          type: 'object',
+          properties: {
+            high: { type: 'integer' },
+            medium: { type: 'integer' },
+            low: { type: 'integer' },
+          },
+          description: 'Claims grouped by confidence level',
+        },
+        last_positive_feedback_age: {
+          type: 'object',
+          properties: {
+            recent_30d: { type: 'integer' },
+            stale_90d: { type: 'integer' },
+            dormant: { type: 'integer' },
+          },
+        },
+        duplicate_feedback_rate: { type: 'number', description: 'Rate of duplicate feedback signals' },
+        never_activated_ratio: {
+          type: 'object',
+          properties: {
+            overall: { type: 'number' },
+            by_age_bucket: { type: 'object' },
+          },
+        },
+        utility_distribution: {
+          type: 'object',
+          properties: {
+            mean: { type: 'number' },
+            median: { type: 'number' },
+            p10: { type: 'number' },
+            p90: { type: 'number' },
+          },
+        },
+        feedback_summary: { type: 'object', description: 'Feedback count by signal type' },
+        policy_version: { type: 'string' },
+        state: { type: 'string', enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'] },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: ['total_claims', 'by_kind', 'by_scope', 'policy_version', 'state', 'request_id', 'trace_id'],
     },
   },
   // ========== Graph Memory Tools ==========

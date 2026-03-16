@@ -186,6 +186,25 @@ async function cleanupOrphanedTempTables(conn: DuckDBConnection): Promise<void> 
  * 6. 一時テーブルをリネーム
  * 7. コミット（失敗時はロールバック）
  */
+/**
+ * feedback表にactive_context_idカラムを追加するマイグレーション
+ * 既存DBで feedback テーブルにカラムがない場合に追加する
+ */
+async function migrateFeedbackActiveContextId(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'feedback'))) return;
+
+  // カラム存在確認
+  const colReader = await conn.runAndReadAll(
+    `SELECT COUNT(*)::INTEGER AS cnt FROM information_schema.columns
+     WHERE table_name = 'feedback' AND column_name = 'active_context_id'`
+  );
+  const colRows = colReader.getRowObjects() as unknown as Array<{ cnt: number | bigint }>;
+  if (Number(colRows[0]?.cnt ?? 0) > 0) return;
+
+  console.error('[DB] Migrating feedback: adding active_context_id column...');
+  await conn.run('ALTER TABLE feedback ADD COLUMN active_context_id TEXT');
+}
+
 async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> {
   // まず孤立した一時テーブルをクリーンアップ
   await cleanupOrphanedTempTables(conn);
@@ -307,6 +326,7 @@ export async function initSchema() {
   // - SCHEMA_SQL内のCREATE INDEXが旧テーブルに対して失敗しないよう、先に実施する
   await migrateLegacyObservations(conn); // Issue #30: observationsスキーマ変更
   await migrateClaimVectorsDropFK(conn); // PR #32: DuckDB FK制約バグ対策
+  await migrateFeedbackActiveContextId(conn); // feedback表にactive_context_idカラム追加
 
   const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())

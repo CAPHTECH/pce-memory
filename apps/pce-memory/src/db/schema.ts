@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS feedback (
   claim_id TEXT NOT NULL,
   signal TEXT NOT NULL,
   score DOUBLE,
+  active_context_id TEXT,
   ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

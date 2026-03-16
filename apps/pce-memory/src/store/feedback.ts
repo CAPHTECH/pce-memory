@@ -4,6 +4,7 @@ export interface FeedbackInput {
   claim_id: string;
   signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
   score?: number;
+  active_context_id?: string;
 }
 
 /**
@@ -39,11 +40,12 @@ export async function recordFeedback(input: FeedbackInput): Promise<{ id: string
   const id = `fb_${crypto.randomUUID().slice(0, 8)}`;
 
   // 1. feedbackテーブルにイベント記録
-  await conn.run('INSERT INTO feedback (id, claim_id, signal, score) VALUES ($1, $2, $3, $4)', [
+  await conn.run('INSERT INTO feedback (id, claim_id, signal, score, active_context_id) VALUES ($1, $2, $3, $4, $5)', [
     id,
     input.claim_id,
     input.signal,
     input.score ?? null,
+    input.active_context_id ?? null,
   ]);
 
   // 2. claimsのutility/confidence更新（g()再ランキング用）
