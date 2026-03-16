@@ -28,7 +28,8 @@ export type ErrorCode =
   | 'SYNC_PULL_FAILED' // pull実行エラー
   | 'SYNC_VALIDATION_ERROR' // JSONスキーマ/content_hash検証エラー
   | 'SYNC_PATH_ERROR' // パストラバーサル等のパスエラー
-  | 'SYNC_STATUS_FAILED'; // Phase 2: status取得エラー
+  | 'SYNC_STATUS_FAILED' // Phase 2: status取得エラー
+  | 'HEALTH_FAILED'; // Health report生成エラー
 
 // ドメインエラー型
 export interface DomainError {

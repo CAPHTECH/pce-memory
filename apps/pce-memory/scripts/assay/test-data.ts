@@ -168,4 +168,71 @@ export const TEST_CLAIMS = [
       note: 'セキュリティポリシー',
     },
   },
+
+  // === hard negatives (検索精度検証用: 似ているが無関係なclaim) ===
+  {
+    id: 'neg-oauth2-flow',
+    text: 'OAuth2認証フローではAuthorization Code Grantを使用し、リダイレクトURIでコードを受け取りトークンと交換する',
+    kind: 'fact',
+    scope: 'project',
+    boundary_class: 'internal',
+    content_hash: 'sha256:neg-oauth2-flow-001',
+    provenance: {
+      at: '2024-02-10T10:00:00Z',
+      actor: 'architect',
+      note: 'Hard negative: OAuth2 (JWT認証と混同させる)',
+    },
+  },
+  {
+    id: 'neg-sqlite-storage',
+    text: 'SQLiteを検討したがWAL並行性の制限から不採用とした。単一ファイルDBとしての軽量性は魅力的だった',
+    kind: 'fact',
+    scope: 'project',
+    boundary_class: 'internal',
+    content_hash: 'sha256:neg-sqlite-storage-001',
+    provenance: {
+      at: '2024-01-09T11:00:00Z',
+      actor: 'architect',
+      note: 'Hard negative: SQLite (DuckDBと混同させる)',
+    },
+  },
+  {
+    id: 'neg-jest-testing',
+    text: 'Jestのスナップショットテストでコンポーネント出力の回帰検知を行っていたが、メンテナンスコストが高かった',
+    kind: 'fact',
+    scope: 'project',
+    boundary_class: 'internal',
+    content_hash: 'sha256:neg-jest-testing-001',
+    provenance: {
+      at: '2024-01-07T15:00:00Z',
+      actor: 'team',
+      note: 'Hard negative: Jest (Vitestと混同させる)',
+    },
+  },
+  {
+    id: 'neg-oop-pattern',
+    text: 'GoFデザインパターンのStrategyパターンとObserverパターンを組み合わせてイベント駆動アーキテクチャを構築',
+    kind: 'fact',
+    scope: 'project',
+    boundary_class: 'internal',
+    content_hash: 'sha256:neg-oop-pattern-001',
+    provenance: {
+      at: '2024-01-06T09:00:00Z',
+      actor: 'team',
+      note: 'Hard negative: OOP (関数型スタイルと混同させる)',
+    },
+  },
+  {
+    id: 'neg-imperative-error',
+    text: 'try-catchブロックで例外を捕捉し、エラーコードに応じてリトライまたはフォールバック処理を行う',
+    kind: 'fact',
+    scope: 'project',
+    boundary_class: 'internal',
+    content_hash: 'sha256:neg-imperative-error-001',
+    provenance: {
+      at: '2024-01-11T13:00:00Z',
+      actor: 'lead-dev',
+      note: 'Hard negative: try-catch (fp-ts Eitherと混同させる)',
+    },
+  },
 ];

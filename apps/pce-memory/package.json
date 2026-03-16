@@ -40,7 +40,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist *.tsbuildinfo",
-    "assay:evaluate": "tsx scripts/assay/run-evaluation.ts"
+    "assay:evaluate": "vitest run --root ../.. --config vitest.assay.config.ts apps/pce-memory/scripts/assay/run-evaluation.test.ts",
+    "assay:perturbation": "vitest run --root ../.. --config vitest.assay.config.ts apps/pce-memory/scripts/assay/run-perturbation.test.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "1.4.1-r.5",

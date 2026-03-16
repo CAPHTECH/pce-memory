@@ -83,6 +83,6 @@ export default defineConfig({
     // Property-based testのフィルタリング
     // `pnpm test:pbt` で Property: プレフィックス付きテストのみ実行
     include: ['**/*.test.ts', '**/*.spec.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/external/**', '**/scripts/assay/*.test.ts'],
   },
 });
