@@ -24,8 +24,8 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/stop-upsert-proposal.sh"
+            "type": "prompt",
+            "prompt": "Session ending. Persist important context for continuity:\n\n**Step 1 - Close completed tasks**: For any task claims (kind: task) recalled via activate that are now done, send pce_memory_feedback(claim_id, signal: 'outdated'). If the completed work produced important outcomes, record them separately as kind: fact (NOT kind: task). Do NOT upsert new claims with 'TASK' prefix for completed work.\n\n**Step 2 - Record incomplete task state** (PRIORITY if work is in progress): Call pce_memory_upsert with:\n- kind: task, scope: project, boundary_class: internal\n- Text format: 'TASK [status:in_progress|blocked] <description>. Progress: <what was done>. Next: <next steps>. Blockers: <blockers or none>.'\n- Always write in English.\n\n**Step 3 - Record other discoveries**: Architecture decisions (kind: fact), conventions (kind: preference), bug root causes (kind: fact). Skip if nothing significant.\n\n**Step 4 - Send feedback**: pce_memory_feedback for any recalled knowledge used (helpful/outdated/harmful).\n\nAfter completing all steps, allow the session to end."
           }
         ]
       }
