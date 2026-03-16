@@ -10,8 +10,8 @@ PROMPT=$(echo "$INPUT" | sed -n 's/.*"userPrompt"[[:space:]]*:[[:space:]]*"\([^"
 # Base protocol (always injected)
 BASE="pce-memory autonomous operation: Record important design decisions with pce_memory_upsert. Send pce_memory_feedback when recalled knowledge was helpful/outdated. Record: architecture decisions, technical constraints, API specs, naming conventions, bug root causes. Do NOT record: minor fixes, obvious info, secrets. After context compaction, re-retrieve knowledge with pce_memory_activate if previously activated knowledge is no longer in conversation."
 
-# Task detection (Japanese + English)
-if echo "$PROMPT" | grep -qiE '(実装|追加|作成|修正|バグ|エラー|設計|リファクタ|implement|add|create|fix|bug|error|design|refactor|debug|investigate|調査|移行|削除|変更|更新|テスト|test|review|レビュー)'; then
+# Task detection
+if echo "$PROMPT" | grep -qiE '(implement|add|create|build|fix|bug|error|design|refactor|debug|investigate|migrate|delete|remove|change|update|modify|test|review|deploy|configure|setup|install|upgrade)'; then
   ACTIVATE=" Task detected: Run pce_memory_activate before starting work (extract keywords from user prompt for q, scope: project/principle, use results internally only)."
 else
   ACTIVATE=""
