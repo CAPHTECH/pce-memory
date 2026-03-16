@@ -270,13 +270,13 @@ async function main(): Promise<void> {
   console.log(`  Loaded ${queries.length} queries`);
 
   const configResults: ConfigResult[] = [];
+  process.env.PCE_DB = ':memory:';
 
   for (const config of CONFIGS) {
     console.log(`\n🔧 Running config: ${config.name} (α=${config.alpha}, rerank=${config.rerank}, top_k=${config.top_k})`);
 
     // 各設定ごとにDB初期化
     await resetDbAsync();
-    process.env.PCE_DB = ':memory:';
     await initDb();
     await initSchema();
 

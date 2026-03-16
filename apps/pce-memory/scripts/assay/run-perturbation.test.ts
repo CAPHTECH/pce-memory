@@ -126,10 +126,10 @@ describe('PCE-Memory Parameter Perturbation', () => {
     console.log(`Loaded ${queries.length} queries`);
 
     const configResults: ConfigResult[] = [];
+    process.env.PCE_DB = ':memory:';
     for (const config of CONFIGS) {
       console.log(`Running: ${config.name}`);
       await resetDbAsync();
-      process.env.PCE_DB = ':memory:';
       await initDb();
       await initSchema();
       const idMap = await warmup();
