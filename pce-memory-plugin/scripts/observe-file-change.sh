@@ -18,7 +18,7 @@ if [ "$SHOULD_OBSERVE" = true ]; then
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "アーキテクチャ上重要なファイルが変更された。この変更が設計決定を含む場合は pce_memory_upsert で記録すること。API契約・スキーマ・設定・認証の変更は記録対象。エンティティやリレーションの更新も必要に応じて実行する。"
+    "additionalContext": "Architecturally significant file changed. If this change involves a design decision, record it with pce_memory_upsert. API contracts, schema changes, config changes, and auth changes should be recorded. Update entities/relations as needed."
   }
 }
 EOF

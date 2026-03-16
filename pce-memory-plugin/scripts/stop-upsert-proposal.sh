@@ -4,7 +4,7 @@ cat <<'EOF'
 {
   "hookSpecificOutput": {
     "hookEventName": "Stop",
-    "additionalContext": "セッション終了前に、このセッションで行った重要な決定・発見を pce_memory_upsert で記録すること。以下に該当する情報があれば記録する:\n- アーキテクチャや設計の決定事項 (kind: fact)\n- 新しいコーディング規約やパターン (kind: preference)\n- 発見したバグの根本原因と解決策 (kind: fact)\n- 未完了タスクの状態 (kind: task)\n\n記録すべき情報がない場合（軽微な修正、既知の情報のみ）はスキップしてよい。\n活用した知識があれば pce_memory_feedback も送ること。"
+    "additionalContext": "Before ending, record important decisions/discoveries from this session with pce_memory_upsert:\n- Architecture/design decisions (kind: fact)\n- New coding conventions/patterns (kind: preference)\n- Bug root causes and fixes (kind: fact)\n- Incomplete task state (kind: task)\n\nSkip if nothing significant (minor fixes, already-known info only).\nSend pce_memory_feedback for any recalled knowledge that was used."
   }
 }
 EOF

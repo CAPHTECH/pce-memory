@@ -8,9 +8,9 @@ INPUT=$(cat)
 SOURCE=$(echo "$INPUT" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
 
 if [ "$SOURCE" = "compact" ]; then
-  CONTEXT="コンテキスト圧縮が発生した。以前activateした知識は失われている。今すぐ pce_memory_activate を実行して関連知識を再取得すること（q: 現在取り組んでいるタスクのキーワード, scope: project/principle, top_k: 10）。結果は内部参照し、ユーザーへの報告は不要。"
+  CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately run pce_memory_activate to re-retrieve relevant knowledge (q: keywords of the current task, scope: project/principle, top_k: 10). Use results internally without reporting to the user."
 else
-  CONTEXT="pce-memoryセッション開始（今すぐ実行）: 1. pce_memory_state で状態確認 2. Uninitialized なら pce_memory_policy_apply を実行（scope: session/project/principle, boundary: public/internal） 3. pce_memory_activate を実行（q: 現在のプロジェクト名やディレクトリ名, scope: project/principle, top_k: 10） 4. 結果は内部参照し、ユーザーへの報告は不要"
+  CONTEXT="pce-memory session start (execute now): 1. Check state with pce_memory_state 2. If Uninitialized, run pce_memory_policy_apply (scope: session/project/principle, boundary: public/internal) 3. Run pce_memory_activate (q: current project/directory name, scope: project/principle, top_k: 10) 4. Use results internally without reporting to the user."
 fi
 
 python3 -c "
