@@ -10,8 +10,18 @@ CWD=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print
 
 # Set per-project DB path via CLAUDE_ENV_FILE (only on startup, not compact)
 if [ "$SOURCE" != "compact" ] && [ -n "$CLAUDE_ENV_FILE" ] && [ -n "$CWD" ]; then
-  # Create project-specific DB directory
-  PROJECT_NAME=$(basename "$CWD")
+  # Create project-specific DB directory (shared across worktrees)
+  # Resolve absolute git-common-dir to ensure worktrees share the same DB
+  ABS_COMMON_DIR=$(cd "$CWD" && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+  if [ -n "$ABS_COMMON_DIR" ]; then
+    # Use main repo's toplevel directory name (works for both main repo and worktrees)
+    # For worktrees: common-dir points to main repo's .git, so dirname gives main repo root
+    # For main repo: common-dir == git-dir, dirname also gives repo root
+    PROJECT_NAME=$(basename "$(dirname "$ABS_COMMON_DIR")")
+  else
+    # Non-git directory: use CWD basename
+    PROJECT_NAME=$(basename "$CWD")
+  fi
   DB_DIR="$HOME/.pce/projects/$PROJECT_NAME"
   mkdir -p "$DB_DIR"
   echo "export PCE_DB=\"$DB_DIR/memory.db\"" >> "$CLAUDE_ENV_FILE"
