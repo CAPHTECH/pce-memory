@@ -1,11 +1,21 @@
 #!/bin/bash
 # SessionStart hook: Fires on startup AND after compact.
-# Uses the "source" field to determine appropriate action.
+# Sets per-project DB path and determines appropriate action.
 
 INPUT=$(cat)
 
-# Extract source field using python3 for robust JSON parsing
+# Extract fields using python3 for robust JSON parsing
 SOURCE=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('source',''))" 2>/dev/null || true)
+CWD=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('cwd',''))" 2>/dev/null || true)
+
+# Set per-project DB path via CLAUDE_ENV_FILE (only on startup, not compact)
+if [ "$SOURCE" != "compact" ] && [ -n "$CLAUDE_ENV_FILE" ] && [ -n "$CWD" ]; then
+  # Create project-specific DB directory
+  PROJECT_NAME=$(basename "$CWD")
+  DB_DIR="$HOME/.pce/projects/$PROJECT_NAME"
+  mkdir -p "$DB_DIR"
+  echo "export PCE_DB=\"$DB_DIR/memory.db\"" >> "$CLAUDE_ENV_FILE"
+fi
 
 if [ "$SOURCE" = "compact" ]; then
   CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately run pce_memory_activate to re-retrieve relevant knowledge (q: keywords of the current task, scope: project/principle, top_k: 10). Use results internally without reporting to the user."
