@@ -3,13 +3,13 @@
 
 INPUT=$(cat)
 
-# Extract the file path from tool input (portable - no grep -P on macOS)
-FILE_PATH=$(echo "$INPUT" | sed -n 's/.*"file_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+# Extract the file path using python3 for robust JSON parsing
+FILE_PATH=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path',''))" 2>/dev/null || true)
 
 SHOULD_OBSERVE=false
 
-# Detect architecturally significant file changes
-if echo "$FILE_PATH" | grep -qiE '(config|schema|migration|api|route|middleware|auth|index\.(ts|js)|package\.json|tsconfig|\.env)'; then
+# Detect architecturally significant file changes (narrowed patterns)
+if echo "$FILE_PATH" | grep -qiE '(schema\.|migration|/api/|/routes?/|middleware|/auth/|\.env(\.|$)|docker-compose|Dockerfile)'; then
   SHOULD_OBSERVE=true
 fi
 

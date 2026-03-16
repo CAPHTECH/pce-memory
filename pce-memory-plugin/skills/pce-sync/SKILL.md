@@ -1,88 +1,88 @@
 ---
 name: pce-sync
 context: fork
-description: "pce-memoryのチーム間知識同期スキル。push/pull/statusを管理し、Git hooks連携とCRDTマージを支援する。「sync knowledge」「push knowledge」「pull team knowledge」「check sync status」「知識を同期」「同期状態を確認」と言われた時に使用する。"
+description: "Team knowledge synchronization skill for pce-memory. Manages push/pull/status with Git hooks integration and CRDT merge. Triggered by: 'sync knowledge', 'push knowledge', 'pull team knowledge', 'check sync status'."
 argument-hint: "[push|pull|status]"
 allowed-tools: "mcp__pce-memory__pce_memory_sync_push, mcp__pce-memory__pce_memory_sync_pull, mcp__pce-memory__pce_memory_sync_status, mcp__pce-memory__pce_memory_state"
 ---
 
 # PCE Sync - Team Knowledge Synchronization
 
-pce-memoryの知識をチーム間で同期する。Git hooks連携とCRDT（G-Set）ベースのマージを提供。
+Synchronize pce-memory knowledge across team members. Provides Git hooks integration and CRDT (G-Set) based merge.
 
-## 引数の解釈
+## Argument Parsing
 
-`$ARGUMENTS` を解析する:
-- `push` → ローカル知識をエクスポート
-- `pull` → チーム知識をインポート
-- `status` → 同期状態の確認
-- 引数なし → status を実行してガイド
+Parse `$ARGUMENTS`:
+- `push` → Export local knowledge
+- `pull` → Import team knowledge
+- `status` → Check sync state
+- No arguments → Run status and guide
 
-## 操作
+## Operations
 
-### Push（エクスポート）
+### Push (Export)
 
-ローカルDBの知識を `.pce-shared/` ディレクトリにエクスポートする。
+Export local DB knowledge to `.pce-shared/` directory.
 
 ```
 pce_memory_sync_push()
 ```
 
-- エクスポート先: `$PCE_SYNC_TARGET_DIR`（デフォルト: `.pce-shared/`）
-- `PCE_SYNC_AUTO_STAGE=true` の場合、自動で `git add` される
-- scope フィルタ: `PCE_SYNC_SCOPE_FILTER` で制限可能
+- Export target: `$PCE_SYNC_TARGET_DIR` (default: `.pce-shared/`)
+- If `PCE_SYNC_AUTO_STAGE=true`, auto `git add`
+- Scope filter: Restrict with `PCE_SYNC_SCOPE_FILTER`
 
-### Pull（インポート）
+### Pull (Import)
 
-`.pce-shared/` からチームの知識をインポートする。
+Import team knowledge from `.pce-shared/`.
 
 ```
 pce_memory_sync_pull()
-// または dry-run で確認
+// Or dry-run to preview
 pce_memory_sync_pull({ dry_run: true })
 ```
 
-- CRDT（G-Set）ベースのマージ: 追加のみ、削除なし
-- Boundary昇格: `public < internal < pii < secret`（上方向のみ）
-- コンフリクト: boundary_upgrade は自動解決、entity/relation差分はスキップ
+- CRDT (G-Set) based merge: additions only, no deletions
+- Boundary promotion: `public < internal < pii < secret` (upgrade only)
+- Conflicts: boundary_upgrade auto-resolved, entity/relation diffs skipped
 
-### Status（状態確認）
+### Status
 
 ```
 pce_memory_sync_status()
 ```
 
-返される情報:
-- ローカルとリモートのclaim数
-- 未同期のclaim数
-- 最終同期日時
-- コンフリクトの有無
+Returns:
+- Local and remote claim counts
+- Unsynced claim count
+- Last sync timestamp
+- Conflict presence
 
-## Git Hooks 連携
+## Git Hooks Integration
 
-### セットアップ
+### Setup
 
 ```bash
-# hooks のインストール
+# Install hooks
 ./scripts/git-hooks/install-hooks.sh
 
-# 環境変数の設定
+# Set environment
 export PCE_SYNC_ENABLED=true
 ```
 
-### 動作フロー
+### Flow
 
 ```
-git commit → pre-commit hook → sync push（自動エクスポート）
-git pull   → post-merge hook → sync pull（自動インポート）
+git commit → pre-commit hook → sync push (auto export)
+git pull   → post-merge hook → sync pull (auto import)
 ```
 
-## CRDT マージ戦略
+## CRDT Merge Strategy
 
-[crdt-merge-guide.md](references/crdt-merge-guide.md) を参照。
+See [crdt-merge-guide.md](references/crdt-merge-guide.md).
 
-## トラブルシューティング
+## Troubleshooting
 
-- **sync push が失敗する**: `pce_memory_state` で状態を確認。Ready 状態でないと push できない
-- **pull でコンフリクト**: boundary_upgrade は自動解決。entity/relation の差分は手動確認
-- **大量の未同期**: `sync status` で確認し、`sync push` → `git commit` → `git push`
+- **sync push fails**: Check state with `pce_memory_state`. Must be Ready to push
+- **pull conflicts**: boundary_upgrade auto-resolved. Entity/relation diffs need manual review
+- **many unsynced**: Check with `sync status`, then `sync push` → `git commit` → `git push`

@@ -1,65 +1,65 @@
 ---
 name: pce-graph
 context: fork
-description: "pce-memoryのナレッジグラフ操作スキル。エンティティ・リレーションの作成・クエリ・可視化を行う。「create entity」「graph relation」「query knowledge graph」「map dependencies」「エンティティ作成」「関係を追加」「グラフ検索」と言われた時に使用する。"
+description: "Knowledge graph operations skill for pce-memory. Create, query, and visualize entities and relations. Triggered by: 'create entity', 'graph relation', 'query knowledge graph', 'map dependencies'."
 argument-hint: "[entity|relation|query] [args...]"
 allowed-tools: "mcp__pce-memory__pce_memory_upsert_entity, mcp__pce-memory__pce_memory_upsert_relation, mcp__pce-memory__pce_memory_query_entity, mcp__pce-memory__pce_memory_query_relation, mcp__pce-memory__pce_memory_state"
 ---
 
 # PCE Graph - Knowledge Graph Operations
 
-pce-memoryのナレッジグラフ（エンティティ・リレーション）を操作する。
+Operate on the pce-memory knowledge graph (entities and relations).
 
-## 引数の解釈
+## Argument Parsing
 
-`$ARGUMENTS` を解析する:
-- `entity [name] [type]` → エンティティ作成/検索
-- `relation [from] [to] [type]` → リレーション作成
-- `query [pattern]` → グラフ検索
-- 引数なし → インタラクティブガイド
+Parse `$ARGUMENTS`:
+- `entity [name] [type]` → Create/search entity
+- `relation [from] [to] [type]` → Create relation
+- `query [pattern]` → Search graph
+- No arguments → Interactive guide
 
-## エンティティ操作
+## Entity Operations
 
-### エンティティの作成
+### Creating Entities
 
-コードベースの重要な構成要素をエンティティとして登録する。
+Register important codebase components as entities.
 
 ```
 pce_memory_upsert_entity({
   id: "entity-unique-id",
   type: "component|module|api|database|service|concept",
-  name: "表示名",
-  properties: { ... }  // 任意の追加情報
+  name: "Display name",
+  properties: { ... }  // Optional additional info
 })
 ```
 
-### エンティティタイプの使い分け
+### Entity Type Guide
 
-[entity-relation-patterns.md](references/entity-relation-patterns.md) を参照。
+See [entity-relation-patterns.md](references/entity-relation-patterns.md).
 
-| Type | 用途 | 例 |
-|------|------|-----|
-| component | ソフトウェアコンポーネント | AuthService, UserController |
-| module | モジュール/パッケージ | pce-boundary, pce-embeddings |
-| api | APIエンドポイント | POST /api/claims |
-| database | データストア | DuckDB, Redis |
-| service | 外部サービス | OpenAI API, GitHub |
-| concept | 概念・パターン | State Machine, CRDT |
+| Type | Purpose | Examples |
+|------|---------|---------|
+| component | Software component | AuthService, UserController |
+| module | Module/package | pce-boundary, pce-embeddings |
+| api | API endpoint | POST /api/claims |
+| database | Data store | DuckDB, Redis |
+| service | External service | OpenAI API, GitHub |
+| concept | Concept/pattern | State Machine, CRDT |
 
-### エンティティの検索
+### Querying Entities
 
 ```
 pce_memory_query_entity({
-  type: "component",     // タイプでフィルタ
-  name_pattern: "Auth*"  // 名前パターン
+  type: "component",     // Filter by type
+  name_pattern: "Auth*"  // Filter by name pattern
 })
 ```
 
-## リレーション操作
+## Relation Operations
 
-### リレーションの作成
+### Creating Relations
 
-エンティティ間の関係を登録する。
+Register relationships between entities.
 
 ```
 pce_memory_upsert_relation({
@@ -70,35 +70,35 @@ pce_memory_upsert_relation({
 })
 ```
 
-### リレーションタイプの使い分け
+### Relation Type Guide
 
-| Type | 意味 | 例 |
-|------|------|-----|
-| depends_on | 依存関係 | AuthService depends_on JWTLibrary |
-| implements | 実装関係 | UserController implements IUserAPI |
-| contains | 包含関係 | CoreModule contains StateManager |
-| calls | 呼び出し関係 | Handler calls Repository |
-| stores_in | 永続化先 | ClaimStore stores_in DuckDB |
+| Type | Meaning | Example |
+|------|---------|---------|
+| depends_on | Dependency | AuthService depends_on JWTLibrary |
+| implements | Implementation | UserController implements IUserAPI |
+| contains | Containment | CoreModule contains StateManager |
+| calls | Invocation | Handler calls Repository |
+| stores_in | Persistence target | ClaimStore stores_in DuckDB |
 
-### リレーションの検索
+### Querying Relations
 
 ```
 pce_memory_query_relation({
-  from_id: "entity-a",        // 起点でフィルタ
-  relation_type: "depends_on" // タイプでフィルタ
+  from_id: "entity-a",        // Filter by source
+  relation_type: "depends_on" // Filter by type
 })
 ```
 
-## 典型的なワークフロー
+## Typical Workflows
 
-### 依存関係マッピング
+### Dependency Mapping
 
-1. 主要コンポーネントをエンティティとして登録
-2. コンポーネント間の依存関係をリレーションとして登録
-3. `query_relation` で依存ツリーを可視化
+1. Register key components as entities
+2. Register inter-component dependencies as relations
+3. Visualize dependency tree with `query_relation`
 
-### アーキテクチャ記録
+### Architecture Recording
 
-1. レイヤー/モジュールをエンティティとして登録
-2. contains/implements 関係を登録
-3. claims（upsert）と連携して設計決定をエンティティに紐付け
+1. Register layers/modules as entities
+2. Register contains/implements relations
+3. Link design decisions (claims via upsert) to entities

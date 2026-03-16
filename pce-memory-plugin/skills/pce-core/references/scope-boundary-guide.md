@@ -1,60 +1,60 @@
 # Scope & Boundary Class Guide
 
-## Scope 選択基準
+## Scope Selection
 
-### session（高速変化）
-- **使うとき**: 今回のセッションでのみ有効な情報
-- **例**: 「このファイルを編集中」「デバッグ中の仮説」「一時的な作業状態」
-- **寿命**: セッション終了まで
+### session (fast-changing)
+- **When**: Information valid only for the current session
+- **Examples**: "Editing this file", "Debugging hypothesis", "Temporary state"
+- **Lifespan**: Until session ends
 
-### project（中速変化）
-- **使うとき**: プロジェクト固有の決定事項・パターン
-- **例**: 「JWTで認証」「Vitestでテスト」「REST API設計」「DuckDB使用」
-- **寿命**: プロジェクトの存続期間
+### project (medium-changing)
+- **When**: Project-specific decisions and patterns
+- **Examples**: "JWT for auth", "Vitest for testing", "REST API design", "DuckDB storage"
+- **Lifespan**: Duration of the project
 
-### principle（低速変化）
-- **使うとき**: プロジェクトを跨いで適用される普遍的原則
-- **例**: 「TDDで開発」「SOLID原則」「fp-ts/Either でエラー処理」
-- **寿命**: 長期間（変更は稀）
+### principle (slow-changing)
+- **When**: Universal principles applicable across projects
+- **Examples**: "TDD development", "SOLID principles", "fp-ts/Either for errors"
+- **Lifespan**: Long-term (rarely changes)
 
-## Boundary Class 選択基準
+## Boundary Class Selection
 
 ### public
-- **使うとき**: 公開可能な情報
-- **例**: OSSライブラリの使い方、一般的な技術パターン、公開API仕様
+- **When**: Publicly shareable information
+- **Examples**: OSS library usage, general technical patterns, public API specs
 
 ### internal
-- **使うとき**: 社内/プロジェクト内限定の情報
-- **例**: 内部API仕様、アーキテクチャ決定、内部ツール設定
+- **When**: Internal/project-only information
+- **Examples**: Internal API specs, architecture decisions, internal tool configs
 
 ### pii
-- **使うとき**: 個人情報を含む文脈
-- **例**: ユーザー名、メールアドレスを含む設計決定
-- **注意**: 可能な限り匿名化してから記録
+- **When**: Context containing personal information
+- **Examples**: Design decisions involving usernames, email addresses
+- **Note**: Anonymize before recording when possible
 
 ### secret
-- **使うとき**: 機密情報（**記録しないことを強く推奨**）
-- **例**: APIキー、認証トークン、パスワード
-- **注意**: secretは記録せず、参照先のみ記録する
+- **When**: Sensitive information (**strongly recommend NOT recording**)
+- **Examples**: API keys, auth tokens, passwords
+- **Note**: Record only references, never actual secrets
 
-## 判断フローチャート
+## Decision Flowchart
 
 ```
-情報は公開可能？
+Is the information publicly shareable?
 ├─ Yes → public
-└─ No → 個人情報を含む？
-         ├─ Yes → pii（匿名化を検討）
-         └─ No → 機密情報？
-                  ├─ Yes → secret（記録非推奨）
+└─ No → Contains personal information?
+         ├─ Yes → pii (consider anonymizing)
+         └─ No → Sensitive/secret?
+                  ├─ Yes → secret (do not record)
                   └─ No → internal
 ```
 
-## Scope × Boundary の組み合わせ例
+## Scope × Boundary Combinations
 
-| Scope | Boundary | 例 |
-|-------|----------|-----|
-| session + internal | デバッグ中の内部APIの挙動メモ |
-| project + internal | プロジェクト固有のDB設計決定 |
-| project + public | OSSライブラリの選定理由 |
-| principle + public | TDDの適用方針 |
-| principle + internal | 社内コーディング標準 |
+| Scope | Boundary | Example |
+|-------|----------|---------|
+| session + internal | Internal API behavior notes during debugging |
+| project + internal | Project-specific DB design decisions |
+| project + public | OSS library selection rationale |
+| principle + public | TDD adoption policy |
+| principle + internal | Internal coding standards |

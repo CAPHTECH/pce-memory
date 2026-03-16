@@ -4,8 +4,8 @@
 
 INPUT=$(cat)
 
-# Extract the user prompt text (portable - no grep -P on macOS)
-PROMPT=$(echo "$INPUT" | sed -n 's/.*"userPrompt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+# Extract the user prompt text using python3 for robust JSON parsing
+PROMPT=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('userPrompt',''))" 2>/dev/null || true)
 
 # Base protocol (always injected)
 BASE="pce-memory autonomous operation: Record important design decisions with pce_memory_upsert. Send pce_memory_feedback when recalled knowledge was helpful/outdated. Record: architecture decisions, technical constraints, API specs, naming conventions, bug root causes. Do NOT record: minor fixes, obvious info, secrets. After context compaction, re-retrieve knowledge with pce_memory_activate if previously activated knowledge is no longer in conversation. Always write upsert text and activate queries in English for consistent embedding search and team sync."

@@ -1,6 +1,6 @@
 # Entity-Relation Patterns
 
-## パターン 1: マイクロサービスアーキテクチャ
+## Pattern 1: Microservices Architecture
 
 ```
 [API Gateway] --calls--> [Auth Service] --stores_in--> [Redis]
@@ -10,7 +10,7 @@
 [API Gateway] --calls--> [User Service] --stores_in--> [PostgreSQL]
 ```
 
-エンティティ:
+Entities:
 - `api-gateway` (type: service)
 - `auth-service` (type: component)
 - `user-service` (type: component)
@@ -18,7 +18,7 @@
 - `postgresql` (type: database)
 - `jwt-library` (type: module)
 
-## パターン 2: モノレポパッケージ構造
+## Pattern 2: Monorepo Package Structure
 
 ```
 [Root] --contains--> [apps/pce-memory] --depends_on--> [packages/pce-boundary]
@@ -26,7 +26,7 @@
                                         --depends_on--> [packages/pce-sdk-ts]
 ```
 
-## パターン 3: 状態マシン
+## Pattern 3: State Machine
 
 ```
 [StateMachine] --contains--> [Uninitialized]
@@ -39,7 +39,7 @@
 [HasClaims] --transitions_to--> [Ready] (via: activate)
 ```
 
-## パターン 4: API構造
+## Pattern 4: API Structure
 
 ```
 [POST /claims] --implements--> [ClaimHandler]
@@ -48,16 +48,16 @@
                 --calls--> [EmbeddingProvider]
 ```
 
-## 命名規約
+## Naming Conventions
 
-- エンティティID: kebab-case (`auth-service`, `user-controller`)
-- 表示名: PascalCase or 自然言語 (`AuthService`, `認証サービス`)
-- リレーションタイプ: snake_case (`depends_on`, `stores_in`)
+- Entity ID: kebab-case (`auth-service`, `user-controller`)
+- Display name: PascalCase or natural language (`AuthService`, `Auth Service`)
+- Relation type: snake_case (`depends_on`, `stores_in`)
 
-## properties の活用例
+## Properties Examples
 
 ```json
-// エンティティのproperties
+// Entity properties
 {
   "version": "2.0",
   "language": "TypeScript",
@@ -65,7 +65,7 @@
   "owner": "backend-team"
 }
 
-// リレーションのproperties
+// Relation properties
 {
   "strength": "strong",
   "direction": "unidirectional",

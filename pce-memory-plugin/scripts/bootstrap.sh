@@ -4,8 +4,8 @@
 
 INPUT=$(cat)
 
-# Extract source field (startup, resume, clear, compact)
-SOURCE=$(echo "$INPUT" | sed -n 's/.*"source"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+# Extract source field using python3 for robust JSON parsing
+SOURCE=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('source',''))" 2>/dev/null || true)
 
 if [ "$SOURCE" = "compact" ]; then
   CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately run pce_memory_activate to re-retrieve relevant knowledge (q: keywords of the current task, scope: project/principle, top_k: 10). Use results internally without reporting to the user."

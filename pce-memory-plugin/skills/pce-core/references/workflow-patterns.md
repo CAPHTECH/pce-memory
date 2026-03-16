@@ -1,85 +1,85 @@
 # PCE Memory Workflow Patterns
 
-## Pattern 1: 新機能実装
+## Pattern 1: New Feature Implementation
 
 ```
-1. activate({ q: "関連機能 設計 API", scope: ["project", "principle"] })
-   → 既存の設計決定・規約を確認
+1. activate({ q: "related feature design API", scope: ["project", "principle"] })
+   → Review existing design decisions and conventions
 
-2. 実装を進める（想起した知識を考慮）
+2. Implement (considering recalled knowledge)
 
 3. upsert({
-     text: "具体的な設計決定",
+     text: "Specific design decision",
      kind: "fact",
      scope: "project",
      boundary_class: "internal"
    })
-   → 新しい決定を記録
+   → Record new decision
 
 4. feedback({ claim_id: "clm_xxx", signal: "helpful" })
-   → 参考になった知識にフィードバック
+   → Feedback on useful knowledge
 ```
 
-## Pattern 2: バグ修正
+## Pattern 2: Bug Fix
 
 ```
-1. activate({ q: "エラーメッセージ 関連コンポーネント", scope: ["project", "session"] })
-   → 過去の類似問題や関連実装を確認
+1. activate({ q: "error message related component", scope: ["project", "session"] })
+   → Check past similar issues and related implementations
 
-2. 原因を特定して修正
+2. Identify root cause and fix
 
 3. upsert({
-     text: "根本原因と解決策",
+     text: "Root cause and fix",
      kind: "fact",
      scope: "project"
    })
-   → 解決策を記録（将来の参考に）
+   → Record for future reference
 ```
 
-## Pattern 3: コードレビュー
+## Pattern 3: Code Review
 
 ```
-1. activate({ q: "コーディング規約 命名 スタイル", scope: ["project", "principle"] })
-   → プロジェクトの規約を確認
+1. activate({ q: "coding conventions naming style", scope: ["project", "principle"] })
+   → Review project conventions
 
-2. レビュー実施（規約に基づいて）
+2. Perform review (based on conventions)
 
-3. 新しい規約が決まったら upsert({ kind: "preference" })
+3. If new convention established → upsert({ kind: "preference" })
 ```
 
-## Pattern 4: リファクタリング
+## Pattern 4: Refactoring
 
 ```
-1. activate({ q: "アーキテクチャ パターン 依存", scope: ["project"] })
-   → 現在の設計意図を確認
+1. activate({ q: "architecture patterns dependencies", scope: ["project"] })
+   → Confirm current design intent
 
-2. リファクタリング実施
+2. Perform refactoring
 
 3. upsert({
-     text: "リファクタリングの理由と新しい構造",
-     kind: "fact",
-     scope: "project"
-   })
-```
-
-## Pattern 5: 設計相談
-
-```
-1. activate({ q: "設計パターン トレードオフ", scope: ["project", "principle"] })
-   → 既存の設計決定と原則を確認
-
-2. 選択肢を比較検討
-
-3. upsert({
-     text: "選択した設計とその理由（ADR形式推奨）",
+     text: "Refactoring rationale and new structure",
      kind: "fact",
      scope: "project"
    })
 ```
 
-## Anti-patterns（やってはいけないこと）
+## Pattern 5: Design Discussion
 
-- **全ての会話を記録する**: 重要な決定のみを厳選
-- **曖昧なテキストで記録**: 「色々決めた」→「認証トークンの期限を15分に設定」
-- **secretを記録する**: APIキーやパスワードは絶対に記録しない
-- **feedbackを忘れる**: activateした知識の品質フィードバックは知識の精度向上に重要
+```
+1. activate({ q: "design patterns tradeoffs", scope: ["project", "principle"] })
+   → Review existing decisions and principles
+
+2. Compare and evaluate options
+
+3. upsert({
+     text: "Chosen design and rationale (ADR format recommended)",
+     kind: "fact",
+     scope: "project"
+   })
+```
+
+## Anti-patterns
+
+- **Recording everything**: Be selective — important decisions only
+- **Vague text**: "Decided various things" → "Set auth token expiry to 15 minutes"
+- **Recording secrets**: Never record API keys or passwords
+- **Forgetting feedback**: Quality feedback on activated knowledge improves precision
