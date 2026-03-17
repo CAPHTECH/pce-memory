@@ -98,6 +98,8 @@
 | `pce_memory_policy_apply`      | `{ yaml }`                                                                     | `{ version }`                                    | Apply policy (invariants, purpose tags)                |
 
 > All tools include **Provenance** and **policy_version** in responses to ensure auditability.
+>
+> **P0 note**: the current blessed integration path is the Claude Code plugin, and the primary recall flow is `pce_memory_activate`. `pce_memory_search` is not part of the P0 primary workflow.
 
 ### Representative Flow (Agent Side)
 

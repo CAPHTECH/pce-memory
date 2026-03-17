@@ -1,6 +1,6 @@
 {
   "name": "pce-memory-plugin",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Persistent knowledge management with pce-memory MCP server",
   "author": {
     "name": "CAPH TECH Inc."

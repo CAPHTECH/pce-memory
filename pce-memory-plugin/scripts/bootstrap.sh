@@ -1,6 +1,6 @@
 #!/bin/bash
 # SessionStart hook: Fires on startup AND after compact.
-# Sets per-project DB path and determines appropriate action.
+# Sets per-project DB path and injects the activate-first workflow.
 
 INPUT=$(cat)
 
@@ -27,12 +27,12 @@ if [ "$SOURCE" != "compact" ] && [ -n "$CLAUDE_ENV_FILE" ] && [ -n "$CWD" ]; the
   echo "export PCE_DB=\"$DB_DIR/memory.db\"" >> "$CLAUDE_ENV_FILE"
 fi
 
-TASK_RECOVERY_INSTRUCTION="Run pce_memory_activate (q: 'TASK status in_progress blocked next steps', scope: [project], allow: [\"answer:task\"], top_k: 5) to recover task state. From results, IGNORE claims with low confidence (< 0.5) or that contain '[status:done]' - these are completed tasks. Only treat claims containing '[status:in_progress]' or '[status:blocked]' as active work."
+TASK_RECOVERY_INSTRUCTION="If state is HasClaims or Ready, run pce_memory_activate (q: 'task status in progress blocked next steps', scope: [project], allow: [\"answer:task\"], top_k: 5) to recover task state. Ignore claims with low confidence or completed-task markers. Only treat '[status:in_progress]' and '[status:blocked]' as active work."
 
 if [ "$SOURCE" = "compact" ]; then
-  CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately: 1. Run pce_memory_activate (q: keywords of the current task, scope: [project, principle], allow: [\"answer:task\", \"answer:fact\"], top_k: 10) to re-retrieve relevant knowledge. 2. $TASK_RECOVERY_INSTRUCTION Use results internally without reporting to the user."
+  CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately: 1. Check pce_memory_state. 2. If state is HasClaims or Ready, run pce_memory_activate (q: English keywords of the current task, scope: [project, principle], allow: [\"answer:task\"], top_k: 10) to re-retrieve relevant knowledge. 3. $TASK_RECOVERY_INSTRUCTION Use results internally unless they reveal an active task the user should know about."
 else
-  CONTEXT="pce-memory session start (execute now): 1. Check state with pce_memory_state 2. If Uninitialized, run pce_memory_policy_apply 3. Run pce_memory_activate (q: current project/directory name, scope: [project, principle], allow: [\"answer:task\", \"answer:fact\"], top_k: 10) 4. $TASK_RECOVERY_INSTRUCTION If active tasks found, report to user. 5. Use other results internally without reporting to the user."
+  CONTEXT="pce-memory session start (execute now): 1. Check state with pce_memory_state. 2. If state is Uninitialized, run pce_memory_policy_apply. 3. If state is HasClaims or Ready, run pce_memory_activate (q: English keywords for the current project and task, scope: [project, principle], allow: [\"answer:task\"], top_k: 10). 4. $TASK_RECOVERY_INSTRUCTION 5. If active tasks are found, report them briefly to the user. Use other recalled knowledge internally without reporting it."
 fi
 
 python3 -c "
