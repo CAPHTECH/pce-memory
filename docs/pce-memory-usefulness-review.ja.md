@@ -166,7 +166,7 @@ P0 ができても、記録の質が低いとノイズが増えます。
      - policy apply
      - task start activate
      - stop 時の task upsert / feedback
-     を一連で確実に動かす
+       を一連で確実に動かす
 
 3. `記録テンプレートの導入`
    - 英語で短く書く
