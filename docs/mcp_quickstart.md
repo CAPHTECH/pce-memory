@@ -1,41 +1,25 @@
 # MCP Quickstart — pce-memory を 5 分で動かす
 
-> **ゴール**：IDE/コードエージェント（Cursor / Codex / Claude Code 等）から **MCP** 経由で pce-memory を呼び、  
+> **ゴール**：IDE/コードエージェントから **MCP** 経由で pce-memory を呼び、  
 > `activate → boundary.validate → upsert → feedback` の **E2E** を一度まわす。
 >
 > **デフォルト**：常駐サーバ不要の **stdio** トランスポート（必要時に子プロセス起動）。HTTP/WS は付録を参照。
 
-## 最短：npx 一発セットアップ（30 秒）
+## 推奨 P0 導線: Claude Code plugin
 
-> まずは“動く環境”を最速で作るための 2 ルート。
->
-> - **A. 公開パッケージが利用可能な場合**（推奨）
-> - **B. いますぐ試すローカル雛形（degit）**
-
-### A) npx で初期化（公開パッケージ想定）
+P0 では [`pce-memory-plugin`](../pce-memory-plugin/README.md) を正式導線とします。plugin が state guard と activate-first の運用を固定します。
 
 ```bash
-# 例: 公式スキャフォルダ（公開済みの場合）
-npx @caphtech/create-pce-memory@latest my-pce-memory
-cd my-pce-memory
-pnpm i && pnpm dev   # または npm/yarn
+claude --plugin-dir ./pce-memory-plugin
 ```
 
-- これで `policy/base.yaml` と MCP 設定、`pce-memory server` の起動スクリプトが生成されます。
-- パッケージが未公開の場合は **B)** を利用してください。
+plugin 同梱の `.mcp.json` は `npx -y pce-memory@latest` を使用します。
 
-### B) npx degit で雛形を取得（GitHub テンプレート）
+## 代替: 手動 MCP セットアップ
 
 ```bash
-# 例: GitHub テンプレート（任意のテンプレURLに置き換え）
-# degit はリポジトリのサブディレクトリも取得できます
-npx -y degit <your-org>/<your-repo>/<template-path> pce-memory-starter
-cd pce-memory-starter
-pnpm i && pnpm dev   # または npm/yarn
+mkdir -p ~/.pce/manual-demo
 ```
-
-> ヒント: テンプレ側に `policy/base.yaml` と `mcp.config.json`（または manifest）を置いておくと、  
-> `docs/mcp_quickstart.md` のステップ 1〜3 が即座に実行可能になります。
 
 ---
 
@@ -67,7 +51,7 @@ boundary_classes:
 >
 > ```bash
 > PCE_TOKEN="<your-token>" PCE_POLICY="/path/to/policy/base.yaml" \
-> npx -y @caphtech/pce-memory mcp-stdio
+> npx -y pce-memory@latest
 > ```
 
 ---
@@ -84,7 +68,7 @@ boundary_classes:
     "pce-memory": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@caphtech/pce-memory", "mcp-stdio"],
+      "args": ["-y", "pce-memory@latest"],
       "env": {
         "PCE_TOKEN": "${PCE_TOKEN}",
         "PCE_POLICY": "/absolute/path/to/policy/base.yaml"
@@ -98,7 +82,25 @@ boundary_classes:
 
 ### 2.2 Claude Code / Codex（例）
 
-- それぞれの MCP 設定で **stdio** サーバを登録（上記と同等のコマンド/引数/環境変数）
+- Claude Code は plugin 導線を推奨:
+
+```bash
+claude --plugin-dir ./pce-memory-plugin
+```
+
+- 手動登録する場合は **stdio** サーバを追加:
+
+```json
+{
+  "mcpServers": {
+    "pce-memory": {
+      "command": "npx",
+      "args": ["-y", "pce-memory@latest"]
+    }
+  }
+}
+```
+
 - ツール一覧に `pce_memory_*` が見えたら OK。
 
 ---
@@ -175,24 +177,24 @@ boundary_classes:
 2. **必ず validate**：生成の前後で `boundary.validate`。`allowed=false` は必ず redraft/redact。
 3. **Provenance を義務化**：`upsert` は `provenance` 必須。Git/URL/署名のいずれかを付ける。
 4. **feedback を返す**：採用/棄却を `feedback` で送る（Critic 学習 → 次回の再ランクに反映）。
-5. **AC の TTL を意識**：`expires_at` を超えたら再 `activate`。`policy_version` が変わったら再構成。
+5. **再 activate を前提にする**：新タスク開始時、context compaction 後、または recalled knowledge が会話から落ちた後は再 `activate`。
 
 ---
 
 ## 5. よくあるエラーと対処
 
-| 症状              | 典型エラー              | 対処                                                     |
-| ----------------- | ----------------------- | -------------------------------------------------------- |
-| AC が取得できない | `POLICY_MISSING` (424)  | `policy.apply` を先に実行                                |
-| 想起が拒否される  | `BOUNDARY_DENIED` (403) | `scope/allow` を見直す・`boundary.validate` で redaction |
-| upsert が重複     | `DUPLICATE` (409)       | 同じ `content_hash`。ID を再利用するか `text` を正規化   |
-| レート制限        | `RATE_LIMIT` (429)      | `Retry-After` 秒後に指数バックオフ＋ジッタ再試行         |
+| 症状              | 典型エラー              | 対処                                                        |
+| ----------------- | ----------------------- | ----------------------------------------------------------- |
+| AC が取得できない | `STATE_ERROR`           | `pce_memory_state` を確認し、必要なら `policy.apply` を実行 |
+| 想起が拒否される  | `BOUNDARY_DENIED` / 0件 | `scope/allow` を見直す・`boundary.validate` で redaction    |
+| upsert が重複気味 | `is_new: false`         | 同じ内容の既存 claim を再利用し、新規乱立を避ける            |
+| レート制限        | `RATE_LIMIT`            | 短時間の連続呼び出しを避け、再試行する                       |
 
 ---
 
 ## 6. 片付け（任意）
 
-- 作業 AC を失効させる：`expires_at` 待ち、または実装依存の `ac.invalidate` があれば呼ぶ。
+- 作業 AC は必要時に再 `activate` する。P0 では自動再構成を前提にし、明示的 invalidate は前提にしない。
 - 監査ログを確認：`request_id/trace_id/policy_version` で関連呼び出しを相関。
 
 ---
@@ -205,7 +207,6 @@ boundary_classes:
   "version": "0.1.0",
   "tools": [
     { "name": "pce_memory_activate" },
-    { "name": "pce_memory_search" },
     { "name": "pce_memory_upsert" },
     { "name": "pce_memory_feedback" },
     { "name": "pce_memory_boundary_validate" },

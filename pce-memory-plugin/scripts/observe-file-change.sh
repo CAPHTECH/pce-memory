@@ -18,7 +18,7 @@ if [ "$SHOULD_OBSERVE" = true ]; then
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "Architecturally significant file changed. If this change involves a design decision, record it with pce_memory_upsert. API contracts, schema changes, config changes, and auth changes should be recorded. Update entities/relations as needed."
+    "additionalContext": "Architecturally significant file changed. Treat this as a recording candidate only. Record it with pce_memory_upsert only if the change made an explicit and durable decision or constraint. API contracts, schema decisions, config decisions, auth decisions, and bug root causes may be recorded. Do not record speculative or minor implementation detail."
   }
 }
 EOF

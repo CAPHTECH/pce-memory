@@ -98,6 +98,8 @@
 | `pce_memory_policy_apply`      | `{ yaml }`                                                                     | `{ version }`                                    | ポリシー適用（不変量・用途タグ）          |
 
 > すべてのツールは **Provenance** と **policy_version** をレスポンスに含め、監査可能性を担保する。
+>
+> **P0 運用注記**: 現在の正式導線は `pce_memory_activate` 中心の Claude Code plugin です。`pce_memory_search` は P0 の主導線には含めません。
 
 ### 代表フロー（エージェント側）
 

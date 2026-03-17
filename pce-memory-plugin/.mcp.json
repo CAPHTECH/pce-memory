@@ -2,7 +2,7 @@
   "mcpServers": {
     "pce-memory": {
       "command": "npx",
-      "args": ["pce-memory@latest"]
+      "args": ["-y", "pce-memory@latest"]
     }
   }
 }

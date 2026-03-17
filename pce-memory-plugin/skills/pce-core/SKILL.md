@@ -27,17 +27,18 @@ Retrieve relevant knowledge from pce-memory and inject into working context.
 1. Check current state with `pce_memory_state`
 2. If Uninitialized, run `pce_memory_policy_apply` first
 3. Call `pce_memory_activate`:
-   - `q`: Extract keywords from user intent (natural language OK)
+   - `q`: Extract English keywords from user intent
    - `scope`: Select appropriate scope (see [scope-boundary-guide.md](references/scope-boundary-guide.md))
    - `top_k`: Usually 5-10
-   - `allow`: Use `["answer:task"]` or `["answer:fact"]` as appropriate
-4. Summarize retrieved knowledge and present to user
+   - `allow`: Use `["answer:task"]`
+4. Use results internally by default; only surface active task recovery or directly relevant constraints to the user
 
 ### Best Practices
 
 - Be specific with queries: "JWT auth token expiry" is better than "auth"
 - Combine multiple activates for comprehensive coverage
 - Filter by priority when many results are returned
+- Prefer activate-first over ad hoc upsert-first behavior
 
 ## 2. Knowledge Recording (Upsert)
 
@@ -60,8 +61,10 @@ Persist important decisions and discoveries to pce-memory.
 - Keep text concise and specific (1-2 sentences ideal)
 - Always set `content_hash` (SHA256)
 - Include `provenance` for traceability
-- Be selective: record only important decisions
+- Be selective: record only durable decisions and active task state
 - Always write in English
+- For task state, use: `TASK [status:in_progress|blocked] <description>. Progress: <...>. Next: <...>. Blockers: <...>.`
+- Do not record completed tasks as new task claims
 
 ## 3. Feedback
 
