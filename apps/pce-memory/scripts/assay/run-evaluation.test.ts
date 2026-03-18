@@ -70,7 +70,7 @@ class StoreDirectAdapter implements SearchAdapter<PceQuery, Metrics> {
           content_hash: claim.content_hash,
           provenance: claim.provenance,
         },
-        this.embeddingService,
+        this.embeddingService
       );
       this.testIdToClaimId.set(claim.id, result.claim.id);
     }
@@ -85,7 +85,7 @@ class StoreDirectAdapter implements SearchAdapter<PceQuery, Metrics> {
       ['session', 'project', 'principle'],
       k,
       query.text,
-      { embeddingService: this.embeddingService },
+      { embeddingService: this.embeddingService }
     );
 
     const latencyMs = Date.now() - startTime;
@@ -184,11 +184,20 @@ describe('PCE-Memory Goldenset Evaluation', () => {
     await new MarkdownReporter({ outputPath: mdPath }).write(result);
     await new ConsoleReporter({ verbosity: 'normal' }).write(result);
 
-    const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-    const precisions = result.queries.filter((q) => q.status === 'success').map((q) => q.metrics?.precision ?? 0);
-    const recalls = result.queries.filter((q) => q.status === 'success').map((q) => q.metrics?.recall ?? 0);
-    const mrrs = result.queries.filter((q) => q.status === 'success').map((q) => (q.metrics?.extras?.mrr as number) ?? 0);
-    const ndcgs = result.queries.filter((q) => q.status === 'success').map((q) => (q.metrics?.extras?.ndcg as number) ?? 0);
+    const avg = (arr: number[]) =>
+      arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const precisions = result.queries
+      .filter((q) => q.status === 'success')
+      .map((q) => q.metrics?.precision ?? 0);
+    const recalls = result.queries
+      .filter((q) => q.status === 'success')
+      .map((q) => q.metrics?.recall ?? 0);
+    const mrrs = result.queries
+      .filter((q) => q.status === 'success')
+      .map((q) => (q.metrics?.extras?.mrr as number) ?? 0);
+    const ndcgs = result.queries
+      .filter((q) => q.status === 'success')
+      .map((q) => (q.metrics?.extras?.ndcg as number) ?? 0);
 
     console.log(`\n📊 Metrics Summary:`);
     console.log(`  Precision@k: ${(avg(precisions) * 100).toFixed(1)}%`);

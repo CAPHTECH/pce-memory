@@ -11,6 +11,7 @@
 ```
 
 Entities:
+
 - `api-gateway` (type: service)
 - `auth-service` (type: component)
 - `user-service` (type: component)

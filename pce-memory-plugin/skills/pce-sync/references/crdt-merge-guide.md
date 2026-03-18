@@ -45,12 +45,12 @@ Result: { hash: "abc", boundary: "internal" }  ← stricter wins
 
 ## Conflict Types
 
-| Type | Resolution | Auto/Manual |
-|------|-----------|-------------|
-| Duplicate claim (same hash) | Merge (consolidate to one) | Auto |
-| Boundary upgrade | Adopt stricter level | Auto |
-| Entity attribute diff | Skip (local priority) | Manual review recommended |
-| Relation diff | Skip (local priority) | Manual review recommended |
+| Type                        | Resolution                 | Auto/Manual               |
+| --------------------------- | -------------------------- | ------------------------- |
+| Duplicate claim (same hash) | Merge (consolidate to one) | Auto                      |
+| Boundary upgrade            | Adopt stricter level       | Auto                      |
+| Entity attribute diff       | Skip (local priority)      | Manual review recommended |
+| Relation diff               | Skip (local priority)      | Manual review recommended |
 
 ## Best Practices
 

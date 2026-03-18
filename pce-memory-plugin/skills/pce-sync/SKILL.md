@@ -2,8 +2,8 @@
 name: pce-sync
 context: fork
 description: "Team knowledge synchronization skill for pce-memory. Manages push/pull/status with Git hooks integration and CRDT merge. Triggered by: 'sync knowledge', 'push knowledge', 'pull team knowledge', 'check sync status'."
-argument-hint: "[push|pull|status]"
-allowed-tools: "mcp__pce-memory__pce_memory_sync_push, mcp__pce-memory__pce_memory_sync_pull, mcp__pce-memory__pce_memory_sync_status, mcp__pce-memory__pce_memory_state"
+argument-hint: '[push|pull|status]'
+allowed-tools: 'mcp__pce-memory__pce_memory_sync_push, mcp__pce-memory__pce_memory_sync_pull, mcp__pce-memory__pce_memory_sync_status, mcp__pce-memory__pce_memory_state'
 ---
 
 # PCE Sync - Team Knowledge Synchronization
@@ -13,6 +13,7 @@ Synchronize pce-memory knowledge across team members. Provides Git hooks integra
 ## Argument Parsing
 
 Parse `$ARGUMENTS`:
+
 - `push` → Export local knowledge
 - `pull` → Import team knowledge
 - `status` → Check sync state
@@ -53,6 +54,7 @@ pce_memory_sync_status()
 ```
 
 Returns:
+
 - Local and remote claim counts
 - Unsynced claim count
 - Last sync timestamp

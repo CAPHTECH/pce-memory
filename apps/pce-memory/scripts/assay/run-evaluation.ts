@@ -88,7 +88,7 @@ class StoreDirectAdapter implements SearchAdapter<PceQuery, Metrics> {
           content_hash: claim.content_hash,
           provenance: claim.provenance,
         },
-        this.embeddingService,
+        this.embeddingService
       );
       this.testIdToClaimId.set(claim.id, result.claim.id);
     }
@@ -110,7 +110,7 @@ class StoreDirectAdapter implements SearchAdapter<PceQuery, Metrics> {
       query.text,
       {
         embeddingService: this.embeddingService,
-      },
+      }
     );
 
     const latencyMs = Date.now() - startTime;
@@ -262,7 +262,7 @@ async function main(): Promise<void> {
     .filter((q) => q.status === 'success' && q.metrics?.extras?.ndcg !== undefined)
     .map((q) => q.metrics!.extras!.ndcg as number);
 
-  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
   console.log(`  Precision@k: ${(avg(precisions) * 100).toFixed(1)}%`);
   console.log(`  Recall@k: ${(avg(recalls) * 100).toFixed(1)}%`);
   console.log(`  MRR: ${(avg(mrrs) * 100).toFixed(1)}%`);

@@ -2,8 +2,8 @@
 name: pce-graph
 context: fork
 description: "Knowledge graph operations skill for pce-memory. Create, query, and visualize entities and relations. Triggered by: 'create entity', 'graph relation', 'query knowledge graph', 'map dependencies'."
-argument-hint: "[entity|relation|query] [args...]"
-allowed-tools: "mcp__pce-memory__pce_memory_upsert_entity, mcp__pce-memory__pce_memory_upsert_relation, mcp__pce-memory__pce_memory_query_entity, mcp__pce-memory__pce_memory_query_relation, mcp__pce-memory__pce_memory_state"
+argument-hint: '[entity|relation|query] [args...]'
+allowed-tools: 'mcp__pce-memory__pce_memory_upsert_entity, mcp__pce-memory__pce_memory_upsert_relation, mcp__pce-memory__pce_memory_query_entity, mcp__pce-memory__pce_memory_query_relation, mcp__pce-memory__pce_memory_state'
 ---
 
 # PCE Graph - Knowledge Graph Operations
@@ -13,6 +13,7 @@ Operate on the pce-memory knowledge graph (entities and relations).
 ## Argument Parsing
 
 Parse `$ARGUMENTS`:
+
 - `entity [name] [type]` → Create/search entity
 - `relation [from] [to] [type]` → Create relation
 - `query [pattern]` → Search graph
@@ -37,14 +38,14 @@ pce_memory_upsert_entity({
 
 See [entity-relation-patterns.md](references/entity-relation-patterns.md).
 
-| Type | Purpose | Examples |
-|------|---------|---------|
-| component | Software component | AuthService, UserController |
-| module | Module/package | pce-boundary, pce-embeddings |
-| api | API endpoint | POST /api/claims |
-| database | Data store | DuckDB, Redis |
-| service | External service | OpenAI API, GitHub |
-| concept | Concept/pattern | State Machine, CRDT |
+| Type      | Purpose            | Examples                     |
+| --------- | ------------------ | ---------------------------- |
+| component | Software component | AuthService, UserController  |
+| module    | Module/package     | pce-boundary, pce-embeddings |
+| api       | API endpoint       | POST /api/claims             |
+| database  | Data store         | DuckDB, Redis                |
+| service   | External service   | OpenAI API, GitHub           |
+| concept   | Concept/pattern    | State Machine, CRDT          |
 
 ### Querying Entities
 
@@ -72,13 +73,13 @@ pce_memory_upsert_relation({
 
 ### Relation Type Guide
 
-| Type | Meaning | Example |
-|------|---------|---------|
-| depends_on | Dependency | AuthService depends_on JWTLibrary |
-| implements | Implementation | UserController implements IUserAPI |
-| contains | Containment | CoreModule contains StateManager |
-| calls | Invocation | Handler calls Repository |
-| stores_in | Persistence target | ClaimStore stores_in DuckDB |
+| Type       | Meaning            | Example                            |
+| ---------- | ------------------ | ---------------------------------- |
+| depends_on | Dependency         | AuthService depends_on JWTLibrary  |
+| implements | Implementation     | UserController implements IUserAPI |
+| contains   | Containment        | CoreModule contains StateManager   |
+| calls      | Invocation         | Handler calls Repository           |
+| stores_in  | Persistence target | ClaimStore stores_in DuckDB        |
 
 ### Querying Relations
 

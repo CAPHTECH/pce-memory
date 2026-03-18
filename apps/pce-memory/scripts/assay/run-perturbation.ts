@@ -10,7 +10,10 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadDataset, evaluateRetrieval } from '../../external/assay-kit/packages/assay-kit/src/index.ts';
+import {
+  loadDataset,
+  evaluateRetrieval,
+} from '../../external/assay-kit/packages/assay-kit/src/index.ts';
 import { TEST_CLAIMS } from './test-data.ts';
 
 // store層の直接インポート
@@ -35,8 +38,8 @@ interface PerturbationConfig {
 const CONFIGS: PerturbationConfig[] = [
   { name: 'baseline', alpha: 0.65, rerank: true, top_k: 10 },
   { name: 'no-rerank', alpha: 0.65, rerank: false, top_k: 10 },
-  { name: 'alpha-0.5', alpha: 0.50, rerank: true, top_k: 10 },
-  { name: 'alpha-0.8', alpha: 0.80, rerank: true, top_k: 10 },
+  { name: 'alpha-0.5', alpha: 0.5, rerank: true, top_k: 10 },
+  { name: 'alpha-0.8', alpha: 0.8, rerank: true, top_k: 10 },
   { name: 'top_k-5', alpha: 0.65, rerank: true, top_k: 5 },
   { name: 'top_k-20', alpha: 0.65, rerank: true, top_k: 20 },
 ];
@@ -89,7 +92,7 @@ async function warmup(): Promise<Map<string, string>> {
         content_hash: claim.content_hash,
         provenance: claim.provenance,
       },
-      embeddingService,
+      embeddingService
     );
     testIdToClaimId.set(claim.id, result.claim.id);
   }
@@ -102,8 +105,12 @@ async function warmup(): Promise<Map<string, string>> {
  */
 async function runConfig(
   config: PerturbationConfig,
-  queries: Array<{ id: string; text: string; metadata?: { expected?: Array<string | { path: string; relevance: number }> } }>,
-  testIdToClaimId: Map<string, string>,
+  queries: Array<{
+    id: string;
+    text: string;
+    metadata?: { expected?: Array<string | { path: string; relevance: number }> };
+  }>,
+  testIdToClaimId: Map<string, string>
 ): Promise<ConfigResult> {
   const results: QueryResult[] = [];
 
@@ -119,7 +126,7 @@ async function runConfig(
         embeddingService,
         alpha: config.alpha,
         enableRerank: config.rerank,
-      },
+      }
     );
 
     const retrievedIds = searchResult.results.map((c) => c.claim.id);
@@ -130,7 +137,8 @@ async function runConfig(
     const relevantIdSet = new Set<string>();
     const resolveId = (rawId: string): string => {
       const mapped = testIdToClaimId.get(rawId);
-      if (!mapped) throw new Error(`Unknown expected claim reference "${rawId}" in query "${query.id}"`);
+      if (!mapped)
+        throw new Error(`Unknown expected claim reference "${rawId}" in query "${query.id}"`);
       return mapped;
     };
 
@@ -171,7 +179,7 @@ async function runConfig(
     });
   }
 
-  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
 
   return {
     config,
@@ -229,7 +237,9 @@ function generateMarkdown(configResults: ConfigResult[]): string {
   lines.push(``);
 
   for (const cr of configResults) {
-    lines.push(`### ${cr.config.name} (α=${cr.config.alpha}, rerank=${cr.config.rerank}, top_k=${cr.config.top_k})`);
+    lines.push(
+      `### ${cr.config.name} (α=${cr.config.alpha}, rerank=${cr.config.rerank}, top_k=${cr.config.top_k})`
+    );
     lines.push(``);
     lines.push(`| Query | Precision | Recall | MRR | nDCG |`);
     lines.push(`|-------|-----------|--------|-----|------|`);
@@ -266,14 +276,20 @@ async function main(): Promise<void> {
   // データセットロード
   console.log('📖 Loading dataset...');
   const dataset = await loadDataset(datasetPath);
-  const queries = dataset.queries as Array<{ id: string; text: string; metadata?: { expected?: Array<string | { path: string; relevance: number }> } }>;
+  const queries = dataset.queries as Array<{
+    id: string;
+    text: string;
+    metadata?: { expected?: Array<string | { path: string; relevance: number }> };
+  }>;
   console.log(`  Loaded ${queries.length} queries`);
 
   const configResults: ConfigResult[] = [];
   process.env.PCE_DB = ':memory:';
 
   for (const config of CONFIGS) {
-    console.log(`\n🔧 Running config: ${config.name} (α=${config.alpha}, rerank=${config.rerank}, top_k=${config.top_k})`);
+    console.log(
+      `\n🔧 Running config: ${config.name} (α=${config.alpha}, rerank=${config.rerank}, top_k=${config.top_k})`
+    );
 
     // 各設定ごとにDB初期化
     await resetDbAsync();
@@ -287,7 +303,9 @@ async function main(): Promise<void> {
     // クエリ実行
     const result = await runConfig(config, queries, testIdToClaimId);
     configResults.push(result);
-    console.log(`  Precision: ${(result.avgPrecision * 100).toFixed(1)}%, Recall: ${(result.avgRecall * 100).toFixed(1)}%, MRR: ${(result.avgMrr * 100).toFixed(1)}%, nDCG: ${(result.avgNdcg * 100).toFixed(1)}%`);
+    console.log(
+      `  Precision: ${(result.avgPrecision * 100).toFixed(1)}%, Recall: ${(result.avgRecall * 100).toFixed(1)}%, MRR: ${(result.avgMrr * 100).toFixed(1)}%, nDCG: ${(result.avgNdcg * 100).toFixed(1)}%`
+    );
   }
 
   // Markdown出力

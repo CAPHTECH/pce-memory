@@ -48,7 +48,9 @@ export async function computeHealthReport(): Promise<HealthReport> {
       COALESCE(SUM(CASE WHEN confidence < 0.3 THEN 1 ELSE 0 END), 0)::INTEGER AS low
     FROM claims
   `);
-  const confRow = (confResult.getRowObjects() as { high: number; medium: number; low: number }[])[0] ?? { high: 0, medium: 0, low: 0 };
+  const confRow = (
+    confResult.getRowObjects() as { high: number; medium: number; low: number }[]
+  )[0] ?? { high: 0, medium: 0, low: 0 };
 
   // last_positive_feedback_age
   const feedbackAgeResult = await conn.runAndReadAll(`
@@ -63,7 +65,13 @@ export async function computeHealthReport(): Promise<HealthReport> {
       GROUP BY claim_id
     ) f
   `);
-  const feedbackAgeRow = (feedbackAgeResult.getRowObjects() as { recent_30d: number; stale_90d: number; dormant: number }[])[0] ?? { recent_30d: 0, stale_90d: 0, dormant: 0 };
+  const feedbackAgeRow = (
+    feedbackAgeResult.getRowObjects() as {
+      recent_30d: number;
+      stale_90d: number;
+      dormant: number;
+    }[]
+  )[0] ?? { recent_30d: 0, stale_90d: 0, dormant: 0 };
 
   // duplicate_feedback_rate
   const dupResult = await conn.runAndReadAll(`
@@ -72,7 +80,10 @@ export async function computeHealthReport(): Promise<HealthReport> {
       COALESCE(COUNT(*), 0)::INTEGER AS total_count
     FROM feedback
   `);
-  const dupRow = (dupResult.getRowObjects() as { dup_count: number; total_count: number }[])[0] ?? { dup_count: 0, total_count: 0 };
+  const dupRow = (dupResult.getRowObjects() as { dup_count: number; total_count: number }[])[0] ?? {
+    dup_count: 0,
+    total_count: 0,
+  };
   const duplicateFeedbackRate = dupRow.total_count > 0 ? dupRow.dup_count / dupRow.total_count : 0;
 
   // never_activated_ratio (claims that have never appeared in active_contexts)
@@ -108,7 +119,11 @@ export async function computeHealthReport(): Promise<HealthReport> {
   const byAgeBucket: Record<string, number> = {};
   let totalNever = 0;
   let totalForRatio = 0;
-  for (const row of neverActivatedResult.getRowObjects() as { age_bucket: string; total: number; never_count: number }[]) {
+  for (const row of neverActivatedResult.getRowObjects() as {
+    age_bucket: string;
+    total: number;
+    never_count: number;
+  }[]) {
     byAgeBucket[row.age_bucket] = row.total > 0 ? row.never_count / row.total : 0;
     totalNever += row.never_count;
     totalForRatio += row.total;
@@ -124,7 +139,9 @@ export async function computeHealthReport(): Promise<HealthReport> {
       COALESCE(PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY utility), 0) AS p90
     FROM claims
   `);
-  const utilRow = (utilResult.getRowObjects() as { mean: number; median: number; p10: number; p90: number }[])[0] ?? { mean: 0, median: 0, p10: 0, p90: 0 };
+  const utilRow = (
+    utilResult.getRowObjects() as { mean: number; median: number; p10: number; p90: number }[]
+  )[0] ?? { mean: 0, median: 0, p10: 0, p90: 0 };
 
   // feedback_summary
   const fbSummaryResult = await conn.runAndReadAll(

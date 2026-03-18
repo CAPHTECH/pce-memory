@@ -8,7 +8,7 @@ description: |
 model: sonnet
 color: cyan
 tools: Read, Glob, Grep, Bash
-allowed-mcp-tools: "mcp__pce-memory__pce_memory_state, mcp__pce-memory__pce_memory_activate, mcp__pce-memory__pce_memory_feedback, mcp__pce-memory__pce_memory_query_entity, mcp__pce-memory__pce_memory_query_relation"
+allowed-mcp-tools: 'mcp__pce-memory__pce_memory_state, mcp__pce-memory__pce_memory_activate, mcp__pce-memory__pce_memory_feedback, mcp__pce-memory__pce_memory_query_entity, mcp__pce-memory__pce_memory_query_relation'
 ---
 
 # Knowledge Curator Agent
