@@ -2961,8 +2961,14 @@ export const TOOL_DEFINITIONS = [
       type: 'object',
       properties: {
         total_claims: { type: 'integer', minimum: 0, description: 'Total number of claims' },
-        by_kind: { type: 'object', description: 'Claim count by kind (fact/preference/task/policy_hint)' },
-        by_scope: { type: 'object', description: 'Claim count by scope (session/project/principle)' },
+        by_kind: {
+          type: 'object',
+          description: 'Claim count by kind (fact/preference/task/policy_hint)',
+        },
+        by_scope: {
+          type: 'object',
+          description: 'Claim count by scope (session/project/principle)',
+        },
         confidence_bands: {
           type: 'object',
           properties: {
@@ -2980,7 +2986,10 @@ export const TOOL_DEFINITIONS = [
             dormant: { type: 'integer' },
           },
         },
-        duplicate_feedback_rate: { type: 'number', description: 'Rate of duplicate feedback signals' },
+        duplicate_feedback_rate: {
+          type: 'number',
+          description: 'Rate of duplicate feedback signals',
+        },
         never_activated_ratio: {
           type: 'object',
           properties: {
@@ -3003,7 +3012,15 @@ export const TOOL_DEFINITIONS = [
         request_id: { type: 'string' },
         trace_id: { type: 'string' },
       },
-      required: ['total_claims', 'by_kind', 'by_scope', 'policy_version', 'state', 'request_id', 'trace_id'],
+      required: [
+        'total_claims',
+        'by_kind',
+        'by_scope',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
   // ========== Graph Memory Tools ==========

@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "pce-memory-plugin@pce-memory-marketplace": true
+  }
+}

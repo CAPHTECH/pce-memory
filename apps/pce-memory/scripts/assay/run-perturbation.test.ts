@@ -4,7 +4,10 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadDataset, evaluateRetrieval } from '../../external/assay-kit/packages/assay-kit/src/index.ts';
+import {
+  loadDataset,
+  evaluateRetrieval,
+} from '../../external/assay-kit/packages/assay-kit/src/index.ts';
 import { TEST_CLAIMS } from './test-data.ts';
 import { initDb, initSchema, resetDbAsync } from '../../src/db/connection';
 import { upsertClaimWithEmbedding } from '../../src/store/claims';
@@ -29,8 +32,8 @@ interface PerturbationConfig {
 const CONFIGS: PerturbationConfig[] = [
   { name: 'baseline', alpha: 0.65, rerank: true, top_k: 10 },
   { name: 'no-rerank', alpha: 0.65, rerank: false, top_k: 10 },
-  { name: 'alpha-0.5', alpha: 0.50, rerank: true, top_k: 10 },
-  { name: 'alpha-0.8', alpha: 0.80, rerank: true, top_k: 10 },
+  { name: 'alpha-0.5', alpha: 0.5, rerank: true, top_k: 10 },
+  { name: 'alpha-0.8', alpha: 0.8, rerank: true, top_k: 10 },
   { name: 'top_k-5', alpha: 0.65, rerank: true, top_k: 5 },
   { name: 'top_k-20', alpha: 0.65, rerank: true, top_k: 20 },
 ];
@@ -56,14 +59,18 @@ async function warmup(): Promise<Map<string, string>> {
         content_hash: claim.content_hash,
         provenance: claim.provenance,
       },
-      embeddingService,
+      embeddingService
     );
     testIdToClaimId.set(claim.id, result.claim.id);
   }
   return testIdToClaimId;
 }
 
-type QueryType = { id: string; text: string; metadata?: { expected?: Array<string | { path: string; relevance: number }> } };
+type QueryType = {
+  id: string;
+  text: string;
+  metadata?: { expected?: Array<string | { path: string; relevance: number }> };
+};
 
 interface ConfigResult {
   config: PerturbationConfig;
@@ -77,21 +84,24 @@ interface ConfigResult {
 async function runConfig(
   config: PerturbationConfig,
   queries: QueryType[],
-  testIdToClaimId: Map<string, string>,
+  testIdToClaimId: Map<string, string>
 ): Promise<ConfigResult> {
   const results: ConfigResult['results'] = [];
   for (const query of queries) {
     const startTime = Date.now();
     const searchResult = await hybridSearchPaginated(
-      ['session', 'project', 'principle'], config.top_k, query.text,
-      { embeddingService, alpha: config.alpha, enableRerank: config.rerank },
+      ['session', 'project', 'principle'],
+      config.top_k,
+      query.text,
+      { embeddingService, alpha: config.alpha, enableRerank: config.rerank }
     );
     const retrievedIds = searchResult.results.map((c) => c.claim.id);
     const relevanceGrades = new Map<string, number>();
     const relevantIdSet = new Set<string>();
     const resolveId = (rawId: string): string => {
       const mapped = testIdToClaimId.get(rawId);
-      if (!mapped) throw new Error(`Unknown expected claim reference "${rawId}" in query "${query.id}"`);
+      if (!mapped)
+        throw new Error(`Unknown expected claim reference "${rawId}" in query "${query.id}"`);
       return mapped;
     };
     if (Array.isArray(query.metadata?.expected)) {
@@ -108,14 +118,32 @@ async function runConfig(
       }
     }
     const metrics = evaluateRetrieval({
-      items: retrievedIds.map((id, i) => ({ id, timestampMs: startTime + i * TIMESTAMP_INTERVAL_MS })),
-      relevant: Array.from(relevantIdSet), k: config.top_k, startTimestampMs: startTime,
+      items: retrievedIds.map((id, i) => ({
+        id,
+        timestampMs: startTime + i * TIMESTAMP_INTERVAL_MS,
+      })),
+      relevant: Array.from(relevantIdSet),
+      k: config.top_k,
+      startTimestampMs: startTime,
       ...(relevanceGrades.size > 0 && { relevanceGrades }),
     });
-    results.push({ queryId: query.id, precision: metrics.precisionAtK, recall: metrics.recallAtK, mrr: metrics.mrr, ndcg: metrics.ndcg ?? 0 });
+    results.push({
+      queryId: query.id,
+      precision: metrics.precisionAtK,
+      recall: metrics.recallAtK,
+      mrr: metrics.mrr,
+      ndcg: metrics.ndcg ?? 0,
+    });
   }
-  const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-  return { config, results, avgPrecision: avg(results.map(r => r.precision)), avgRecall: avg(results.map(r => r.recall)), avgMrr: avg(results.map(r => r.mrr)), avgNdcg: avg(results.map(r => r.ndcg)) };
+  const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+  return {
+    config,
+    results,
+    avgPrecision: avg(results.map((r) => r.precision)),
+    avgRecall: avg(results.map((r) => r.recall)),
+    avgMrr: avg(results.map((r) => r.mrr)),
+    avgNdcg: avg(results.map((r) => r.ndcg)),
+  };
 }
 
 describe('PCE-Memory Parameter Perturbation', () => {
@@ -140,13 +168,22 @@ describe('PCE-Memory Parameter Perturbation', () => {
       const idMap = await warmup();
       const result = await runConfig(config, queries, idMap);
       configResults.push(result);
-      console.log(`  P=${(result.avgPrecision*100).toFixed(1)}% R=${(result.avgRecall*100).toFixed(1)}% MRR=${(result.avgMrr*100).toFixed(1)}% nDCG=${(result.avgNdcg*100).toFixed(1)}%`);
+      console.log(
+        `  P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% nDCG=${(result.avgNdcg * 100).toFixed(1)}%`
+      );
     }
 
     // Markdown output
-    const lines = ['# Perturbation Results', '', `| Config | α | Rerank | top_k | Precision | Recall | MRR | nDCG |`, `|--------|---|--------|-------|-----------|--------|-----|------|`];
+    const lines = [
+      '# Perturbation Results',
+      '',
+      `| Config | α | Rerank | top_k | Precision | Recall | MRR | nDCG |`,
+      `|--------|---|--------|-------|-----------|--------|-----|------|`,
+    ];
     for (const cr of configResults) {
-      lines.push(`| ${cr.config.name} | ${cr.config.alpha} | ${cr.config.rerank ? 'on' : 'off'} | ${cr.config.top_k} | ${(cr.avgPrecision*100).toFixed(1)}% | ${(cr.avgRecall*100).toFixed(1)}% | ${(cr.avgMrr*100).toFixed(1)}% | ${(cr.avgNdcg*100).toFixed(1)}% |`);
+      lines.push(
+        `| ${cr.config.name} | ${cr.config.alpha} | ${cr.config.rerank ? 'on' : 'off'} | ${cr.config.top_k} | ${(cr.avgPrecision * 100).toFixed(1)}% | ${(cr.avgRecall * 100).toFixed(1)}% | ${(cr.avgMrr * 100).toFixed(1)}% | ${(cr.avgNdcg * 100).toFixed(1)}% |`
+      );
     }
     const dateStr = new Date().toISOString().split('T')[0];
     const mdPath = join(resultsDir, `perturbation-${dateStr}.md`);

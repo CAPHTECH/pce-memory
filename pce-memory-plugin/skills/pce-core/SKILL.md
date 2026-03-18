@@ -2,8 +2,8 @@
 name: pce-core
 context: fork
 description: "Core pce-memory workflow skill for activate/upsert/feedback. Guides knowledge recall, recording, and feedback with proper scope/kind/boundary selection. Triggered by: 'knowledge recall', 'record to memory', 'activate context', 'memory workflow'."
-argument-hint: "[activate|upsert|feedback] [query or text...]"
-allowed-tools: "mcp__pce-memory__pce_memory_activate, mcp__pce-memory__pce_memory_upsert, mcp__pce-memory__pce_memory_feedback, mcp__pce-memory__pce_memory_state, mcp__pce-memory__pce_memory_policy_apply, mcp__pce-memory__pce_memory_upsert_entity, mcp__pce-memory__pce_memory_upsert_relation"
+argument-hint: '[activate|upsert|feedback] [query or text...]'
+allowed-tools: 'mcp__pce-memory__pce_memory_activate, mcp__pce-memory__pce_memory_upsert, mcp__pce-memory__pce_memory_feedback, mcp__pce-memory__pce_memory_state, mcp__pce-memory__pce_memory_policy_apply, mcp__pce-memory__pce_memory_upsert_entity, mcp__pce-memory__pce_memory_upsert_relation'
 ---
 
 # PCE Core - Knowledge Management Workflow
@@ -13,6 +13,7 @@ Manages the core pce-memory workflow: activate → work → upsert → feedback.
 ## Argument Parsing
 
 Parse `$ARGUMENTS`:
+
 - `activate [query]` → Knowledge recall mode
 - `upsert [kind] [text]` → Knowledge recording mode
 - `feedback [claim-id] [signal]` → Feedback mode

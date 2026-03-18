@@ -21,12 +21,12 @@ claude --plugin-dir ./pce-memory-plugin
 
 ### Hooks (fully autonomous)
 
-| Event | Behavior |
-|-------|----------|
-| SessionStart | Check state → policy_apply → activate (also fires after compaction) |
-| UserPromptSubmit | Inject base protocol every message + activate on task detection |
-| Stop | Auto-record important decisions with upsert |
-| PostToolUse(Write\|Edit) | Auto-record on architecturally significant file changes |
+| Event                    | Behavior                                                            |
+| ------------------------ | ------------------------------------------------------------------- |
+| SessionStart             | Check state → policy_apply → activate (also fires after compaction) |
+| UserPromptSubmit         | Inject base protocol every message + activate on task detection     |
+| Stop                     | Auto-record important decisions with upsert                         |
+| PostToolUse(Write\|Edit) | Auto-record on architecturally significant file changes             |
 
 ### Skills (AI internal reference)
 

@@ -189,6 +189,7 @@ MIT License - see [LICENSE](LICENSE) for details
 ## Documentation
 
 - [Vision & Mission](docs/pce-memory-vision.md)
+- [Usefulness Review (JA)](docs/pce-memory-usefulness-review.ja.md)
 - [Core Types](docs/core-types.md)
 - [MCP Tools](docs/mcp-tools.md)
 - [Boundary Policy](docs/boundary-policy.md)
