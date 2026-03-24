@@ -64,9 +64,13 @@ export function canDoUpsert(): boolean {
   return canUpsert(currentMachine.runtimeState);
 }
 
-/** activate可能かチェック（Ready状態からも可） */
+/** activate可能かチェック（PolicyApplied / HasClaims / Ready で可） */
 export function canDoActivate(): boolean {
-  return canActivate(currentMachine.runtimeState) || currentMachine.runtimeState.type === 'Ready';
+  return (
+    canActivate(currentMachine.runtimeState) ||
+    currentMachine.runtimeState.type === 'PolicyApplied' ||
+    currentMachine.runtimeState.type === 'Ready'
+  );
 }
 
 /** feedback可能かチェック */
