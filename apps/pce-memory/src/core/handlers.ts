@@ -32,8 +32,14 @@ import { checkAndConsume } from '../store/rate.js';
 import { updateCritic } from '../store/critic.js';
 import { stateError } from '../domain/stateMachine.js';
 import type { ErrorCode } from '../domain/errors.js';
-import { CLAIM_KINDS, ENTITY_TYPES, isValidEntityType } from '../domain/types.js';
-import type { ClaimKind } from '../domain/types.js';
+import {
+  CLAIM_KINDS,
+  ENTITY_TYPES,
+  MEMORY_TYPES,
+  isValidEntityType,
+  isValidMemoryType,
+} from '../domain/types.js';
+import type { ClaimKind, MemoryType } from '../domain/types.js';
 import * as E from 'fp-ts/Either';
 
 import {
@@ -359,12 +365,23 @@ export async function handlePolicyApply(args: Record<string, unknown>) {
 }
 
 export async function handleUpsert(args: Record<string, unknown>) {
-  const { text, kind, scope, boundary_class, content_hash, provenance, entities, relations } =
+  const {
+    text,
+    kind,
+    scope,
+    boundary_class,
+    memory_type,
+    content_hash,
+    provenance,
+    entities,
+    relations,
+  } =
     args as {
       text?: string;
       kind?: string;
       scope?: string;
       boundary_class?: string;
+      memory_type?: string;
       content_hash?: string;
       provenance?: Provenance;
       entities?: EntityInput[];
@@ -429,12 +446,32 @@ export async function handleUpsert(args: Record<string, unknown>) {
       );
     }
 
+    if (memory_type !== undefined) {
+      try {
+        validateString('memory_type', memory_type, 128);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+
+      if (!isValidMemoryType(memory_type)) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'unknown memory_type', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
     // Claim登録（EmbeddingServiceがあれば埋め込みも生成）
     const claimInput = {
       text: text!,
       kind: kind as ClaimKind,
       scope: scope!,
       boundary_class: boundary_class!,
+      ...(memory_type !== undefined ? { memory_type: memory_type as MemoryType } : {}),
       content_hash: validation.resolvedHash,
       ...(provenance !== undefined ? { provenance } : {}),
     };
@@ -974,7 +1011,12 @@ export async function handleActivate(args: Record<string, unknown>) {
     });
     const claims = searchResult.results.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
-    await saveActiveContext({ id: acId, claims });
+    await saveActiveContext({
+      id: acId,
+      claims,
+      ...(q !== undefined ? { intent: q } : {}),
+      policy_version: getPolicyVersion(),
+    });
 
     let evidenceMap: Map<string, Evidence[]> | undefined;
     if (include_meta && claims.length > 0) {
@@ -2720,6 +2762,12 @@ export const TOOL_DEFINITIONS = [
           enum: ['public', 'internal', 'pii'],
           description:
             'Durable claims support public|internal|pii. secret is rejected by default; use pce_memory_observe for secret material.',
+        },
+        memory_type: {
+          type: 'string',
+          enum: [...MEMORY_TYPES],
+          description:
+            'Optional v2 memory taxonomy. Must match one of the domain MemoryType values.',
         },
         content_hash: {
           type: 'string',

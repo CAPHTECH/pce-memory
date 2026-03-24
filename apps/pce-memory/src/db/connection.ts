@@ -205,6 +205,34 @@ async function migrateFeedbackActiveContextId(conn: DuckDBConnection): Promise<v
   await conn.run('ALTER TABLE feedback ADD COLUMN active_context_id TEXT');
 }
 
+async function migrateClaimsMemoryType(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'claims'))) return;
+
+  const cols = await getTableColumns(conn, 'claims');
+  if (cols.has('memory_type')) return;
+
+  console.error('[DB] Migrating claims: adding memory_type column...');
+  await conn.run('ALTER TABLE claims ADD COLUMN memory_type TEXT');
+}
+
+async function migrateActiveContextsV2(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'active_contexts'))) return;
+
+  const cols = await getTableColumns(conn, 'active_contexts');
+  if (!cols.has('intent')) {
+    console.error('[DB] Migrating active_contexts: adding intent column...');
+    await conn.run('ALTER TABLE active_contexts ADD COLUMN intent TEXT');
+  }
+  if (!cols.has('expires_at')) {
+    console.error('[DB] Migrating active_contexts: adding expires_at column...');
+    await conn.run('ALTER TABLE active_contexts ADD COLUMN expires_at TEXT');
+  }
+  if (!cols.has('policy_version')) {
+    console.error('[DB] Migrating active_contexts: adding policy_version column...');
+    await conn.run('ALTER TABLE active_contexts ADD COLUMN policy_version TEXT');
+  }
+}
+
 async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> {
   // まず孤立した一時テーブルをクリーンアップ
   await cleanupOrphanedTempTables(conn);
@@ -327,6 +355,8 @@ export async function initSchema() {
   await migrateLegacyObservations(conn); // Issue #30: observationsスキーマ変更
   await migrateClaimVectorsDropFK(conn); // PR #32: DuckDB FK制約バグ対策
   await migrateFeedbackActiveContextId(conn); // feedback表にactive_context_idカラム追加
+  await migrateClaimsMemoryType(conn); // Issue #60: claims表にmemory_typeカラム追加
+  await migrateActiveContextsV2(conn); // Issue #60: active_contexts表をv2列で拡張
 
   const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())

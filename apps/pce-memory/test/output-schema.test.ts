@@ -11,6 +11,7 @@ import { resetMemoryState } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
 import { resetRates, initRateState } from '../src/store/rate';
 import { computeContentHash } from '@pce/embeddings';
+import { MEMORY_TYPES } from '../src/domain/types';
 
 // テスト前にDBと状態をリセット
 beforeEach(async () => {
@@ -58,6 +59,9 @@ describe('Output Schema - 基本テスト', () => {
     const boundaryClassSchema = upsertTool?.inputSchema?.properties?.boundary_class as
       | { enum?: string[]; description?: string }
       | undefined;
+    const memoryTypeSchema = upsertTool?.inputSchema?.properties?.memory_type as
+      | { enum?: string[]; description?: string }
+      | undefined;
     const provenanceSchema = upsertTool?.inputSchema?.properties?.provenance as
       | { description?: string; properties?: { at?: { description?: string } }; required?: string[] }
       | undefined;
@@ -74,6 +78,8 @@ describe('Output Schema - 基本テスト', () => {
     expect(boundaryClassSchema?.enum).toEqual(['public', 'internal', 'pii']);
     expect(boundaryClassSchema?.description).toContain('secret is rejected by default');
     expect(boundaryClassSchema?.description).toContain('pce_memory_observe');
+    expect(memoryTypeSchema?.enum).toEqual([...MEMORY_TYPES]);
+    expect(memoryTypeSchema?.description).toContain('Optional v2 memory taxonomy');
     expect(provenanceSchema?.description).toContain('Optional for session scope');
     expect(provenanceSchema?.required).toBeUndefined();
     expect(provenanceSchema?.properties?.at?.description).toContain(

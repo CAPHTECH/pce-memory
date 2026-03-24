@@ -99,6 +99,33 @@ describe('executePull', () => {
     }
   });
 
+  it('memory_type を含むClaimをインポート', async () => {
+    const text = 'memory type import claim';
+    const hash = computeContentHash(text);
+
+    const claim: ClaimExport = {
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      memory_type: 'procedure',
+      content_hash: `sha256:${hash}`,
+    };
+
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify(claim)
+    );
+
+    const result = await executePull({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      const saved = await findClaimByContentHash(`sha256:${hash}`);
+      expect(saved?.memory_type).toBe('procedure');
+    }
+  });
+
   it('content_hashが不一致の場合はバリデーションエラー', async () => {
     const text = 'テスト用Claim';
     const wrongHash = '0000000000000000000000000000000000000000000000000000000000000000';

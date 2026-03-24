@@ -3,6 +3,7 @@ import type { EmbeddingService, SensitivityLevel } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
 import { saveClaimVector, splitQueryWords, buildWordOrCondition } from './hybridSearch.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
+import type { MemoryType } from '../domain/types.js';
 
 /**
  * Provenance: 由来情報（mcp-tools.md §1.y準拠）
@@ -27,6 +28,7 @@ export interface Claim {
   kind: string;
   scope: string;
   boundary_class: string;
+  memory_type?: MemoryType | null;
   content_hash: string;
   // g()再ランキング用フィールド（ADR-0004準拠）
   utility: number;
@@ -37,6 +39,10 @@ export interface Claim {
   recency_anchor: Date | string;
   // 由来情報（mcp-tools.md §1.y準拠）
   provenance?: Provenance;
+}
+
+export interface ClaimRow extends Omit<Claim, 'provenance'> {
+  provenance?: Provenance | string | null;
 }
 
 /**
@@ -56,14 +62,21 @@ export interface UpsertResult {
 /** g()再ランキング用フィールドを含むClaim入力型 */
 export type ClaimInput = Omit<
   Claim,
-  'id' | 'utility' | 'confidence' | 'created_at' | 'updated_at' | 'recency_anchor'
+  | 'id'
+  | 'memory_type'
+  | 'utility'
+  | 'confidence'
+  | 'created_at'
+  | 'updated_at'
+  | 'recency_anchor'
 > & {
+  memory_type?: MemoryType;
   provenance?: Provenance;
 };
 
 /** 全カラムのSELECT句 */
 const CLAIM_COLUMNS =
-  'id, text, kind, scope, boundary_class, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance';
+  'id, text, kind, scope, boundary_class, memory_type, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance';
 
 /**
  * DBから取得したClaimのprovenanceフィールドをパース
@@ -71,24 +84,40 @@ const CLAIM_COLUMNS =
  *
  * exactOptionalPropertyTypes対応: undefinedを代入せずプロパティを省略する
  */
-function parseClaimProvenance(claim: Claim): Claim {
+function parseClaimProvenance(claim: ClaimRow): Claim {
+  const normalizedClaim: Claim = {
+    id: claim.id,
+    text: claim.text,
+    kind: claim.kind,
+    scope: claim.scope,
+    boundary_class: claim.boundary_class,
+    memory_type: claim.memory_type ?? null,
+    content_hash: claim.content_hash,
+    utility: claim.utility,
+    confidence: claim.confidence,
+    created_at: claim.created_at,
+    updated_at: claim.updated_at,
+    recency_anchor: claim.recency_anchor,
+  };
+
   if (claim.provenance && typeof claim.provenance === 'string') {
     try {
-      return { ...claim, provenance: JSON.parse(claim.provenance) as Provenance };
+      return { ...normalizedClaim, provenance: JSON.parse(claim.provenance) as Provenance };
     } catch {
-      // パース失敗時はprovenanceプロパティを省略
-      const { provenance: _, ...rest } = claim;
-      return rest as Claim;
+      return normalizedClaim;
     }
   }
-  return claim;
+  if (claim.provenance && typeof claim.provenance === 'object') {
+    return { ...normalizedClaim, provenance: claim.provenance };
+  }
+  return normalizedClaim;
 }
 
 /**
  * 複数のClaimのprovenanceをパース
  */
-function parseClaimsProvenance(claims: Claim[]): Claim[] {
-  return claims.map(parseClaimProvenance);
+function parseClaimsProvenance(claims: ClaimRow[]): Claim[] {
+  return claims.map((claim) => parseClaimProvenance(claim));
 }
 
 export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
@@ -99,7 +128,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
       [c.content_hash]
     );
-    const rawExisting = reader.getRowObjects() as unknown as Claim[];
+    const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
     const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
     if (existing.length > 0 && existing[0]) {
       return { claim: existing[0], isNew: false };
@@ -108,16 +137,17 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
     // 新規レコード挿入（utility/confidence/timestampsはDEFAULT値を使用）
     const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
     const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
+    const memoryType = c.memory_type ?? null;
     await conn.run(
-      'INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, provenanceJson]
+      'INSERT INTO claims (id, text, kind, scope, boundary_class, memory_type, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [id, c.text, c.kind, c.scope, c.boundary_class, memoryType, c.content_hash, provenanceJson]
     );
     // 挿入後のレコードを取得（DEFAULT値を含む）
     const insertedReader = await conn.runAndReadAll(
       `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
       [id]
     );
-    const rawInserted = insertedReader.getRowObjects() as unknown as Claim[];
+    const rawInserted = insertedReader.getRowObjects() as unknown as ClaimRow[];
     const inserted = parseClaimsProvenance(normalizeRowsTimestamps(rawInserted));
     return { claim: inserted[0]!, isNew: true };
   } catch (e: unknown) {
@@ -126,7 +156,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
       [c.content_hash]
     );
-    const rawExisting = reader.getRowObjects() as unknown as Claim[];
+    const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
     const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
     if (existing.length > 0 && existing[0]) {
       return { claim: existing[0], isNew: false };
@@ -161,8 +191,7 @@ export async function listClaimsByScope(
 
   // 空クエリの場合はスコープ内の全Claimを返す
   if (words.length === 0) {
-    const sql = `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
-              c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+    const sql = `SELECT ${CLAIM_COLUMNS},
               coalesce(cr.score, 0) as score
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -170,15 +199,14 @@ export async function listClaimsByScope(
        ORDER BY score DESC
        LIMIT $${scopes.length + 1}`;
     const reader = await conn.runAndReadAll(sql, [...scopes, limit]);
-    const rawRows = reader.getRowObjects() as unknown as Claim[];
-    return normalizeRowsTimestamps(rawRows);
+    const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
+    return parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
   }
 
   // 単語OR条件を構築
   const { sql: wordCondition, params: wordParams } = buildWordOrCondition(words, scopes.length + 1);
 
-  const sql = `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
-              c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+  const sql = `SELECT ${CLAIM_COLUMNS},
               coalesce(cr.score, 0) as score
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -187,8 +215,8 @@ export async function listClaimsByScope(
        LIMIT $${scopes.length + wordParams.length + 1}`;
 
   const reader = await conn.runAndReadAll(sql, [...scopes, ...wordParams, limit]);
-  const rawRows = reader.getRowObjects() as unknown as Claim[];
-  return normalizeRowsTimestamps(rawRows);
+  const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
+  return parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
 }
 
 export async function findClaimById(id: string): Promise<Claim | undefined> {
@@ -196,7 +224,7 @@ export async function findClaimById(id: string): Promise<Claim | undefined> {
   const reader = await conn.runAndReadAll(`SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`, [
     id,
   ]);
-  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
   const rows = parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
   return rows[0];
 }
@@ -210,7 +238,7 @@ export async function findClaimByContentHash(contentHash: string): Promise<Claim
     `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
     [contentHash]
   );
-  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
   const rows = parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
   return rows[0];
 }
@@ -270,7 +298,7 @@ export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<C
   params.push(limit);
 
   const reader = await conn.runAndReadAll(sql, params);
-  const rawRows = reader.getRowObjects() as unknown as Claim[];
+  const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
   return parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
 }
 
