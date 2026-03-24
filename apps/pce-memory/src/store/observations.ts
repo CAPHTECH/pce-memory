@@ -13,6 +13,7 @@ export interface Observation {
   source_type: ObservationSourceType;
   source_id?: string;
   content?: string | null;
+  boundary_class: string;
   content_digest: string;
   content_length: number;
   actor?: string;
@@ -26,6 +27,7 @@ export interface InsertObservationInput {
   source_type: ObservationSourceType;
   source_id?: string;
   content: string | null;
+  boundary_class: string;
   content_digest: string;
   content_length: number;
   actor?: string;
@@ -38,12 +40,13 @@ export async function insertObservation(input: InsertObservationInput): Promise<
   const tagsJson = input.tags ? JSON.stringify(input.tags) : null;
 
   await conn.run(
-    'INSERT INTO observations (id, source_type, source_id, content, content_digest, content_length, actor, tags, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::TIMESTAMP)',
+    'INSERT INTO observations (id, source_type, source_id, content, boundary_class, content_digest, content_length, actor, tags, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::TIMESTAMP)',
     [
       input.id,
       input.source_type,
       input.source_id ?? null,
       input.content,
+      input.boundary_class,
       input.content_digest,
       input.content_length,
       input.actor ?? null,
@@ -53,7 +56,7 @@ export async function insertObservation(input: InsertObservationInput): Promise<
   );
 
   const reader = await conn.runAndReadAll(
-    'SELECT id, source_type, source_id, content, content_digest, content_length, actor, tags, created_at, expires_at FROM observations WHERE id = $1',
+    'SELECT id, source_type, source_id, content, boundary_class, content_digest, content_length, actor, tags, created_at, expires_at FROM observations WHERE id = $1',
     [input.id]
   );
   const rawRows = reader.getRowObjects() as unknown as Observation[];
@@ -64,12 +67,29 @@ export async function insertObservation(input: InsertObservationInput): Promise<
 export async function findObservationById(id: string): Promise<Observation | undefined> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    'SELECT id, source_type, source_id, content, content_digest, content_length, actor, tags, created_at, expires_at FROM observations WHERE id = $1',
+    'SELECT id, source_type, source_id, content, boundary_class, content_digest, content_length, actor, tags, created_at, expires_at FROM observations WHERE id = $1',
     [id]
   );
   const rawRows = reader.getRowObjects() as unknown as Observation[];
   const rows = normalizeRowsTimestamps(rawRows);
   return rows[0];
+}
+
+export async function findObservationsByIds(ids: string[]): Promise<Observation[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const conn = await getConnection();
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+  const reader = await conn.runAndReadAll(
+    `SELECT id, source_type, source_id, content, boundary_class, content_digest, content_length, actor, tags, created_at, expires_at
+     FROM observations
+     WHERE id IN (${placeholders})`,
+    ids
+  );
+  const rawRows = reader.getRowObjects() as unknown as Observation[];
+  return normalizeRowsTimestamps(rawRows);
 }
 
 export type ObservationGcMode = 'scrub' | 'delete';

@@ -8,8 +8,13 @@
 import { boundaryValidate, allowTagMatches as boundaryAllowTagMatches } from '@pce/boundary';
 import { computeContentHash } from '@pce/embeddings';
 import type { BoundaryPolicy } from '@pce/policy-schemas';
-import { upsertClaim, upsertClaimWithEmbedding, findClaimById } from '../store/claims.js';
-import type { Provenance } from '../store/claims.js';
+import {
+  upsertClaim,
+  upsertClaimWithEmbedding,
+  findClaimById,
+  findClaimsByIds,
+} from '../store/claims.js';
+import type { Claim, Provenance } from '../store/claims.js';
 import { hybridSearchPaginated, getEmbeddingService } from '../store/hybridSearch.js';
 import { upsertEntity, linkClaimEntity, queryEntities } from '../store/entities.js';
 import type { EntityInput, EntityQueryFilters } from '../store/entities.js';
@@ -19,12 +24,19 @@ import { getEvidenceForClaims, insertEvidence } from '../store/evidence.js';
 import type { Evidence } from '../store/evidence.js';
 import {
   gcExpiredObservations,
+  findObservationsByIds,
   insertObservation,
   type InsertObservationInput,
   type ObservationSourceType,
 } from '../store/observations.js';
 import { analyzeTextSensitivity, redactPiiText } from '../audit/redactText.js';
-import { saveActiveContext } from '../store/activeContext.js';
+import { findActiveContextById, saveActiveContext } from '../store/activeContext.js';
+import {
+  acceptPromotionQueueRow,
+  findRollbackRecordByClaimId,
+  findPromotionQueueRowById,
+  insertPromotionQueueRow,
+} from '../store/promotionQueue.js';
 import { recordFeedback } from '../store/feedback.js';
 import { computeHealthReport } from '../store/health.js';
 import { appendLog } from '../store/logs.js';
@@ -36,6 +48,7 @@ import {
   CLAIM_KINDS,
   ENTITY_TYPES,
   MEMORY_TYPES,
+  isValidClaimKind,
   isValidEntityType,
   isValidMemoryType,
 } from '../domain/types.js';
@@ -134,6 +147,89 @@ function getAllowedBoundaryClasses(policy: BoundaryPolicy, requestedAllow: strin
   return Object.entries(policy.boundary_classes)
     .filter(([, boundary]) => isAllowedByBoundary(boundary.allow ?? [], requestedAllow))
     .map(([boundaryClass]) => boundaryClass);
+}
+
+type DurableScope = 'project' | 'principle';
+type DurableBoundaryClass = 'public' | 'internal' | 'pii' | 'secret';
+
+const BOUNDARY_SEVERITY: Record<DurableBoundaryClass, number> = {
+  public: 0,
+  internal: 1,
+  pii: 2,
+  secret: 3,
+};
+
+function isDurableScope(value: unknown): value is DurableScope {
+  return value === 'project' || value === 'principle';
+}
+
+function isDurableBoundaryClass(value: unknown): value is DurableBoundaryClass {
+  return value === 'public' || value === 'internal' || value === 'pii' || value === 'secret';
+}
+
+function getMostRestrictiveBoundary(boundaryClasses: DurableBoundaryClass[]): DurableBoundaryClass {
+  if (boundaryClasses.length === 0) {
+    return 'internal';
+  }
+  return boundaryClasses.reduce<DurableBoundaryClass>(
+    (current, candidate) =>
+      BOUNDARY_SEVERITY[candidate] > BOUNDARY_SEVERITY[current] ? candidate : current,
+    boundaryClasses[0]!
+  );
+}
+
+function inferDurableScope(kind: ClaimKind, memoryType?: MemoryType): DurableScope {
+  if (kind === 'policy_hint' || memoryType === 'norm') {
+    return 'principle';
+  }
+  return 'project';
+}
+
+function inferMemoryTypeForKind(kind: ClaimKind): MemoryType | undefined {
+  switch (kind) {
+    case 'fact':
+      return 'knowledge';
+    case 'task':
+      return 'working_state';
+    case 'policy_hint':
+      return 'norm';
+    default:
+      return undefined;
+  }
+}
+
+function mapScopeToLayer(scope: string): string {
+  if (scope === 'principle') return 'macro';
+  if (scope === 'project') return 'meso';
+  return 'micro';
+}
+
+function mapDurableScopeToTargetLayer(scope: DurableScope): 'meso' | 'macro' {
+  return scope === 'principle' ? 'macro' : 'meso';
+}
+
+function parseJsonObject<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) {
+    return fallback;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function validateRequiredProvenance(
+  provenance: unknown
+): { ok: true; value: Provenance } | { ok: false; message: string } {
+  if (typeof provenance !== 'object' || provenance === null) {
+    return { ok: false, message: 'provenance.at is required' };
+  }
+  const candidate = provenance as Provenance;
+  if (typeof candidate.at !== 'string' || candidate.at.length === 0) {
+    return { ok: false, message: 'provenance.at is required' };
+  }
+  return { ok: true, value: candidate };
 }
 
 // ========== Upsert Helper Functions ==========
@@ -846,6 +942,7 @@ export async function handleObserve(args: Record<string, unknown>) {
       id: observationId,
       source_type: source_type as ObservationSourceType,
       content: contentToStore,
+      boundary_class: effectiveBoundaryClass,
       content_digest: contentDigest,
       content_length: contentLength,
       expires_at: expiresAt,
@@ -939,6 +1036,794 @@ export async function handleObserve(args: Record<string, unknown>) {
     await appendLog({
       id: `log_${reqId}`,
       op: 'observe',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  } finally {
+    exitRequestScope(scopeId);
+  }
+}
+
+export async function handleDistill(args: Record<string, unknown>) {
+  const {
+    source_observation_ids,
+    source_claim_ids,
+    active_context_id,
+    proposed_kind,
+    proposed_scope,
+    proposed_memory_type,
+    note,
+  } = args as {
+    source_observation_ids?: unknown;
+    source_claim_ids?: unknown;
+    active_context_id?: unknown;
+    proposed_kind?: unknown;
+    proposed_scope?: unknown;
+    proposed_memory_type?: unknown;
+    note?: unknown;
+  };
+
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+  const scopeResult = enterRequestScope(reqId);
+  if (E.isLeft(scopeResult)) {
+    return createToolResult(
+      {
+        ...err('STATE_ERROR', scopeResult.left.message, reqId),
+        trace_id: traceId,
+      },
+      { isError: true }
+    );
+  }
+  const scopeId = scopeResult.right;
+
+  try {
+    if (!canDoUpsert()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!isInActiveScope(scopeId)) {
+      return createToolResult(
+        { ...err('STATE_ERROR', 'scope not active', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const observationIds =
+      source_observation_ids === undefined
+        ? []
+        : Array.isArray(source_observation_ids) &&
+            source_observation_ids.every((value) => typeof value === 'string')
+          ? (source_observation_ids as string[])
+          : null;
+    const claimIds =
+      source_claim_ids === undefined
+        ? []
+        : Array.isArray(source_claim_ids) && source_claim_ids.every((value) => typeof value === 'string')
+          ? (source_claim_ids as string[])
+          : null;
+
+    if (observationIds === null || claimIds === null) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'source_observation_ids and source_claim_ids must be string[]',
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
+    if (active_context_id !== undefined && typeof active_context_id !== 'string') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'active_context_id must be a string', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (note !== undefined && typeof note !== 'string') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'note must be a string', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (observationIds.length === 0 && claimIds.length === 0 && active_context_id === undefined) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'at least one source is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (proposed_kind !== undefined && !isValidClaimKind(proposed_kind)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown proposed_kind', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (proposed_scope !== undefined && !isDurableScope(proposed_scope)) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'proposed_scope must be project or principle', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (proposed_memory_type !== undefined) {
+      if (!isValidMemoryType(proposed_memory_type)) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'unknown proposed_memory_type', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+      if (proposed_memory_type === 'evidence') {
+        return createToolResult(
+          {
+            ...err(
+              'VALIDATION_ERROR',
+              'proposed_memory_type evidence is reserved for micro memory',
+              reqId
+            ),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
+    }
+
+    const observations = await findObservationsByIds(observationIds);
+    if (observations.length !== observationIds.length) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'one or more observation sources were not found', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const observationsById = new Map(observations.map((observation) => [observation.id, observation]));
+
+    const sourceClaims = await findClaimsByIds(claimIds);
+    if (sourceClaims.length !== claimIds.length) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'one or more claim sources were not found', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const sourceClaimsById = new Map(sourceClaims.map((claim) => [claim.id, claim]));
+
+    const activeContext = active_context_id ? await findActiveContextById(active_context_id) : undefined;
+    if (active_context_id && !activeContext) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'active_context_id not found', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const activeContextClaimIds = activeContext?.claims.map((claim) => claim.id) ?? [];
+    const activeContextClaims = await findClaimsByIds(activeContextClaimIds);
+    const activeContextClaimsById = new Map(activeContextClaims.map((claim) => [claim.id, claim]));
+
+    const allClaims = new Map<string, Claim>();
+    for (const claimId of claimIds) {
+      const claim = sourceClaimsById.get(claimId);
+      if (claim) {
+        allClaims.set(claim.id, claim);
+      }
+    }
+    for (const claimId of activeContextClaimIds) {
+      const claim = activeContextClaimsById.get(claimId);
+      if (claim) {
+        allClaims.set(claim.id, claim);
+      }
+    }
+
+    const sourceTexts: string[] = [];
+    const sourceBoundaries: DurableBoundaryClass[] = [];
+    const sourceIds = new Set<string>();
+    const sourceLayers = new Set<string>();
+
+    for (const observationId of observationIds) {
+      const observation = observationsById.get(observationId);
+      if (!observation) continue;
+      sourceTexts.push(observation.content ?? observation.content_digest);
+      sourceIds.add(observation.id);
+      sourceLayers.add('micro');
+      sourceBoundaries.push(
+        isDurableBoundaryClass(observation.boundary_class) ? observation.boundary_class : 'internal'
+      );
+    }
+
+    for (const claim of allClaims.values()) {
+      sourceTexts.push(claim.text);
+      sourceIds.add(claim.id);
+      sourceLayers.add(mapScopeToLayer(claim.scope));
+      sourceBoundaries.push(
+        isDurableBoundaryClass(claim.boundary_class) ? claim.boundary_class : 'internal'
+      );
+    }
+
+    if (activeContext) {
+      sourceIds.add(activeContext.id);
+      sourceLayers.add('micro');
+    }
+
+    if (sourceTexts.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'no source text available to distill', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const sourceClaimIdsForEvidence = [...allClaims.keys()];
+    const evidenceByClaim = await getEvidenceForClaims(sourceClaimIdsForEvidence);
+    const evidenceIds = new Set<string>(observationIds);
+    for (const claimEvidence of evidenceByClaim.values()) {
+      for (const evidence of claimEvidence) {
+        evidenceIds.add(evidence.id);
+      }
+    }
+
+    const commonClaimKinds = new Set(
+      [...allClaims.values()].map((claim) => claim.kind).filter((kind): kind is ClaimKind => isValidClaimKind(kind))
+    );
+    const resolvedKind =
+      (proposed_kind as ClaimKind | undefined) ??
+      (commonClaimKinds.size === 1 ? [...commonClaimKinds][0]! : 'fact');
+
+    const explicitMemoryType = proposed_memory_type as MemoryType | undefined;
+    const commonMemoryTypes = new Set(
+      [...allClaims.values()]
+        .map((claim) => claim.memory_type)
+        .filter((memoryType): memoryType is MemoryType => memoryType !== null && memoryType !== undefined)
+    );
+    const resolvedMemoryType =
+      explicitMemoryType ??
+      (commonMemoryTypes.size === 1 && !commonMemoryTypes.has('evidence')
+        ? [...commonMemoryTypes][0]
+        : inferMemoryTypeForKind(resolvedKind));
+
+    const resolvedScope =
+      (proposed_scope as DurableScope | undefined) ?? inferDurableScope(resolvedKind, resolvedMemoryType);
+    const targetLayer = mapDurableScopeToTargetLayer(resolvedScope);
+    const proposedBoundaryClass = getMostRestrictiveBoundary(sourceBoundaries);
+    const distilledText = sourceTexts.join('\n\n---\n\n');
+    const candidateHash = `sha256:${computeContentHash(distilledText)}`;
+    const policy = getPolicy();
+    const boundaryCheck = boundaryValidate(
+      {
+        payload: distilledText,
+        allow: policy.boundary_classes[proposedBoundaryClass]?.allow ?? [],
+        scope: resolvedScope,
+      },
+      policy
+    );
+
+    const createdAt = new Date().toISOString();
+    const candidateId = `pq_${crypto.randomUUID().slice(0, 8)}`;
+    const invariantCheckResults = {
+      boundary_monotonicity: {
+        passed: true,
+        max_source_boundary_class: proposedBoundaryClass,
+      },
+      boundary_validate: boundaryCheck,
+      source_counts: {
+        observations: observations.length,
+        claims: sourceClaims.length,
+        active_context_claims: activeContextClaims.length,
+      },
+    };
+
+    await insertPromotionQueueRow({
+      id: candidateId,
+      source_layer: sourceLayers.size === 1 ? [...sourceLayers][0]! : 'mixed',
+      target_layer: targetLayer,
+      source_ids: JSON.stringify([...sourceIds]),
+      distilled_text: distilledText,
+      candidate_hash: candidateHash,
+      proposed_kind: resolvedKind,
+      proposed_scope: resolvedScope,
+      proposed_boundary_class: proposedBoundaryClass,
+      proposed_memory_type: resolvedMemoryType ?? null,
+      provenance: JSON.stringify({
+        distilled_at: createdAt,
+        note,
+        source_observation_ids: observationIds,
+        source_claim_ids: claimIds,
+        active_context_id: active_context_id,
+      }),
+      evidence_ids: JSON.stringify([...evidenceIds]),
+      policy_version_checked: getPolicyVersion(),
+      boundary_check_result: JSON.stringify(boundaryCheck),
+      status: 'pending',
+      created_at: createdAt,
+    });
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'distill',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      candidate_id: candidateId,
+      distilled_text: distilledText,
+      proposed_kind: resolvedKind,
+      proposed_scope: resolvedScope,
+      proposed_memory_type: resolvedMemoryType ?? null,
+      proposed_boundary_class: proposedBoundaryClass,
+      status: 'pending',
+      invariant_check_results: invariantCheckResults,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'distill',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  } finally {
+    exitRequestScope(scopeId);
+  }
+}
+
+export async function handlePromote(args: Record<string, unknown>) {
+  const { candidate_id, provenance, reviewers, review_note } = args as {
+    candidate_id?: unknown;
+    provenance?: unknown;
+    reviewers?: unknown;
+    review_note?: unknown;
+  };
+
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+  const scopeResult = enterRequestScope(reqId);
+  if (E.isLeft(scopeResult)) {
+    return createToolResult(
+      {
+        ...err('STATE_ERROR', scopeResult.left.message, reqId),
+        trace_id: traceId,
+      },
+      { isError: true }
+    );
+  }
+  const scopeId = scopeResult.right;
+
+  try {
+    if (!canDoUpsert()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!isInActiveScope(scopeId)) {
+      return createToolResult(
+        { ...err('STATE_ERROR', 'scope not active', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (typeof candidate_id !== 'string' || candidate_id.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'candidate_id is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const validatedProvenance = validateRequiredProvenance(provenance);
+    if (!validatedProvenance.ok) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', validatedProvenance.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (review_note !== undefined && typeof review_note !== 'string') {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'review_note must be a string', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (
+      reviewers !== undefined &&
+      (!Array.isArray(reviewers) || reviewers.some((reviewer) => typeof reviewer !== 'string'))
+    ) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'reviewers must be string[]', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const candidate = await findPromotionQueueRowById(candidate_id);
+    if (!candidate) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'candidate not found', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (candidate.status !== 'pending') {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', `candidate status must be pending (got ${candidate.status})`, reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (!isValidClaimKind(candidate.proposed_kind)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'candidate proposed_kind is invalid', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (!isDurableScope(candidate.proposed_scope)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'candidate proposed_scope is invalid', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (!isDurableBoundaryClass(candidate.proposed_boundary_class)) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'candidate proposed_boundary_class is invalid', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (candidate.proposed_memory_type === 'evidence') {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'candidate proposed_memory_type evidence cannot become a durable claim',
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (candidate.proposed_memory_type && !isValidMemoryType(candidate.proposed_memory_type)) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'candidate proposed_memory_type is invalid', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (candidate.proposed_boundary_class === 'secret') {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'secret candidates cannot be promoted to durable claims', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
+    const policy = getPolicy();
+    const boundaryCheck = boundaryValidate(
+      {
+        payload: candidate.distilled_text,
+        allow: policy.boundary_classes[candidate.proposed_boundary_class]?.allow ?? [],
+        scope: candidate.proposed_scope,
+      },
+      policy
+    );
+    if (!boundaryCheck.allowed) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'candidate failed boundary validation', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const candidateLineage = parseJsonObject<Record<string, unknown>>(candidate.provenance, {});
+    const sourceObservationIds = Array.isArray(candidateLineage['source_observation_ids'])
+      ? (candidateLineage['source_observation_ids'] as string[])
+      : [];
+    const sourceClaimIds = Array.isArray(candidateLineage['source_claim_ids'])
+      ? (candidateLineage['source_claim_ids'] as string[])
+      : [];
+    const lineageActiveContextId =
+      typeof candidateLineage['active_context_id'] === 'string'
+        ? (candidateLineage['active_context_id'] as string)
+        : undefined;
+    const mergedPromotionNote = [validatedProvenance.value.note, review_note]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join(' | ');
+    const promotionProvenance: Provenance = mergedPromotionNote
+      ? { ...validatedProvenance.value, note: mergedPromotionNote }
+      : validatedProvenance.value;
+
+    const embeddingService = getEmbeddingService();
+    const { claim, isNew } = embeddingService
+      ? await upsertClaimWithEmbedding(
+          {
+            text: candidate.distilled_text,
+            kind: candidate.proposed_kind,
+            scope: candidate.proposed_scope,
+            boundary_class: candidate.proposed_boundary_class,
+            ...(candidate.proposed_memory_type ? { memory_type: candidate.proposed_memory_type } : {}),
+            content_hash: candidate.candidate_hash,
+            provenance: promotionProvenance,
+          },
+          embeddingService
+        )
+      : await upsertClaim({
+          text: candidate.distilled_text,
+          kind: candidate.proposed_kind,
+          scope: candidate.proposed_scope,
+          boundary_class: candidate.proposed_boundary_class,
+          ...(candidate.proposed_memory_type ? { memory_type: candidate.proposed_memory_type } : {}),
+          content_hash: candidate.candidate_hash,
+          provenance: promotionProvenance,
+        });
+
+    if (isNew) {
+      const evidenceSources = new Set(sourceObservationIds);
+      for (const observationId of evidenceSources) {
+        await insertEvidence({
+          id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+          claim_id: claim.id,
+          source_type: 'observation',
+          source_id: observationId,
+          snippet: `promotion candidate ${candidate.id}`,
+          at: validatedProvenance.value.at,
+        });
+      }
+
+      for (const sourceClaimId of new Set(sourceClaimIds)) {
+        await insertEvidence({
+          id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+          claim_id: claim.id,
+          source_type: 'claim',
+          source_id: sourceClaimId,
+          snippet: `promotion candidate ${candidate.id}`,
+          at: validatedProvenance.value.at,
+        });
+      }
+
+      if (lineageActiveContextId) {
+        await insertEvidence({
+          id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+          claim_id: claim.id,
+          source_type: 'active_context',
+          source_id: lineageActiveContextId,
+          snippet: `promotion candidate ${candidate.id}`,
+          at: validatedProvenance.value.at,
+        });
+      }
+    }
+
+    await acceptPromotionQueueRow(candidate.id, {
+      accepted_claim_id: claim.id,
+      reviewers: reviewers ? JSON.stringify(reviewers as string[]) : null,
+      resolved_at: validatedProvenance.value.at,
+      provenance: JSON.stringify({
+        ...candidateLineage,
+        promotion: {
+          provenance: validatedProvenance.value,
+          reviewers: reviewers ?? [],
+          review_note: review_note ?? null,
+        },
+      }),
+    });
+
+    transitionToHasClaims(isNew);
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'promote',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      claim_id: claim.id,
+      target_layer: candidate.target_layer,
+      is_new: isNew,
+      promoted_from: candidate.id,
+      rollback_token: claim.id,
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'promote',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
+  } finally {
+    exitRequestScope(scopeId);
+  }
+}
+
+export async function handleRollback(args: Record<string, unknown>) {
+  const { claim_id, reason, provenance } = args as {
+    claim_id?: unknown;
+    reason?: unknown;
+    provenance?: unknown;
+  };
+
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+  const scopeResult = enterRequestScope(reqId);
+  if (E.isLeft(scopeResult)) {
+    return createToolResult(
+      {
+        ...err('STATE_ERROR', scopeResult.left.message, reqId),
+        trace_id: traceId,
+      },
+      { isError: true }
+    );
+  }
+  const scopeId = scopeResult.right;
+
+  try {
+    if (!canDoUpsert()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!isInActiveScope(scopeId)) {
+      return createToolResult(
+        { ...err('STATE_ERROR', 'scope not active', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (typeof claim_id !== 'string' || claim_id.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'claim_id is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (typeof reason !== 'string' || reason.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'reason is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const validatedProvenance = validateRequiredProvenance(provenance);
+    if (!validatedProvenance.ok) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', validatedProvenance.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const claim = await findClaimById(claim_id);
+    if (!claim) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'claim not found', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    const existingRollback = await findRollbackRecordByClaimId(claim.id);
+    if (claim.tombstone || existingRollback) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'claim is already rolled back', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const rollbackId = `rbk_${crypto.randomUUID().slice(0, 8)}`;
+    const evidenceMap = await getEvidenceForClaims([claim.id]);
+    const evidenceIds = (evidenceMap.get(claim.id) ?? []).map((evidence) => evidence.id);
+    await insertPromotionQueueRow({
+      id: rollbackId,
+      source_layer: mapScopeToLayer(claim.scope),
+      target_layer: mapScopeToLayer(claim.scope),
+      source_ids: JSON.stringify([claim.id]),
+      distilled_text: claim.text,
+      candidate_hash: `sha256:${computeContentHash(`rollback:${claim.id}:${reason}:${validatedProvenance.value.at}`)}`,
+      proposed_kind: claim.kind,
+      proposed_scope: claim.scope,
+      proposed_boundary_class: claim.boundary_class,
+      proposed_memory_type: claim.memory_type ?? null,
+      provenance: JSON.stringify({
+        rollback_of: claim.id,
+        reason,
+        provenance: validatedProvenance.value,
+      }),
+      evidence_ids: JSON.stringify(evidenceIds),
+      policy_version_checked: getPolicyVersion(),
+      boundary_check_result: JSON.stringify({ allowed: true, rollback: true }),
+      status: 'rolled_back',
+      created_at: validatedProvenance.value.at,
+      resolved_at: validatedProvenance.value.at,
+      accepted_claim_id: claim.id,
+      rejected_reason: reason,
+    });
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'rollback',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      rollback_id: rollbackId,
+      superseded_claim_id: claim.id,
+      blast_radius: {
+        scope: claim.scope,
+        target_layer: mapScopeToLayer(claim.scope),
+        active_contexts_invalidated: 0,
+      },
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'rollback',
       ok: false,
       req: reqId,
       trace: traceId,
@@ -2040,6 +2925,12 @@ export async function dispatchTool(
       return handlePolicyApply(args);
     case 'pce_memory_observe':
       return handleObserve(args);
+    case 'pce_memory_distill':
+      return handleDistill(args);
+    case 'pce_memory_promote':
+      return handlePromote(args);
+    case 'pce_memory_rollback':
+      return handleRollback(args);
     case 'pce_memory_upsert':
       return handleUpsert(args);
     case 'pce_memory_upsert_entity':
@@ -2679,7 +3570,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_observe',
     description:
-      'Record a temporary observation with auto-expiry (default 30 days). Use for chat logs, tool outputs, file reads, API responses. Set extract.mode="single_claim_v0" to promote to permanent claim. Auto-detects and redacts PII/secrets.',
+      'Record a temporary observation with auto-expiry (default 30 days). Use for chat logs, tool outputs, file reads, API responses. extract.mode="single_claim_v0" is deprecated; prefer pce_memory_distill + pce_memory_promote for durable memory. Auto-detects and redacts PII/secrets.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2713,7 +3604,12 @@ export const TOOL_DEFINITIONS = [
         extract: {
           type: 'object',
           properties: {
-            mode: { type: 'string', enum: ['noop', 'single_claim_v0'] },
+            mode: {
+              type: 'string',
+              enum: ['noop', 'single_claim_v0'],
+              description:
+                'Compatibility extraction mode. single_claim_v0 is deprecated and will be removed after the promotion pipeline rollout; prefer pce_memory_distill + pce_memory_promote.',
+            },
           },
         },
       },
@@ -2740,6 +3636,181 @@ export const TOOL_DEFINITIONS = [
       required: [
         'observation_id',
         'claim_ids',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  {
+    name: 'pce_memory_distill',
+    description:
+      'Create a promotion candidate from observations, claims, or an active context. Distill is the reviewable step between raw capture and durable memory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_observation_ids: { type: 'array', items: { type: 'string' } },
+        source_claim_ids: { type: 'array', items: { type: 'string' } },
+        active_context_id: { type: 'string' },
+        proposed_kind: { type: 'string', enum: [...CLAIM_KINDS] },
+        proposed_scope: { type: 'string', enum: ['project', 'principle'] },
+        proposed_memory_type: {
+          type: 'string',
+          enum: [...MEMORY_TYPES],
+          description: 'Optional durable memory type. evidence is rejected for durable promotion.',
+        },
+        note: { type: 'string' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        candidate_id: { type: 'string' },
+        distilled_text: { type: 'string' },
+        proposed_kind: { type: 'string', enum: [...CLAIM_KINDS] },
+        proposed_scope: { type: 'string', enum: ['project', 'principle'] },
+        proposed_memory_type: {
+          anyOf: [{ type: 'string', enum: [...MEMORY_TYPES] }, { type: 'null' }],
+        },
+        proposed_boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
+        status: { type: 'string', enum: ['pending'] },
+        invariant_check_results: { type: 'object' },
+        policy_version: { type: 'string' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'candidate_id',
+        'distilled_text',
+        'proposed_kind',
+        'proposed_scope',
+        'proposed_boundary_class',
+        'status',
+        'invariant_check_results',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  {
+    name: 'pce_memory_promote',
+    description:
+      'Accept a pending promotion candidate and create a durable claim with mandatory provenance.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        candidate_id: { type: 'string' },
+        provenance: {
+          type: 'object',
+          properties: {
+            at: { type: 'string', format: 'date-time' },
+            actor: { type: 'string' },
+            git: {
+              type: 'object',
+              properties: {
+                commit: { type: 'string' },
+                repo: { type: 'string' },
+                url: { type: 'string' },
+                files: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            url: { type: 'string' },
+            note: { type: 'string' },
+            signed: { type: 'boolean' },
+          },
+          required: ['at'],
+        },
+        reviewers: { type: 'array', items: { type: 'string' } },
+        review_note: { type: 'string' },
+      },
+      required: ['candidate_id', 'provenance'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        claim_id: { type: 'string' },
+        target_layer: { type: 'string', enum: ['meso', 'macro'] },
+        is_new: { type: 'boolean' },
+        promoted_from: { type: 'string' },
+        rollback_token: { type: 'string' },
+        policy_version: { type: 'string' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'claim_id',
+        'target_layer',
+        'is_new',
+        'promoted_from',
+        'rollback_token',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  {
+    name: 'pce_memory_rollback',
+    description:
+      'Append-only rollback for a durable claim. Marks the claim as superseded and records rollback ancestry for audit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        claim_id: { type: 'string' },
+        reason: { type: 'string' },
+        provenance: {
+          type: 'object',
+          properties: {
+            at: { type: 'string', format: 'date-time' },
+            actor: { type: 'string' },
+            git: {
+              type: 'object',
+              properties: {
+                commit: { type: 'string' },
+                repo: { type: 'string' },
+                url: { type: 'string' },
+                files: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            url: { type: 'string' },
+            note: { type: 'string' },
+            signed: { type: 'boolean' },
+          },
+          required: ['at'],
+        },
+      },
+      required: ['claim_id', 'reason', 'provenance'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        rollback_id: { type: 'string' },
+        superseded_claim_id: { type: 'string' },
+        blast_radius: { type: 'object' },
+        policy_version: { type: 'string' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'rollback_id',
+        'superseded_claim_id',
+        'blast_radius',
         'policy_version',
         'state',
         'request_id',

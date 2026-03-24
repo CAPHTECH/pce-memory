@@ -15,7 +15,11 @@ CREATE TABLE IF NOT EXISTS claims (
   -- recency計算の基準時刻（positive feedbackでのみ更新）
   recency_anchor TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   -- 由来情報（mcp-tools.md §1.y Provenance準拠）
-  provenance JSON
+  provenance JSON,
+  tombstone BOOLEAN DEFAULT FALSE,
+  tombstone_at TIMESTAMP,
+  rollback_reason TEXT,
+  superseded_by TEXT
 );
 
 -- ランキング用インデックス（g()計算最適化）
@@ -239,6 +243,7 @@ CREATE TABLE IF NOT EXISTS observations (
   source_type TEXT NOT NULL,
   source_id TEXT,
   content TEXT,
+  boundary_class TEXT NOT NULL DEFAULT 'internal',
   content_digest TEXT NOT NULL,
   content_length INTEGER NOT NULL,
   actor TEXT,
