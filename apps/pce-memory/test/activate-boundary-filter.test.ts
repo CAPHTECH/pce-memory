@@ -27,23 +27,25 @@ describe('activate boundary filter', () => {
     const internal = await dispatchTool('pce_memory_upsert', {
       text: internalText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(internalText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const piiText = 'pii claim';
     const pii = await dispatchTool('pce_memory_upsert', {
       text: piiText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'pii',
       content_hash: `sha256:${computeContentHash(piiText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const secretText = 'preexisting secret claim';
     const { claim: secret } = await upsertClaim({
       text: secretText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'secret',
       content_hash: `sha256:${computeContentHash(secretText)}`,
     });
@@ -53,7 +55,7 @@ describe('activate boundary filter', () => {
     const secretId = secret.id;
 
     const ac1 = await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['answer:task'],
       include_meta: false,
     });
@@ -63,7 +65,7 @@ describe('activate boundary filter', () => {
     expect(claims1).not.toContain(secretId);
 
     const ac2 = await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['tool:contact-lookup'],
       include_meta: false,
     });
@@ -80,33 +82,37 @@ describe('activate boundary filter', () => {
     const internalOne = await dispatchTool('pce_memory_upsert', {
       text: internalOneText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(internalOneText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const internalTwoText = 'internal second allowed claim';
     const internalTwo = await dispatchTool('pce_memory_upsert', {
       text: internalTwoText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(internalTwoText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const internalThreeText = 'internal third allowed claim';
     const internalThree = await dispatchTool('pce_memory_upsert', {
       text: internalThreeText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(internalThreeText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const piiText = 'pii disallowed top score claim';
     const pii = await dispatchTool('pce_memory_upsert', {
       text: piiText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'pii',
       content_hash: `sha256:${computeContentHash(piiText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
 
     const internalOneId = internalOne.structuredContent?.id as string;
@@ -120,7 +126,7 @@ describe('activate boundary filter', () => {
     await updateCritic(piiId, 0.95, 0, 1);
 
     const page1 = await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['answer:task'],
       top_k: 1,
       include_meta: false,
@@ -133,7 +139,7 @@ describe('activate boundary filter', () => {
     expect(page1.structuredContent?.has_more).toBe(true);
 
     const page2 = await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['answer:task'],
       top_k: 1,
       cursor: page1.structuredContent?.next_cursor,
@@ -147,7 +153,7 @@ describe('activate boundary filter', () => {
     expect(page2.structuredContent?.has_more).toBe(true);
 
     const page3 = await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['answer:task'],
       top_k: 1,
       cursor: page2.structuredContent?.next_cursor,
@@ -168,9 +174,10 @@ describe('activate boundary filter', () => {
     const result = await dispatchTool('pce_memory_upsert', {
       text: secretText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'secret',
       content_hash: `sha256:${computeContentHash(secretText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
 
     expect(result.isError).toBe(true);
@@ -192,9 +199,10 @@ describe('activate boundary filter', () => {
     const result = await dispatchTool('pce_memory_upsert', {
       text: 'secret claim',
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'secret',
       content_hash: `sha256:${'0'.repeat(64)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
 
     expect(result.isError).toBe(true);

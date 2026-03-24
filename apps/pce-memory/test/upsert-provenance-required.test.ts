@@ -23,7 +23,7 @@ beforeEach(async () => {
 });
 
 describe('handleUpsert provenance requirements', () => {
-  it('allows session claims without provenance', async () => {
+  it('rejects session claims without provenance', async () => {
     const result = await handleUpsert({
       text: 'session claim without provenance',
       kind: 'fact',
@@ -31,21 +31,25 @@ describe('handleUpsert provenance requirements', () => {
       boundary_class: 'internal',
     });
 
-    expect(result.isError).toBeUndefined();
-    expect(result.structuredContent?.id).toBeDefined();
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain("scope 'session'");
+    expect(result.structuredContent?.error?.message).toContain('pce_memory_observe');
   });
 
-  it('allows session claims with provenance object lacking at', async () => {
+  it('rejects session claims even when provenance is present', async () => {
     const result = await handleUpsert({
       text: 'session claim with partial provenance',
       kind: 'fact',
       scope: 'session',
       boundary_class: 'internal',
-      provenance: { actor: 'claude' },
+      provenance: { at: '2025-01-01T00:00:00.000Z', actor: 'claude' },
     });
 
-    expect(result.isError).toBeUndefined();
-    expect(result.structuredContent?.id).toBeDefined();
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain("scope 'session'");
+    expect(result.structuredContent?.error?.message).toContain('pce_memory_observe');
   });
 
   it('rejects project claims without provenance', async () => {

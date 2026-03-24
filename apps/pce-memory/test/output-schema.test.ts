@@ -155,9 +155,10 @@ describe('Output Schema - ハンドラ出力検証', () => {
     const result = await dispatchTool('pce_memory_upsert', {
       text,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(text)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const data = result.structuredContent!;
 
@@ -176,13 +177,14 @@ describe('Output Schema - ハンドラ出力検証', () => {
     await dispatchTool('pce_memory_upsert', {
       text: activateText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(activateText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
 
     const result = await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['answer:task'],
     });
     const data = result.structuredContent!;
@@ -217,15 +219,16 @@ describe('Output Schema - ハンドラ出力検証', () => {
     const upsertResult = await dispatchTool('pce_memory_upsert', {
       text: feedbackText,
       kind: 'fact',
-      scope: 'session',
+      scope: 'project',
       boundary_class: 'internal',
       content_hash: `sha256:${computeContentHash(feedbackText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
     });
     const claimId = upsertResult.structuredContent!.id as string;
 
     // activateしてReady状態にする
     await dispatchTool('pce_memory_activate', {
-      scope: ['session'],
+      scope: ['project'],
       allow: ['answer:task'],
     });
 
