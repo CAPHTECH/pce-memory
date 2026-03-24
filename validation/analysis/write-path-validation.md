@@ -119,7 +119,7 @@ type DistillCandidate = {
   active_context_id?: string;
   distilled_text: string;
   candidate_hash: string;
-  proposed_kind: 'fact' | 'preference' | 'task' | 'policy_hint';
+  proposed_kind: ClaimKind;
   proposed_scope: 'session' | 'project' | 'principle';
   proposed_boundary_class: 'public' | 'internal' | 'pii' | 'secret';
   provenance_bundle: Provenance;

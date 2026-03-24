@@ -117,8 +117,8 @@ Create a reviewable promotion candidate from observations, existing claims, or a
   "source_observation_ids": ["obs_..."],
   "source_claim_ids": ["clm_..."],
   "active_context_id": "ac_...",
-  "proposed_kind": "fact|preference|task|policy_hint",
-  "proposed_memory_type": "working_state|knowledge|procedure|norm",
+  "proposed_kind": "ClaimKind",
+  "proposed_memory_type": "MemoryType",
   "target_layer": "meso|macro",
   "note": "optional operator guidance"
 }

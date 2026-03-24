@@ -19,6 +19,7 @@ import {
   createInMemoryCache,
   createLocalOnlyService,
 } from '@pce/embeddings';
+import type { ClaimKind } from '../../src/domain/types';
 
 const TIMESTAMP_INTERVAL_MS = 10;
 
@@ -53,7 +54,7 @@ async function warmup(): Promise<Map<string, string>> {
     const result = await upsertClaimWithEmbedding(
       {
         text: claim.text,
-        kind: claim.kind as 'fact' | 'preference' | 'task' | 'policy_hint',
+        kind: claim.kind as ClaimKind,
         scope: claim.scope as 'session' | 'project' | 'principle',
         boundary_class: claim.boundary_class as 'public' | 'internal' | 'pii' | 'secret',
         content_hash: claim.content_hash,

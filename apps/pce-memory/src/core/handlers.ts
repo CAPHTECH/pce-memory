@@ -32,7 +32,8 @@ import { checkAndConsume } from '../store/rate.js';
 import { updateCritic } from '../store/critic.js';
 import { stateError } from '../domain/stateMachine.js';
 import type { ErrorCode } from '../domain/errors.js';
-import { ENTITY_TYPES, isValidEntityType } from '../domain/types.js';
+import { CLAIM_KINDS, ENTITY_TYPES, isValidEntityType } from '../domain/types.js';
+import type { ClaimKind } from '../domain/types.js';
 import * as E from 'fp-ts/Either';
 
 import {
@@ -431,7 +432,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
     // Claim登録（EmbeddingServiceがあれば埋め込みも生成）
     const claimInput = {
       text: text!,
-      kind: kind!,
+      kind: kind as ClaimKind,
       scope: scope!,
       boundary_class: boundary_class!,
       content_hash: validation.resolvedHash,
@@ -2712,7 +2713,7 @@ export const TOOL_DEFINITIONS = [
       type: 'object',
       properties: {
         text: { type: 'string' },
-        kind: { type: 'string', enum: ['fact', 'preference', 'task', 'policy_hint'] },
+        kind: { type: 'string', enum: [...CLAIM_KINDS] },
         scope: { type: 'string', enum: ['session', 'project', 'principle'] },
         boundary_class: {
           type: 'string',
@@ -3032,7 +3033,7 @@ export const TOOL_DEFINITIONS = [
         total_claims: { type: 'integer', minimum: 0, description: 'Total number of claims' },
         by_kind: {
           type: 'object',
-          description: 'Claim count by kind (fact/preference/task/policy_hint)',
+          description: `Claim count by kind (${CLAIM_KINDS.join('/')})`,
         },
         by_scope: {
           type: 'object',

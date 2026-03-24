@@ -4,6 +4,7 @@ import { upsertClaim } from '../src/store/claims';
 import { saveActiveContext } from '../src/store/activeContext';
 import { recordFeedback } from '../src/store/feedback';
 import { computeHealthReport } from '../src/store/health';
+import { CLAIM_KINDS } from '../src/domain/types';
 
 beforeEach(async () => {
   await resetDbAsync();
@@ -81,7 +82,7 @@ describe('computeHealthReport', () => {
 
   it('Property: total_claims === sum(by_kind) === sum(by_scope)', async () => {
     // Insert diverse claims
-    const kinds = ['fact', 'preference', 'task', 'policy_hint'] as const;
+    const kinds = CLAIM_KINDS;
     const scopes = ['session', 'project', 'principle'] as const;
     let idx = 0;
     for (const kind of kinds) {
