@@ -272,6 +272,29 @@ export async function findClaimByContentHash(contentHash: string): Promise<Claim
   return rows[0];
 }
 
+export interface FindClaimByContentHashAnyStateOptions {
+  includeRollbackMetadata?: boolean;
+}
+
+export async function findClaimByContentHashAnyState(
+  contentHash: string,
+  options: FindClaimByContentHashAnyStateOptions = {}
+): Promise<Claim | undefined> {
+  const conn = await getConnection();
+  const selectColumns = options.includeRollbackMetadata
+    ? `${CLAIM_COLUMNS}, ${rollbackRecordExistsFilter('c')} AS has_rollback_record`
+    : CLAIM_COLUMNS;
+  const reader = await conn.runAndReadAll(
+    `SELECT ${selectColumns}
+     FROM claims c
+     WHERE c.content_hash = $1`,
+    [contentHash]
+  );
+  const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
+  const rows = parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
+  return rows[0];
+}
+
 /**
  * フィルター条件によるClaim一覧取得（同期機能用）
  *

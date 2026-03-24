@@ -9,10 +9,11 @@ import * as E from 'fp-ts/Either';
 import { computeContentHash } from '@pce/embeddings';
 import { executePull } from '../src/sync/pull.js';
 import { executePush } from '../src/sync/push.js';
-import { upsertClaim, findClaimByContentHash } from '../src/store/claims.js';
+import { markClaimRolledBack, upsertClaim, findClaimByContentHash } from '../src/store/claims.js';
 import { findEntityById } from '../src/store/entities.js';
 import { findRelationById } from '../src/store/relations.js';
-import { initDb, initSchema, resetDbAsync } from '../src/db/connection.js';
+import { insertPromotionQueueRow } from '../src/store/promotionQueue.js';
+import { getConnection, initDb, initSchema, resetDbAsync } from '../src/db/connection.js';
 import { initRateState, resetRates } from '../src/store/rate.js';
 import { resetMemoryState } from '../src/state/memoryState.js';
 import type { ClaimExport, EntityExport, RelationExport } from '../src/sync/schemas.js';
@@ -359,6 +360,114 @@ describe('executePull', () => {
       // DBで確認（internalのまま）
       const saved = await findClaimByContentHash(`sha256:${hash}`);
       expect(saved?.boundary_class).toBe('internal');
+    }
+  });
+
+  it('conflicting incoming memory_type does not overwrite the existing durable classification', async () => {
+    const text = 'memory type conflict should keep local classification';
+    const hash = computeContentHash(text);
+
+    await upsertClaim({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      memory_type: 'knowledge',
+      content_hash: `sha256:${hash}`,
+    });
+
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify({
+        text,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'procedure',
+        content_hash: `sha256:${hash}`,
+      } satisfies ClaimExport)
+    );
+
+    const result = await executePull({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.imported.claims.new).toBe(0);
+      expect(result.right.imported.claims.skippedDuplicate).toBe(1);
+      expect(result.right.imported.claims.upgradedBoundary).toBe(0);
+      const saved = await findClaimByContentHash(`sha256:${hash}`);
+      expect(saved?.memory_type).toBe('knowledge');
+    }
+  });
+
+  it('rolled-back local claims are skipped instead of being re-imported from sync files', async () => {
+    const text = 'rolled back durable claim should stay rolled back';
+    const hash = computeContentHash(text);
+
+    const inserted = await upsertClaim({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      memory_type: 'knowledge',
+      content_hash: `sha256:${hash}`,
+    });
+
+    await markClaimRolledBack(inserted.claim.id, {
+      tombstone_at: '2026-03-24T00:00:00.000Z',
+      rollback_reason: 'rollback before pull regression test',
+      superseded_by: 'rbk_sync_pull',
+    });
+    await insertPromotionQueueRow({
+      id: 'rbk_sync_pull',
+      source_layer: 'meso',
+      target_layer: 'meso',
+      source_ids: JSON.stringify([inserted.claim.id]),
+      distilled_text: inserted.claim.text,
+      candidate_hash: `sha256:${computeContentHash('rollback marker for sync pull test')}`,
+      proposed_kind: inserted.claim.kind,
+      proposed_scope: inserted.claim.scope,
+      proposed_boundary_class: inserted.claim.boundary_class,
+      proposed_memory_type: inserted.claim.memory_type ?? null,
+      provenance: JSON.stringify({
+        rollback_of: inserted.claim.id,
+        actor: 'vitest',
+      }),
+      evidence_ids: JSON.stringify([]),
+      policy_version_checked: 'test-policy',
+      boundary_check_result: JSON.stringify({ allowed: true, rollback: true }),
+      status: 'rolled_back',
+      created_at: '2026-03-24T00:00:00.000Z',
+      resolved_at: '2026-03-24T00:00:00.000Z',
+      accepted_claim_id: inserted.claim.id,
+      rejected_reason: 'test rollback',
+    });
+
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify({
+        text,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'knowledge',
+        content_hash: `sha256:${hash}`,
+      } satisfies ClaimExport)
+    );
+
+    const result = await executePull({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.imported.claims.new).toBe(0);
+      expect(result.right.imported.claims.skippedDuplicate).toBe(1);
+      const conn = await getConnection();
+      const reader = await conn.runAndReadAll(
+        'SELECT COUNT(*)::INTEGER AS cnt FROM claims WHERE content_hash = $1',
+        [`sha256:${hash}`]
+      );
+      const rows = reader.getRowObjects() as Array<{ cnt: number }>;
+      expect(rows[0]?.cnt).toBe(1);
     }
   });
 

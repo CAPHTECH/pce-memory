@@ -8,7 +8,7 @@ import {
   initDb,
   initSchema,
 } from '../src/db/connection.ts';
-import type { MemoryType } from '../src/domain/types.ts';
+import { isValidMemoryType, type MemoryType } from '../src/domain/types.ts';
 import { getEvidenceForClaims } from '../src/store/evidence.ts';
 import { normalizeRowsTimestamps } from '../src/utils/serialization.ts';
 
@@ -150,7 +150,19 @@ function buildMappedCounts(): Record<MemoryType, number> {
   };
 }
 
-export async function migrateV2MemoryType(
+let migrationQueue: Promise<unknown> = Promise.resolve();
+
+function runSerializedMigration<T>(task: () => Promise<T>): Promise<T> {
+  const previous = migrationQueue.catch(() => undefined);
+  const current = previous.then(task);
+  migrationQueue = current.then(
+    () => undefined,
+    () => undefined
+  );
+  return current;
+}
+
+async function migrateV2MemoryTypeUnlocked(
   options: V2MemoryTypeMigrationOptions = {}
 ): Promise<V2MemoryTypeMigrationReport> {
   const conn = await getConnection();
@@ -214,13 +226,15 @@ export async function migrateV2MemoryType(
 
     for (const claim of claims) {
       const { memoryType, ambiguousPreference } = resolveBackfilledMemoryType(claim);
-      report.mapped_counts[memoryType] += 1;
+      const existingMemoryType = isValidMemoryType(claim.memory_type) ? claim.memory_type : null;
+      const effectiveMemoryType = existingMemoryType ?? memoryType;
+      report.mapped_counts[effectiveMemoryType] += 1;
 
-      if (ambiguousPreference) {
+      if (ambiguousPreference && existingMemoryType === null) {
         report.ambiguous_preferences.push(claim.id);
       }
 
-      if (claim.memory_type === null || claim.memory_type === undefined || claim.memory_type === '') {
+      if (existingMemoryType === null) {
         await conn.run(
           `UPDATE claims
            SET memory_type = $1,
@@ -308,7 +322,7 @@ export async function migrateV2MemoryType(
               migration: {
                 source_claim_id: claim.id,
                 original_scope: claim.scope,
-                original_memory_type: claim.memory_type ?? memoryType,
+                original_memory_type: effectiveMemoryType,
                 original_confidence: claim.confidence,
                 original_utility: claim.utility,
                 recency_anchor: claim.recency_anchor ?? claim.created_at,
@@ -354,6 +368,12 @@ export async function migrateV2MemoryType(
     await conn.run('ROLLBACK');
     throw error;
   }
+}
+
+export async function migrateV2MemoryType(
+  options: V2MemoryTypeMigrationOptions = {}
+): Promise<V2MemoryTypeMigrationReport> {
+  return runSerializedMigration(() => migrateV2MemoryTypeUnlocked(options));
 }
 
 async function main(): Promise<void> {

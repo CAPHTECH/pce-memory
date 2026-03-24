@@ -13,7 +13,7 @@ import * as E from 'fp-ts/Either';
 import { syncPullError, type DomainError } from '../domain/errors.js';
 import {
   upsertClaim,
-  findClaimByContentHash,
+  findClaimByContentHashAnyState,
   updateClaimSyncMetadata,
   type ClaimInput,
 } from '../store/claims.js';
@@ -224,9 +224,15 @@ async function importClaim(
   }
 
   // 既存Claimを検索
-  const existing = await findClaimByContentHash(claim.content_hash);
+  const existing = await findClaimByContentHashAnyState(claim.content_hash, {
+    includeRollbackMetadata: true,
+  });
 
   if (existing) {
+    if (existing.tombstone || existing.has_rollback_record) {
+      return 'skipped_duplicate';
+    }
+
     // 既存がある場合：boundary_classのマージ判定
     const merged = mergeBoundaryClass(
       existing.boundary_class as BoundaryClass,
@@ -446,9 +452,11 @@ export async function executePull(
           // Phase 3: インポート前に衝突検出
           // TODO: パフォーマンス最適化 - existingClaim を importClaim に渡して再利用可能
           // 現在は importClaim 内で再度クエリが発生する（N件で2N回のDBアクセス）
-          const existingClaim = await findClaimByContentHash(claim.content_hash);
+          const existingClaim = await findClaimByContentHashAnyState(claim.content_hash, {
+            includeRollbackMetadata: true,
+          });
           const claimConflict = detectClaimConflict(
-            existingClaim
+            existingClaim && !existingClaim.tombstone && !existingClaim.has_rollback_record
               ? { boundary_class: existingClaim.boundary_class as BoundaryClass }
               : undefined,
             claim
