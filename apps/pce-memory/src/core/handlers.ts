@@ -867,8 +867,8 @@ export async function handleObserve(args: Record<string, unknown>) {
       typeof extract === 'object' && extract !== null && 'mode' in extract
         ? (extract as { mode?: unknown }).mode
         : undefined;
-    const mode = (extractMode ?? 'noop') as 'noop' | 'single_claim_v0';
-    if (mode !== 'noop' && mode !== 'single_claim_v0') {
+    const mode = extractMode ?? 'noop';
+    if (mode !== 'noop') {
       return createToolResult(
         { ...err('VALIDATION_ERROR', 'invalid extract.mode', reqId), trace_id: traceId },
         { isError: true }
@@ -1019,62 +1019,6 @@ export async function handleObserve(args: Record<string, unknown>) {
     await insertObservation(observationInput);
 
     const claimIds: string[] = [];
-    const effectiveExtractMode =
-      mode === 'single_claim_v0' && effectiveBoundaryClass === 'secret' ? 'noop' : mode;
-    if (mode === 'single_claim_v0' && effectiveExtractMode === 'noop') {
-      warnings.push('EXTRACT_SKIPPED_SECRET');
-    }
-
-    if (effectiveExtractMode === 'single_claim_v0') {
-      // 暫定: Observation.contentをそのまま1Claim化（配線確認用）
-      if (effectiveBoundaryClass === 'secret') {
-        // 防御的（ここには来ない想定）
-        return createToolResult(
-          {
-            ...err('VALIDATION_ERROR', 'secret content cannot be extracted', reqId),
-            trace_id: traceId,
-          },
-          { isError: true }
-        );
-      }
-
-      const claimText = effectiveBoundaryClass === 'pii' ? piiRedaction.redacted : content;
-      const claimHash = `sha256:${computeContentHash(claimText)}`;
-
-      const claimInput = {
-        text: claimText,
-        kind: 'fact',
-        scope: 'session',
-        boundary_class: effectiveBoundaryClass,
-        content_hash: claimHash,
-        ...(provenance !== undefined ? { provenance } : {}),
-      };
-
-      const embeddingService = getEmbeddingService();
-      const { claim, isNew } = embeddingService
-        ? await upsertClaimWithEmbedding(claimInput, embeddingService)
-        : await upsertClaim(claimInput);
-
-      // スコープへのリソース登録（claimのみ）
-      const addResult = addResourceToCurrentScope(scopeId, claim.id);
-      if (E.isLeft(addResult)) {
-        console.error(`[Handler] Failed to add resource to scope: ${addResult.left.message}`);
-      }
-
-      transitionToHasClaims(isNew);
-      claimIds.push(claim.id);
-
-      // Evidence: Claimの根拠としてObservationを記録（長期保持は最小限に寄せる）
-      const safeSnippet = `${contentDigest} bytes=${contentLength}`;
-      await insertEvidence({
-        id: `evd_${crypto.randomUUID().slice(0, 8)}`,
-        claim_id: claim.id,
-        source_type: 'observation',
-        source_id: observationId,
-        snippet: safeSnippet,
-        at: provenance?.at ?? new Date().toISOString(),
-      });
-    }
 
     await appendLog({
       id: `log_${reqId}`,
@@ -3739,7 +3683,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_observe',
     description:
-      'Record a temporary observation with auto-expiry (default 30 days). Use for chat logs, tool outputs, file reads, API responses. extract.mode="single_claim_v0" is deprecated; prefer pce_memory_distill + pce_memory_promote for durable memory. Auto-detects and redacts PII/secrets.',
+      'Record a temporary observation with auto-expiry (default 30 days). Use for chat logs, tool outputs, file reads, API responses. Raw observations do not create durable claims; use pce_memory_distill + pce_memory_promote for durable memory. Auto-detects and redacts PII/secrets.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -3775,9 +3719,9 @@ export const TOOL_DEFINITIONS = [
           properties: {
             mode: {
               type: 'string',
-              enum: ['noop', 'single_claim_v0'],
+              enum: ['noop'],
               description:
-                'Compatibility extraction mode. single_claim_v0 is deprecated and will be removed after the promotion pipeline rollout; prefer pce_memory_distill + pce_memory_promote.',
+                'Reserved compatibility knob. noop preserves raw observations only; use pce_memory_distill + pce_memory_promote for durable memory.',
             },
           },
         },

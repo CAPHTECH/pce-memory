@@ -43,7 +43,7 @@ async function seedSessionClaim(text: string, kind: 'fact' | 'task' = 'fact') {
 }
 
 describe('promotion pipeline', () => {
-  it('registers distill/promote/rollback tools and marks single_claim_v0 as deprecated', () => {
+  it('registers distill/promote/rollback tools and keeps observe extraction noop-only', () => {
     const toolNames = TOOL_DEFINITIONS.map((tool) => tool.name);
     expect(toolNames).toContain('pce_memory_distill');
     expect(toolNames).toContain('pce_memory_promote');
@@ -54,14 +54,15 @@ describe('promotion pipeline', () => {
       observeTool?.inputSchema?.properties?.extract as
         | {
             properties?: {
-              mode?: { description?: string };
+              mode?: { description?: string; enum?: string[] };
             };
           }
         | undefined
     )?.properties?.mode;
 
-    expect(observeTool?.description).toContain('deprecated');
-    expect(extractModeSchema?.description).toContain('deprecated');
+    expect(observeTool?.description).toContain('do not create durable claims');
+    expect(extractModeSchema?.enum).toEqual(['noop']);
+    expect(extractModeSchema?.description).toContain('noop preserves raw observations only');
     expect(extractModeSchema?.description).toContain('pce_memory_distill');
   });
 

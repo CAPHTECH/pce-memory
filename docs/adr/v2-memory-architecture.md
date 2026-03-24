@@ -58,7 +58,7 @@ Adopt an explicit **micro / meso / macro architecture** with a governed promotio
    and evidence before it becomes durable memory.
 5. Direct durable canonical `session` writes are forbidden.
 6. Direct raw writes into macro memory are forbidden.
-7. `observe.extract.single_claim_v0` is removed.
+7. the legacy observe-to-claim compatibility shortcut is removed.
 
 ### Core invariants
 
@@ -372,8 +372,8 @@ This phase is additive so the repository can backfill and validate before removi
 
 1. add `distill`, `promote`, and `rollback`
 2. route new durable promotion through `promotion_queue`
-3. deprecate `observe.extract.single_claim_v0`
-4. remove `single_claim_v0` only after `distill` is available and covered by tests
+3. deprecate the legacy observe extraction shortcut
+4. remove the shortcut only after `distill` is available and covered by tests
 
 ### Phase 3: claim backfill
 
@@ -443,7 +443,7 @@ Execute the redesign in this order:
    - add `promote`
    - add `rollback`
    - enforce provenance, boundary monotonicity, and rejection persistence
-   - keep `single_claim_v0` only as a temporary compatibility path until `distill` is shipped
+   - keep the legacy observe extraction shortcut only as a temporary compatibility path until `distill` is shipped
 
 5. **Migrate stored data**
    - backfill `memory_type`
@@ -457,7 +457,7 @@ Execute the redesign in this order:
    - persist score breakdowns and selection reasons
 
 7. **Remove obsolete write shortcuts**
-   - disable `observe.extract.single_claim_v0`
+   - disable the legacy observe extraction shortcut
    - forbid direct durable canonical `session` writes
 
 8. **Update sync and governance**

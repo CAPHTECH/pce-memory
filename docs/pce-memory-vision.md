@@ -44,8 +44,8 @@ This architecture is designed to make three things true at the same time:
 3. **Memory stays governable** because durable changes have lineage, review state, and rollback.
 
 This document describes the **target v2 architecture**. The current runtime and the v0.1 tool
-spec still expose legacy surfaces such as `pce_memory_upsert` and
-`observe.extract.single_claim_v0` until the migration plan in the v2 ADR is complete.
+spec still expose legacy surfaces such as `pce_memory_upsert` until the migration plan in the
+v2 ADR is complete.
 
 ---
 

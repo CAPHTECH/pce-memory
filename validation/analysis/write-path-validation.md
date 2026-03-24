@@ -1,5 +1,7 @@
 # Write Path Validation
 
+> Historical note: this analysis captures the pre-v2 transition state. The runtime now has `distill`, `promote`, and `rollback`; references below to the removed observe extraction shortcut are retained only as design history.
+
 ## Recommendation
 
 Choose `observe -> distill candidate -> review gate -> promote`, with `rollback` as an append-only repair path.
@@ -11,16 +13,16 @@ Choose `observe -> distill candidate -> review gate -> promote`, with `rollback`
 | Topic                             | Documented intent                                                                                                                                                                                                                                               | Current implementation                                                                                                                                                                                                                                                                                                                                                                                                | Validation result                                                                                            |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Overall flow                      | Vision and policy docs describe pace-aware `distill` / `promote` / `rollback` with provenance and boundary checks (`docs/pce-memory-vision.md:35-46`, `docs/pce-memory-vision.md:147-151`, `docs/boundary-policy.md:35-45`, `docs/boundary-policy.md:257-258`). | Runtime has `handleObserve` plus direct `handleUpsert`; the dispatch table and tool registry define no `distill`, `promote`, or `rollback` handlers, and the DB schema defines no promotion queue or rollback tables (`apps/pce-memory/src/core/handlers.ts:468-870`, `apps/pce-memory/src/core/handlers.ts:1954-1970`, `apps/pce-memory/src/core/handlers.ts:2571-2922`, `apps/pce-memory/src/db/schema.sql:1-209`). | The documented write path is not implemented as explicit stages.                                             |
-| Observe contract                  | `observe` is short-lived capture with optional extraction (`docs/mcp-tools.md:89-179`).                                                                                                                                                                         | `handleObserve` stores TTL-bound observations and can optionally write a claim immediately when `extract.mode="single_claim_v0"` (`apps/pce-memory/src/core/handlers.ts:623-833`).                                                                                                                                                                                                                                    | Observe exists, but it contains a temporary extraction shortcut instead of a separate distill stage.         |
+| Observe contract                  | `observe` is short-lived capture with optional extraction (`docs/mcp-tools.md:89-179`).                                                                                                                                                                         | Before the v2 promotion pipeline, `handleObserve` stored TTL-bound observations and also exposed a temporary inline claim-extraction shortcut.                                                                                                                                                                                                                                                                     | Observe existed, but it mixed capture with a shortcut instead of a separate distill stage.                   |
 | Promote contract                  | Distill should promote AC outcomes to LCP with dedupe, provenance, and boundary alignment (`docs/pce-memory-vision.md:149-151`, `docs/boundary-policy.md:38`).                                                                                                  | `handleUpsert` writes directly into the durable `claims` table after minimal validation and content hash dedupe (`apps/pce-memory/src/core/handlers.ts:137-247`, `apps/pce-memory/src/core/handlers.ts:321-456`, `apps/pce-memory/src/store/claims.ts:94-135`).                                                                                                                                                       | Promotion is currently direct durable persistence, not mediated promotion.                                   |
 | Provenance requirements           | Docs say upsert provenance is mandatory (`docs/pce-memory-vision.md:104-107`, `docs/pce-memory-vision.md:127-134`).                                                                                                                                             | Tool schema says `provenance.at` is required, but runtime `handleUpsert` does not validate `provenance` at all; it simply passes it through if present (`apps/pce-memory/src/core/handlers.ts:321-456`, `apps/pce-memory/src/core/handlers.ts:2667-2702`).                                                                                                                                                            | Runtime is weaker than the documented contract.                                                              |
 | Secret handling on durable writes | Policy says `upsert` with `secret` is rejected by default (`docs/boundary-policy.md:35-39`, `docs/boundary-policy.md:233-240`).                                                                                                                                 | Runtime only checks that `boundary_class` exists in policy; it does not reject `secret` for `upsert` (`apps/pce-memory/src/core/handlers.ts:236-247`). A test intentionally upserts a `secret` claim successfully (`apps/pce-memory/test/activate-boundary-filter.test.ts:24-47`).                                                                                                                                    | Current durable path allows writes that policy describes as rejected.                                        |
-| Session durability                | Pace docs distinguish short-lived AC / session-layer memory from durable LCP (`docs/pce-memory-vision.md:35-46`, `docs/boundary-policy.md:57-60`, `docs/boundary-policy.md:242-258`).                                                                           | `claims` has no TTL column (`apps/pce-memory/src/db/schema.sql:2-18`). `single_claim_v0` extracts straight into `scope: 'session'` inside `claims` (`apps/pce-memory/src/core/handlers.ts:797-807`). Direct `upsert` also accepts `scope: 'session'` via tool schema and runtime (`apps/pce-memory/src/core/handlers.ts:2667-2676`).                                                                                  | The repository currently lets session-scoped material become durable without an explicit promotion decision. |
+| Session durability                | Pace docs distinguish short-lived AC / session-layer memory from durable LCP (`docs/pce-memory-vision.md:35-46`, `docs/boundary-policy.md:57-60`, `docs/boundary-policy.md:242-258`).                                                                           | Historically, `claims` had no TTL column and the old observe extraction shortcut wrote straight into `scope: 'session'` inside `claims`.                                                                                                                                                                                                                                                                         | That legacy design let session-scoped material become durable without an explicit promotion decision.         |
 
 The practical shape today is:
 
 1. `observe` captures transient material in `observations`.
-2. `observe` may also write a `session` claim immediately via `single_claim_v0`.
+2. The old observe shortcut could also write a `session` claim immediately.
 3. `upsert` writes directly into `claims`, which is the durable corpus used by activation and sync-adjacent flows.
 
 That is closer to `observe -> optional raw extraction -> direct upsert` than `observe -> distill -> promote`.
@@ -40,7 +42,7 @@ That is closer to `observe -> optional raw extraction -> direct upsert` than `ob
 
 This is implemented in `apps/pce-memory/src/core/handlers.ts:753-775` and persisted by `apps/pce-memory/src/store/observations.ts:24-61`. The physical schema matches that storage shape in `apps/pce-memory/src/db/schema.sql:198-209`.
 
-If `extract.mode="single_claim_v0"` is set, observe also creates:
+In the legacy design, observe could also create:
 
 - one `fact` claim
 - always with `scope: 'session'`
@@ -95,7 +97,7 @@ That shortcut is the main reason the distill boundary is still implicit instead 
 
 Not as a first-class stage.
 
-The only runtime behavior that looks like distillation is `extract.mode="single_claim_v0"` in `handleObserve` (`apps/pce-memory/src/core/handlers.ts:623-833`). It is not enough to count as a real distill stage because it:
+The old observe extraction shortcut in `handleObserve` was not enough to count as a real distill stage because it:
 
 - does not create a separate candidate record
 - does not record review state
@@ -156,7 +158,7 @@ That makes provenance shallow and rollback blind, which is exactly what the visi
 There are only two practical promotion paths today:
 
 1. direct `pce_memory_upsert`
-2. `pce_memory_observe` with `extract.mode="single_claim_v0"`
+2. the old `pce_memory_observe` extraction shortcut
 
 Direct `upsert`:
 
@@ -168,7 +170,7 @@ Direct `upsert`:
 
 See `apps/pce-memory/src/core/handlers.ts:137-247`, `apps/pce-memory/src/core/handlers.ts:321-456`, and `apps/pce-memory/src/store/claims.ts:94-135`.
 
-`single_claim_v0`:
+Legacy observe extraction shortcut:
 
 - writes directly to `claims`
 - always as `scope: 'session'`
@@ -262,7 +264,7 @@ That API makes transition boundaries explicit and matches the issue acceptance c
 
 | Invariant                                                         | Current status                                                                                               | Evidence                                                                                           |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| Raw capture must stay separate from durable claims by default.    | Partially satisfied. Observation storage is separate, but `single_claim_v0` can still create a claim inline. | `apps/pce-memory/src/store/observations.ts:36-61`, `apps/pce-memory/src/core/handlers.ts:777-833`  |
+| Raw capture must stay separate from durable claims by default.    | Historically only partially satisfied. Observation storage was separate, but the old observe shortcut could still create a claim inline. | `apps/pce-memory/src/store/observations.ts:36-61`, legacy observe extraction path  |
 | Effective boundary must never be lower than detected sensitivity. | Satisfied.                                                                                                   | `apps/pce-memory/src/core/handlers.ts:692-710`                                                     |
 | Secret observation content must not be stored or extracted.       | Satisfied.                                                                                                   | `apps/pce-memory/src/core/handlers.ts:719-781`                                                     |
 | Observation retention must be finite and scrubbed after expiry.   | Satisfied, but env-driven rather than policy-driven.                                                         | `apps/pce-memory/src/core/handlers.ts:599-621`, `apps/pce-memory/src/store/observations.ts:75-100` |
@@ -324,8 +326,8 @@ The repository is missing six concrete pieces needed for the intended write path
 
 - `apps/pce-memory/src/core/handlers.ts:137-247` shows `handleUpsert` validation is limited to required fields, hash matching, and policy boundary existence.
 - `apps/pce-memory/src/core/handlers.ts:468-870` shows `handleObserve` already combines transient capture, boundary detection, TTL handling, and optional direct claim creation.
-- `apps/pce-memory/src/core/handlers.ts:797-807` shows `single_claim_v0` always extracts into `scope: 'session'`.
-- `apps/pce-memory/src/core/handlers.ts:2596-2598` frames `single_claim_v0` as promotion, but `apps/pce-memory/src/core/handlers.ts:784-833` shows it is implemented as immediate direct claim creation without a separate distill/promote boundary.
+- The removed observe shortcut always extracted into `scope: 'session'`.
+- That shortcut was framed as promotion, but in practice it was immediate direct claim creation without a separate distill/promote boundary.
 - `apps/pce-memory/src/core/handlers.ts:2667-2702` advertises `provenance.at` as required for `pce_memory_upsert`, but the handler does not enforce it.
 - `apps/pce-memory/src/store/observations.ts:36-61` and `apps/pce-memory/src/store/observations.ts:75-100` show short-lived observation storage plus scrub-on-expiry.
 - `apps/pce-memory/src/store/claims.ts:94-135` shows durable claim dedupe is keyed only by final `content_hash`.

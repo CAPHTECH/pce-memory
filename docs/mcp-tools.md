@@ -130,7 +130,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "mode": { "type": "string", "enum": ["noop", "single_claim_v0"] }
+        "mode": { "type": "string", "enum": ["noop"] }
       }
     }
   },
@@ -171,11 +171,11 @@
     - `redact`: PIIを簡易redactした内容を保存する（必要時 `content_redacted=true`）
     - `raw`: 生の `content` を保存する（※運用上は慎重に。`NODE_ENV=production` では `raw` 指定でも `redact` にフォールバック）
   - `ttl_days` は env/policy により clamp される（デフォルト例: 30日、最大例: 90日）。
-  - `extract.mode=single_claim_v0` は配線確認用の暫定モード（Observation.content を 1 Claim 化）。
+  - `observe` は raw/micro capture 専用で、durable claim は作成しない。`claim_ids` は現在空配列を返す。
+  - `extract.mode` は互換性のため `noop` のみを受け付ける。durable memory 化は `distill -> promote` を使う。
   - **Secret検知**（例: API key / private key block / JWT など）時は fail-safe として:
     - `effective_boundary_class=secret`
     - `content` は保存しない（digest-only）
-    - `extract.mode=single_claim_v0` を指定されても `noop` にフォールバックし、`warnings` を返す
   - 期限後は Observation.content を削除/スクラブし、digest/メタデータのみ保持する運用を推奨（GCは起動時 + best-effortで実行）。
 
 ### 2.1 `pce_memory_activate`

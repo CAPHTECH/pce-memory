@@ -24,18 +24,15 @@ testCases:
       effective_boundary_class: internal
 
   - id: obs-002-basic-extract
-    description: "基本的なobserve（extract: single_claim_v0）"
+    description: "基本的なobserve（raw capture only）"
     input:
       source_type: chat
       content: "認証にはJWTを使用することに決定"
-      extract:
-        mode: single_claim_v0
     expected:
       observation_id_present: true
-      claim_ids_count: 1
+      claim_ids_count: 0
       content_stored: true
       effective_boundary_class: internal
-      claim_retrievable: true
 
   # === source_type バリエーション ===
   - id: obs-003-source-tool
@@ -118,7 +115,7 @@ testCases:
       source_type: chat
       content: "sk-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       extract:
-        mode: single_claim_v0
+        mode: noop
     expected:
       observation_id_present: true
       effective_boundary_class: secret
@@ -126,7 +123,6 @@ testCases:
       claim_ids_count: 0
       warnings_contains:
         - OBS_CONTENT_NOT_STORED_SECRET
-        - EXTRACT_SKIPPED_SECRET
 
   - id: obs-013-detect-secret-aws
     description: "Secret検知: AWS認証情報"
@@ -246,26 +242,22 @@ testCases:
         at: "2024-12-16T00:00:00Z"
         actor: "developer"
         note: "テスト用データ"
-      extract:
-        mode: single_claim_v0
     expected:
       observation_id_present: true
-      claim_ids_count: 1
+      claim_ids_count: 0
       content_stored: true
 
-  # === extract → activate 統合テスト ===
+  # === raw capture contract ===
   - id: obs-070-extract-activate-flow
-    description: "observe(extract) → activate フロー"
+    description: "observe は raw capture のみを行う"
     input:
       source_type: chat
       content: "DuckDBをストレージとして採用"
       extract:
-        mode: single_claim_v0
+        mode: noop
     expected:
       observation_id_present: true
-      claim_ids_count: 1
-      claim_retrievable: true
-      claim_has_evidence: true
+      claim_ids_count: 0
 
 # 評価基準
 evaluation:
