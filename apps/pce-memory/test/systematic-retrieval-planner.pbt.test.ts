@@ -86,7 +86,7 @@ describe('Property: retrieval planner invariants', () => {
             ...(intent ? { intent } : {}),
           });
 
-          expect(activate.isError).toBeUndefined();
+          expect(activate.isError).not.toBe(true);
           const body = activate.structuredContent as {
             active_context_id: string;
             claims_count: number;

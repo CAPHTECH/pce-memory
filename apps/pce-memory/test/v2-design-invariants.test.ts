@@ -19,11 +19,11 @@ beforeEach(async () => {
 
 async function applyPolicy() {
   const result = await dispatchTool('pce_memory_policy_apply', {});
-  expect(result.isError).toBeUndefined();
+  expect(result.isError ?? false).toBe(false);
 }
 
 function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
-  expect(result.isError).toBeUndefined();
+  expect(result.isError ?? false).toBe(false);
   expect(result.structuredContent).toBeDefined();
   return result.structuredContent!;
 }
@@ -214,7 +214,7 @@ describe('v2 design invariants', () => {
         scope: 'project',
         boundary_class: 'internal',
         memory_type: 'working_state',
-        provenance: { at: '2026-03-24T14:00:00.000Z', actor: 'claude' },
+        provenance: { at: isoOffset(-60_000), actor: 'claude' },
       })
     );
 

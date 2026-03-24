@@ -18,9 +18,13 @@ beforeEach(async () => {
 });
 
 function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
-  expect(result.isError).toBeUndefined();
+  expect(result.isError).not.toBe(true);
   expect(result.structuredContent).toBeDefined();
   return result.structuredContent!;
+}
+
+function isoOffset(msOffset: number): string {
+  return new Date(Date.now() + msOffset).toISOString();
 }
 
 async function countActiveContextItems(activeContextId: string): Promise<number> {
@@ -472,7 +476,7 @@ describe('systematic retrieval planner edge coverage', () => {
       await dispatchTool('pce_memory_rollback', {
         claim_id: rolledBackId,
         reason: 'superseded by a safer retrieval plan',
-        provenance: { at: '2026-03-24T12:00:00.000Z', actor: 'claude' },
+        provenance: { at: isoOffset(-60_000), actor: 'claude' },
       })
     );
 
