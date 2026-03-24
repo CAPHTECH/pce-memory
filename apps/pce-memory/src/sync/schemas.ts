@@ -5,6 +5,8 @@
  * content_hashの一致確認、boundary_classの制約等を型レベルで保証する。
  */
 import { z } from 'zod';
+import { CLAIM_KINDS, ENTITY_TYPES } from '../domain/types.js';
+import type { ClaimKind, EntityType as DomainEntityType } from '../domain/types.js';
 
 // スコープ定義
 export const ScopeSchema = z.enum(['session', 'project', 'principle']);
@@ -15,12 +17,12 @@ export const BoundaryClassSchema = z.enum(['public', 'internal', 'pii', 'secret'
 export type BoundaryClass = z.infer<typeof BoundaryClassSchema>;
 
 // Kind定義
-export const KindSchema = z.enum(['fact', 'preference', 'task', 'policy_hint']);
-export type Kind = z.infer<typeof KindSchema>;
+export const KindSchema = z.enum(CLAIM_KINDS);
+export type Kind = ClaimKind;
 
 // Entity Type定義
-export const EntityTypeSchema = z.enum(['Actor', 'Artifact', 'Event', 'Concept']);
-export type EntityType = z.infer<typeof EntityTypeSchema>;
+export const EntityTypeSchema = z.enum(ENTITY_TYPES);
+export type EntityType = DomainEntityType;
 
 // content_hashパターン
 export const ContentHashSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/, {

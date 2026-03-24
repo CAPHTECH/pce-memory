@@ -36,7 +36,7 @@ Append one input bundle to this task using JSON with at least these fields:
       "claim_id": "clm_...",
       "scope": "session|project|principle",
       "boundary_class": "public|internal|pii|secret",
-      "kind": "fact|preference|task|policy_hint",
+      "kind": "ClaimKind",
       "text": "string",
       "score": 0.0,
       "provenance": [{ "at": "2026-03-24T00:00:00Z" }]

@@ -132,8 +132,8 @@ Without that, a richer taxonomy would remain documentation-only.
 
 Adopt a two-axis model:
 
-- Keep `kind = fact | preference | task | policy_hint` for backward compatibility and coarse operator workflows.
-- Add `memory_type = evidence | working_state | knowledge | procedure | norm` as the semantic taxonomy that drives storage and retrieval design.
+- Keep `kind = ClaimKind` for backward compatibility and coarse operator workflows.
+- Add `memory_type = MemoryType` as the semantic taxonomy that drives storage and retrieval design.
 
 ### Concrete recommendations
 

@@ -7,14 +7,15 @@
  * - Inv_UtilityMonotonicity: utility増加 → g増加
  * - Inv_RecencyMonotonicity: 時間経過 → recency減少 → g減少
  */
+import type { ClaimKind } from '../domain/types.js';
 
 /** Kind別半減期（日） */
-export const KIND_HALF_LIVES: Record<string, number> = {
+export const KIND_HALF_LIVES = {
   fact: 120,
   task: 14,
   preference: 90,
   policy_hint: 365,
-};
+} satisfies Record<ClaimKind, number>;
 export const DEFAULT_HALF_LIFE = 30;
 
 /** g()係数の内訳（デバッグ・分析用） */
@@ -82,7 +83,7 @@ export function recencyDecay(ts: Date | string, halfLifeDays: number): number {
  * Kind別の半減期を取得
  */
 export function getHalfLife(kind: string): number {
-  return KIND_HALF_LIVES[kind] ?? DEFAULT_HALF_LIFE;
+  return kind in KIND_HALF_LIVES ? KIND_HALF_LIVES[kind as ClaimKind] : DEFAULT_HALF_LIFE;
 }
 
 /**
