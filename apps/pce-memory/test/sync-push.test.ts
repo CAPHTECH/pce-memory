@@ -175,6 +175,54 @@ describe('executePush', () => {
     }
   });
 
+  it('non-empty DB with only local-only claims still exports zero claims', async () => {
+    const sessionText = 'session only local note';
+    const secretText = 'secret durable note';
+    const tombstonedText = 'tombstoned durable note';
+
+    await upsertClaim({
+      text: sessionText,
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(sessionText)}`,
+    });
+    await upsertClaim({
+      text: secretText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'secret',
+      content_hash: `sha256:${computeContentHash(secretText)}`,
+    });
+    const tombstoned = await upsertClaim({
+      text: tombstonedText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(tombstonedText)}`,
+    });
+    await markClaimRolledBack(tombstoned.claim.id, {
+      tombstone_at: '2026-03-24T00:00:00.000Z',
+      rollback_reason: 'test tombstone for zero exportable case',
+      superseded_by: 'rbk_sync_push_zero',
+    });
+
+    const result = await executePush({
+      basePath: tempDir,
+      scopeFilter: ['session', 'project'],
+      boundaryFilter: ['public', 'internal', 'pii'],
+    });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.exported.claims).toBe(0);
+      expect(result.right.manifestUpdated).toBe(true);
+      const projectClaimsDir = path.join(tempDir, '.pce-shared', 'claims', 'project');
+      const files = await fs.readdir(projectClaimsDir);
+      expect(files).toHaveLength(0);
+    }
+  });
+
   it('tombstone または rollback 済みのClaimをエクスポートしない', async () => {
     const active = await upsertClaim({
       text: 'active claim',
