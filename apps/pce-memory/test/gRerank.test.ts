@@ -13,6 +13,7 @@ import {
   recencyDecay,
   calculateG,
   calculateGFromClaim,
+  calculateIntentScoreBreakdown,
   getHalfLife,
   KIND_HALF_LIVES,
   DEFAULT_HALF_LIFE,
@@ -262,6 +263,28 @@ describe('calculateScoreBreakdown function', () => {
     expect(breakdown.s_text).toBe(0.3);
     expect(breakdown.s_vec).toBe(0.9);
     expect(breakdown.g).toBe(gFactor);
+  });
+});
+
+describe('calculateIntentScoreBreakdown function', () => {
+  it('penalizes non-norm non-policy claims for policy_check intent', () => {
+    const breakdown = calculateIntentScoreBreakdown('policy_check', 'task', 'working_state');
+
+    expect(breakdown).toBeDefined();
+    expect(breakdown?.kind_boost).toBe(1);
+    expect(breakdown?.memory_type_boost).toBe(1);
+    expect(breakdown?.penalty_multiplier).toBe(0.3);
+    expect(breakdown?.boost).toBe(0.3);
+  });
+
+  it('does not penalize norm or policy_hint claims for policy_check intent', () => {
+    const normBreakdown = calculateIntentScoreBreakdown('policy_check', 'fact', 'norm');
+    const policyBreakdown = calculateIntentScoreBreakdown('policy_check', 'policy_hint', 'knowledge');
+
+    expect(normBreakdown?.penalty_multiplier).toBe(1);
+    expect(normBreakdown?.boost).toBe(1.5);
+    expect(policyBreakdown?.penalty_multiplier).toBe(1);
+    expect(policyBreakdown?.boost).toBeCloseTo(1.45 * 1.05, 10);
   });
 });
 

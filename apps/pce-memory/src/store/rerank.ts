@@ -35,6 +35,7 @@ export interface IntentScoreBreakdown {
   intent: ActivateIntent;
   kind_boost: number;
   memory_type_boost: number;
+  penalty_multiplier: number;
   recency_weight: number;
   boost: number;
 }
@@ -66,6 +67,7 @@ const DEFAULT_INTENT_PROFILE: IntentProfile = {
   kindBoosts: {},
   memoryTypeBoosts: {},
 };
+const POLICY_CHECK_NON_NORM_PENALTY = 0.3;
 
 const INTENT_PROFILES: Record<ActivateIntent, IntentProfile> = {
   resume_task: {
@@ -192,13 +194,18 @@ export function calculateIntentScoreBreakdown(
   const typedKind = kind as ClaimKind;
   const kind_boost = profile.kindBoosts[typedKind] ?? 1.0;
   const memory_type_boost = memoryType ? (profile.memoryTypeBoosts[memoryType] ?? 1.0) : 1.0;
+  const penalty_multiplier =
+    intent === 'policy_check' && typedKind !== 'policy_hint' && memoryType !== 'norm'
+      ? POLICY_CHECK_NON_NORM_PENALTY
+      : 1.0;
 
   return {
     intent,
     kind_boost,
     memory_type_boost,
+    penalty_multiplier,
     recency_weight: profile.recencyWeight,
-    boost: kind_boost * memory_type_boost,
+    boost: kind_boost * memory_type_boost * penalty_multiplier,
   };
 }
 
