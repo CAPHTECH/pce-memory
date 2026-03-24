@@ -21,6 +21,9 @@ const OLLAMA_MODELS_URL =
   process.env.OLLAMA_MODELS_URL ?? 'http://localhost:11434/v1/models';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'qwen3.5:122b-a10b';
 const MAX_TOKENS = parsePositiveInt(process.env.OLLAMA_MAX_TOKENS) ?? 1500;
+const JSON_RETRY_MAX_TOKENS =
+  parsePositiveInt(process.env.OLLAMA_JSON_RETRY_MAX_TOKENS) ?? Math.max(MAX_TOKENS * 2, 3000);
+const REASONING_EFFORT = process.env.OLLAMA_REASONING_EFFORT ?? 'none';
 const CHAT_TEMPERATURE = 0;
 const CHAT_TIMEOUT_MS = 180_000;
 const RPC_TIMEOUT_MS = 60_000;
@@ -35,6 +38,7 @@ interface ChatMessage {
 }
 
 interface ChatCompletionChoice {
+  finish_reason?: string | null;
   message?: {
     role?: string;
     content?: string | null;
@@ -84,9 +88,31 @@ interface ImprovementPayload {
   improvements: Improvement[];
 }
 
+interface ImprovementRecallItem {
+  slug: string;
+  explanation: string;
+  evidence: string[];
+}
+
+interface ImprovementRecallPayload {
+  status: 'ok' | 'no_context';
+  improvements: ImprovementRecallItem[];
+}
+
 interface DecisionSeed {
   id: string;
   text: string;
+}
+
+interface DecisionRecallItem {
+  id: string;
+  summary: string;
+  params: string[];
+}
+
+interface DecisionRecallPayload {
+  status: 'ok' | 'no_context';
+  decisions: DecisionRecallItem[];
 }
 
 interface AnchorScore {
@@ -95,18 +121,27 @@ interface AnchorScore {
   total: number;
 }
 
+interface CompletionMeta {
+  mode: 'content' | 'empty';
+  has_reasoning: boolean;
+  finish_reason?: string;
+  invalid_reasons: string[];
+}
+
 interface ContinuityScore {
   slug_recall: AnchorScore;
   evidence_recall: AnchorScore;
   generic_markers: string[];
-  verdict: 'specific_recall' | 'partial_recall' | 'generic_or_no_context';
+  invalid_reasons: string[];
+  verdict: 'specific_recall' | 'partial_recall' | 'generic_or_no_context' | 'invalid_response';
 }
 
 interface DecisionScore {
   decision_id_recall: AnchorScore;
   detail_recall: AnchorScore;
   generic_markers: string[];
-  verdict: 'specific_recall' | 'partial_recall' | 'generic_or_no_context';
+  invalid_reasons: string[];
+  verdict: 'specific_recall' | 'partial_recall' | 'generic_or_no_context' | 'invalid_response';
 }
 
 interface ArmBase {
@@ -118,11 +153,14 @@ interface TaskContinuityArm extends ArmBase {
   phase_a: {
     prompt: string;
     response: string;
-    parsed: ImprovementPayload;
+    parsed?: ImprovementPayload;
+    meta: CompletionMeta;
   };
   phase_b: {
     question: string;
     response: string;
+    parsed?: ImprovementRecallPayload;
+    meta: CompletionMeta;
   };
   tool_transcript?: string;
   memory_actions?: {
@@ -137,6 +175,8 @@ interface DesignRecallArm extends ArmBase {
   seeded_decisions?: DecisionSeed[];
   question: string;
   response: string;
+  parsed?: DecisionRecallPayload;
+  meta: CompletionMeta;
   tool_transcript?: string;
   memory_actions?: {
     upserts: unknown[];
@@ -152,6 +192,8 @@ interface ExperimentResults {
     ollama_models_url: string;
     model: string;
     max_tokens: number;
+    json_retry_max_tokens: number;
+    reasoning_effort: string;
     temperature: number;
     target_file: string;
     mcp_server: string;
@@ -188,91 +230,62 @@ class OllamaClient {
     options: {
       jsonMode?: boolean;
       forceJsonSchema?: boolean;
+      maxTokensOverride?: number;
     } = {}
-  ): Promise<{ text: string; raw: ChatCompletionResponse; finalizedFromReasoning: boolean }> {
-    const payload = await this.requestChat(messages, options);
-    const directText = payload.choices?.[0]?.message?.content;
-    if (typeof directText === 'string' && directText.trim().length > 0) {
-      return { text: directText.trim(), raw: payload, finalizedFromReasoning: false };
-    }
+  ): Promise<{ text: string; raw: ChatCompletionResponse; meta: CompletionMeta }> {
+    const initialPayload = await this.requestChat(messages, options);
+    const initialText = extractCompletionText(initialPayload);
+    const initialMeta = buildCompletionMeta(
+      initialPayload,
+      { jsonMode: options.jsonMode === true },
+      initialText
+    );
 
-    const reasoning = payload.choices?.[0]?.message?.reasoning;
-    if (typeof reasoning === 'string' && reasoning.trim().length > 0) {
-      const finalized = await this.requestChat(
-        buildReasoningFinalizerMessages(reasoning, options.jsonMode === true),
+    if (
+      options.jsonMode === true &&
+      initialText.length === 0 &&
+      initialMeta.finish_reason === 'length' &&
+      (options.maxTokensOverride ?? MAX_TOKENS) < JSON_RETRY_MAX_TOKENS
+    ) {
+      const retryPayload = await this.requestChat(
+        [
+          systemMessage(
+            'The previous attempt exhausted tokens before the final JSON. Return the final JSON object immediately with no extra analysis.'
+          ),
+          ...messages,
+        ],
         {
-          jsonMode: options.jsonMode,
-          forceJsonSchema: options.forceJsonSchema,
+          ...options,
+          maxTokensOverride: JSON_RETRY_MAX_TOKENS,
         }
       );
-      const finalizedText = finalized.choices?.[0]?.message?.content;
-      if (typeof finalizedText === 'string' && finalizedText.trim().length > 0) {
-        return {
-          text: finalizedText.trim(),
-          raw: finalized,
-          finalizedFromReasoning: true,
-        };
-      }
-
-      const finalizedReasoning = finalized.choices?.[0]?.message?.reasoning;
-      if (options.jsonMode !== true) {
-        const fallbackText =
-          typeof finalizedReasoning === 'string' && finalizedReasoning.trim().length > 0
-            ? finalizedReasoning.trim()
-            : reasoning.trim();
-        return {
-          text: fallbackText,
-          raw: finalized,
-          finalizedFromReasoning: true,
-        };
-      }
-    }
-
-    throw new Error(`Ollama returned an empty completion: ${JSON.stringify(payload)}`);
-  }
-
-  async chatForImprovements(
-  messages: ChatMessage[]
-  ): Promise<{ text: string; parsed: ImprovementPayload; finalizedFromReasoning: boolean }> {
-    const payload = await this.requestChat(messages, {
-      jsonMode: true,
-      forceJsonSchema: true,
-    });
-    const directText = payload.choices?.[0]?.message?.content;
-    if (typeof directText === 'string' && directText.trim().length > 0) {
-      const parsed = parseImprovementPayload(directText.trim());
-      return { text: directText.trim(), parsed, finalizedFromReasoning: false };
-    }
-
-    const primaryReasoning = payload.choices?.[0]?.message?.reasoning;
-    if (typeof primaryReasoning === 'string' && primaryReasoning.trim().length > 0) {
-      const finalized = await this.requestChat(
-        buildReasoningFinalizerMessages(primaryReasoning, true),
-        {
-          jsonMode: true,
-          forceJsonSchema: true,
-        }
-      );
-      const finalizedText = finalized.choices?.[0]?.message?.content;
-      if (typeof finalizedText === 'string' && finalizedText.trim().length > 0) {
-        const parsed = parseImprovementPayload(finalizedText.trim());
-        return { text: finalizedText.trim(), parsed, finalizedFromReasoning: true };
-      }
-
-      const finalizedReasoning = finalized.choices?.[0]?.message?.reasoning;
-      const reasoningFallback =
-        typeof finalizedReasoning === 'string' && finalizedReasoning.trim().length > 0
-          ? finalizedReasoning
-          : primaryReasoning;
-      const parsed = parseImprovementPayloadFromReasoning(reasoningFallback);
+      const retryText = extractCompletionText(retryPayload);
       return {
-        text: JSON.stringify(parsed, null, 2),
-        parsed,
-        finalizedFromReasoning: true,
+        text: retryText,
+        raw: retryPayload,
+        meta: buildCompletionMeta(retryPayload, { jsonMode: true }, retryText),
       };
     }
 
-    throw new Error(`Ollama returned an empty improvement response: ${JSON.stringify(payload)}`);
+    return {
+      text: initialText,
+      raw: initialPayload,
+      meta: initialMeta,
+    };
+  }
+
+  async chatForImprovements(
+    messages: ChatMessage[]
+  ): Promise<{ text: string; parsed: ImprovementPayload; raw: ChatCompletionResponse; meta: CompletionMeta }> {
+    const completion = await this.chat(messages, {
+      jsonMode: true,
+      forceJsonSchema: true,
+    });
+    if (completion.text.length === 0) {
+      throw new Error(`Ollama returned an empty improvement response: ${JSON.stringify(completion.raw)}`);
+    }
+    const parsed = parseImprovementPayload(completion.text);
+    return { ...completion, parsed };
   }
 
   private async requestChat(
@@ -280,6 +293,7 @@ class OllamaClient {
     options: {
       jsonMode?: boolean;
       forceJsonSchema?: boolean;
+      maxTokensOverride?: number;
     }
   ): Promise<ChatCompletionResponse> {
     const response = await fetchWithTimeout(OLLAMA_CHAT_URL, {
@@ -289,9 +303,10 @@ class OllamaClient {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        max_tokens: MAX_TOKENS,
-        temperature: CHAT_TEMPERATURE,
+      model: OLLAMA_MODEL,
+      max_tokens: options.maxTokensOverride ?? MAX_TOKENS,
+      reasoning_effort: REASONING_EFFORT,
+      temperature: CHAT_TEMPERATURE,
         stream: false,
         messages,
         ...(options.jsonMode
@@ -555,6 +570,8 @@ async function main(): Promise<void> {
       ollama_models_url: OLLAMA_MODELS_URL,
       model: OLLAMA_MODEL,
       max_tokens: MAX_TOKENS,
+      json_retry_max_tokens: JSON_RETRY_MAX_TOKENS,
+      reasoning_effort: REASONING_EFFORT,
       temperature: CHAT_TEMPERATURE,
       target_file: TARGET_FILE_LABEL,
       mcp_server: path.relative(REPO_ROOT, MCP_SERVER_PATH),
@@ -640,7 +657,7 @@ async function runTaskContinuityWithMemory(
     }
 
     const phaseBQuestion =
-      'What improvements were identified in the previous session for hybridSearch.ts? Provide the exact improvement slugs and a short explanation for each.';
+      'What improvements were identified in the previous session for hybridSearch.ts?';
     const activateArgs = {
       intent: 'resume_task',
       q: 'hybridSearch.ts previous session improvements',
@@ -659,9 +676,15 @@ async function runTaskContinuityWithMemory(
       systemMessage(
         'You are answering a task-resume question. Use the provided simulated MCP tool result as authoritative prior-session memory, and do not invent details that are absent from it.'
       ),
+      systemMessage(buildTaskContinuityRecallInstructions()),
       systemMessage(toolTranscript),
       userMessage(phaseBQuestion),
-    ]);
+    ], {
+      jsonMode: true,
+      forceJsonSchema: true,
+    });
+    const phaseBParsed = tryParseImprovementRecallPayload(phaseB.text);
+    const phaseBMeta = mergeMetaInvalidReasons(phaseB.meta, phaseBParsed.invalid_reasons);
 
     return {
       condition: 'with_memory',
@@ -669,10 +692,13 @@ async function runTaskContinuityWithMemory(
         prompt: phaseAPrompt,
         response: phaseA.text,
         parsed: phaseA.parsed,
+        meta: phaseA.meta,
       },
       phase_b: {
         question: phaseBQuestion,
         response: phaseB.text,
+        parsed: phaseBParsed.value,
+        meta: phaseBMeta,
       },
       tool_transcript: toolTranscript,
       memory_actions: {
@@ -680,7 +706,12 @@ async function runTaskContinuityWithMemory(
         upserts,
         activate: activateRaw,
       },
-      score: scoreTaskContinuity(phaseA.parsed.improvements, phaseB.text),
+      score: scoreTaskContinuity(
+        phaseA.parsed.improvements,
+        phaseBParsed.value,
+        phaseB.text,
+        phaseBMeta
+      ),
     };
   } finally {
     await memory.stop();
@@ -700,13 +731,19 @@ async function runTaskContinuityWithoutMemory(
   ]);
 
   const phaseBQuestion =
-    'What improvements were identified in the previous session for hybridSearch.ts? Provide the exact improvement slugs and a short explanation for each.';
+    'What improvements were identified in the previous session for hybridSearch.ts?';
   const phaseB = await client.chat([
     systemMessage(
       'You are answering from the current conversation only. If previous-session context is missing, avoid pretending that you have it.'
     ),
+    systemMessage(buildTaskContinuityRecallInstructions()),
     userMessage(phaseBQuestion),
-  ]);
+  ], {
+    jsonMode: true,
+    forceJsonSchema: true,
+  });
+  const phaseBParsed = tryParseImprovementRecallPayload(phaseB.text);
+  const phaseBMeta = mergeMetaInvalidReasons(phaseB.meta, phaseBParsed.invalid_reasons);
 
   return {
     condition: 'without_memory',
@@ -714,12 +751,20 @@ async function runTaskContinuityWithoutMemory(
       prompt: phaseAPrompt,
       response: phaseA.text,
       parsed: phaseA.parsed,
+      meta: phaseA.meta,
     },
     phase_b: {
       question: phaseBQuestion,
       response: phaseB.text,
+      parsed: phaseBParsed.value,
+      meta: phaseBMeta,
     },
-    score: scoreTaskContinuity(phaseA.parsed.improvements, phaseB.text),
+    score: scoreTaskContinuity(
+      phaseA.parsed.improvements,
+      phaseBParsed.value,
+      phaseB.text,
+      phaseBMeta
+    ),
   };
 }
 
@@ -753,7 +798,7 @@ async function runDesignDecisionRecallWithMemory(
     }
 
     const question =
-      'What architectural decisions have been made about the retrieval pipeline? Include the exact decision ids and concrete parameter values when available.';
+      'What architectural decisions have been made about the retrieval pipeline?';
     const activateArgs = {
       intent: 'design_decision',
       q: 'architectural decisions retrieval pipeline hybrid search',
@@ -772,21 +817,29 @@ async function runDesignDecisionRecallWithMemory(
       systemMessage(
         'You are answering a design-decision recall question. Use the provided simulated MCP tool result as the source of truth and do not invent decisions outside that memory.'
       ),
+      systemMessage(buildDesignDecisionRecallInstructions()),
       systemMessage(toolTranscript),
       userMessage(question),
-    ]);
+    ], {
+      jsonMode: true,
+      forceJsonSchema: true,
+    });
+    const parsed = tryParseDecisionRecallPayload(answer.text);
+    const meta = mergeMetaInvalidReasons(answer.meta, parsed.invalid_reasons);
 
     return {
       condition: 'with_memory',
       seeded_decisions: seededDecisions,
       question,
       response: answer.text,
+      parsed: parsed.value,
+      meta,
       tool_transcript: toolTranscript,
       memory_actions: {
         upserts,
         activate: activateRaw,
       },
-      score: scoreDesignDecisionRecall(seededDecisions, answer.text),
+      score: scoreDesignDecisionRecall(seededDecisions, parsed.value, answer.text, meta),
     };
   } finally {
     await memory.stop();
@@ -798,20 +851,28 @@ async function runDesignDecisionRecallWithoutMemory(
 ): Promise<DesignRecallArm> {
   const seededDecisions = buildRetrievalDecisionSeeds();
   const question =
-    'What architectural decisions have been made about the retrieval pipeline? Include the exact decision ids and concrete parameter values when available.';
+    'What architectural decisions have been made about the retrieval pipeline?';
   const answer = await client.chat([
     systemMessage(
       'You are answering from the current conversation only. If you do not have prior architectural context, do not claim that you do.'
     ),
+    systemMessage(buildDesignDecisionRecallInstructions()),
     userMessage(question),
-  ]);
+  ], {
+    jsonMode: true,
+    forceJsonSchema: true,
+  });
+  const parsed = tryParseDecisionRecallPayload(answer.text);
+  const meta = mergeMetaInvalidReasons(answer.meta, parsed.invalid_reasons);
 
   return {
     condition: 'without_memory',
     seeded_decisions: seededDecisions,
     question,
     response: answer.text,
-    score: scoreDesignDecisionRecall(seededDecisions, answer.text),
+    parsed: parsed.value,
+    meta,
+    score: scoreDesignDecisionRecall(seededDecisions, parsed.value, answer.text, meta),
   };
 }
 
@@ -823,38 +884,22 @@ function userMessage(content: string): ChatMessage {
   return { role: 'user', content };
 }
 
-function buildReasoningFinalizerMessages(reasoning: string, jsonMode: boolean): ChatMessage[] {
-  return [
-    systemMessage(
-      jsonMode
-        ? 'Convert the draft analysis into the final JSON answer only. Do not include commentary, markdown fences, or extra explanation.'
-        : 'Convert the draft analysis into the direct final answer only. Do not include commentary about the conversion step.'
-    ),
-    userMessage(
-      [
-        'Draft analysis:',
-        reasoning,
-        '',
-        jsonMode
-          ? 'Return the final answer as JSON only.'
-          : 'Return the final direct answer now.',
-      ].join('\n')
-    ),
-  ];
-}
-
 function buildPhaseAAnalyzePrompt(sourceCode: string): string {
   const digest = buildHybridSearchDigest(sourceCode);
   return [
     `Analyze \`${TARGET_FILE_LABEL}\` and identify exactly 3 concrete improvements.`,
     'You are given a grounded digest of the file focused on scoring, filtering, pagination, and vector persistence.',
-    'Return JSON only with this shape:',
-    '{"improvements":[{"slug":"kebab-case-id","title":"short title","why":"one-sentence rationale","evidence":["identifier1","identifier2"]}]}',
+    'Return JSON only.',
+    'Schema:',
+    '- Top-level object with key "improvements".',
+    '- "improvements" must be an array of exactly 3 objects.',
+    '- Each object must contain: "slug" (string), "title" (string), "why" (string), "evidence" (string array).',
     'Rules:',
     '- Make each slug specific and stable.',
     '- Keep each title under 12 words.',
-    '- Cite only identifiers or constants that are present in the file.',
+    '- Cite only identifiers, constants, or function names that are present in the file.',
     '- Focus on actionable code improvements rather than style nits.',
+    '- Do not emit placeholder text such as "kebab-case-id" or "short title".',
     '',
     `File: ${TARGET_FILE_LABEL}`,
     'Digest:',
@@ -888,6 +933,38 @@ function sliceLines(lines: string[], startLine: number, endLine: number): string
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function buildTaskContinuityRecallInstructions(): string {
+  return [
+    'Return JSON only.',
+    'Schema:',
+    '- status: "ok" or "no_context"',
+    '- improvements: array of objects with keys "slug", "explanation", and "evidence"',
+    'Rules:',
+    '- If prior-session memory is unavailable, return {"status":"no_context","improvements":[]}.',
+    '- If memory is available, return status "ok" and copy the exact improvement slugs from memory.',
+    '- Keep each explanation to one sentence.',
+    '- "evidence" must be an array of strings, not a single comma-separated string.',
+    '- Keep evidence entries to concrete identifiers only.',
+    '- Do not include markdown, commentary, or reasoning traces.',
+  ].join('\n');
+}
+
+function buildDesignDecisionRecallInstructions(): string {
+  return [
+    'Return JSON only.',
+    'Schema:',
+    '- status: "ok" or "no_context"',
+    '- decisions: array of objects with keys "id", "summary", and "params"',
+    'Rules:',
+    '- If prior architectural memory is unavailable, return {"status":"no_context","decisions":[]}.',
+    '- If memory is available, return status "ok" and copy the exact decision ids from memory.',
+    '- "params" must be an array of strings, not an object.',
+    '- Put concrete parameter names or values in "params".',
+    '- Keep each summary to one sentence.',
+    '- Do not include markdown, commentary, or reasoning traces.',
+  ].join('\n');
 }
 
 function parseImprovementPayload(text: string): ImprovementPayload {
@@ -928,83 +1005,88 @@ function parseImprovementPayload(text: string): ImprovementPayload {
   return { improvements };
 }
 
-function parseImprovementPayloadFromReasoning(reasoning: string): ImprovementPayload {
-  const titles = extractReasoningIssueTitles(reasoning);
-  const evidenceHints = extractBacktickedIdentifiers(reasoning);
-  const curatedFallbacks: Improvement[] = [
-    {
-      slug: 'unsafe-vector-sql-literal',
-      title: 'Replace vector SQL literals',
-      why: 'Embedding arrays are interpolated into SQL strings in vectorSearch and saveClaimVector, which is brittle even with validateEmbedding.',
-      evidence: ['vectorSearch', 'saveClaimVector', 'validateEmbedding', 'embeddingLiteral'],
-    },
-    {
-      slug: 'cursor-fetchlimit-unbounded-scan',
-      title: 'Bound cursor pagination work',
-      why: 'hybridSearchPaginated switches to Number.MAX_SAFE_INTEGER for cursor paging, which can force an unbounded candidate fetch.',
-      evidence: ['hybridSearchPaginated', 'fetchLimit', 'Number.MAX_SAFE_INTEGER'],
-    },
-    {
-      slug: 'queryless-fallback-heavy-path',
-      title: 'Separate queryless search path',
-      why: 'hybridSearchWithScores mixes queryless fallback and query-time candidate expansion in one branch, which makes the expensive path harder to reason about and optimize.',
-      evidence: ['hybridSearchWithScores', 'querylessUnlimited', 'fallbackToTextOnlyResults'],
-    },
-  ];
+function parseImprovementRecallPayload(text: string): ImprovementRecallPayload {
+  const json = extractFirstJsonObject(text);
+  const parsed = JSON.parse(json) as {
+    status?: unknown;
+    improvements?: unknown;
+  };
 
-  const inferred = titles.slice(0, 3).map((title, index) => ({
-    slug: slugify(title),
-    title: title.replace(/\.$/, ''),
-    why: `Inferred from the model reasoning trace for ${TARGET_FILE_LABEL}.`,
-    evidence: evidenceHints.slice(index * 2, index * 2 + 3),
-  }));
-
-  const improvements = [...inferred];
-  for (const fallback of curatedFallbacks) {
-    if (improvements.length >= 3) {
-      break;
-    }
-    if (improvements.some((item) => item.slug === fallback.slug)) {
-      continue;
-    }
-    improvements.push(fallback);
+  if (parsed.status !== 'ok' && parsed.status !== 'no_context') {
+    throw new Error(`Expected status to be "ok" or "no_context", got: ${json}`);
+  }
+  if (!Array.isArray(parsed.improvements)) {
+    throw new Error(`Expected improvements array, got: ${json}`);
   }
 
-  if (improvements.length < 3) {
-    throw new Error(`Could not recover 3 improvements from reasoning: ${reasoning}`);
-  }
+  const improvements = parsed.improvements.map((entry, index) => {
+    const candidate = entry as Partial<ImprovementRecallItem>;
+    if (typeof candidate.slug !== 'string' || candidate.slug.trim().length === 0) {
+      throw new Error(`Improvement ${index + 1} is missing slug: ${json}`);
+    }
+    if (typeof candidate.explanation !== 'string' || candidate.explanation.trim().length === 0) {
+      throw new Error(`Improvement ${index + 1} is missing explanation: ${json}`);
+    }
+    if (!Array.isArray(candidate.evidence)) {
+      throw new Error(`Improvement ${index + 1} evidence must be a string array: ${json}`);
+    }
+    const evidence = candidate.evidence
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => value.trim());
 
-  return { improvements: improvements.slice(0, 3) };
+    return {
+      slug: slugify(candidate.slug),
+      explanation: candidate.explanation.trim(),
+      evidence,
+    };
+  });
+
+  return {
+    status: parsed.status,
+    improvements,
+  };
 }
 
-function extractReasoningIssueTitles(reasoning: string): string[] {
-  const titles = new Set<string>();
-  const patterns = [
-    /Issue\s+\d+\s*:\s*([^\n*.]+(?:\.[^\n*.]+)*)/g,
-    /\d+\.\s+\*\*([^*]+)\*\*/g,
-  ];
+function parseDecisionRecallPayload(text: string): DecisionRecallPayload {
+  const json = extractFirstJsonObject(text);
+  const parsed = JSON.parse(json) as {
+    status?: unknown;
+    decisions?: unknown;
+  };
 
-  for (const pattern of patterns) {
-    for (const match of reasoning.matchAll(pattern)) {
-      const title = match[1]?.trim();
-      if (title) {
-        titles.add(title.replace(/[:.]\s*$/, ''));
-      }
-    }
+  if (parsed.status !== 'ok' && parsed.status !== 'no_context') {
+    throw new Error(`Expected status to be "ok" or "no_context", got: ${json}`);
+  }
+  if (!Array.isArray(parsed.decisions)) {
+    throw new Error(`Expected decisions array, got: ${json}`);
   }
 
-  return [...titles];
-}
-
-function extractBacktickedIdentifiers(reasoning: string): string[] {
-  const identifiers = new Set<string>();
-  for (const match of reasoning.matchAll(/`([^`]+)`/g)) {
-    const value = match[1]?.trim();
-    if (value) {
-      identifiers.add(value);
+  const decisions = parsed.decisions.map((entry, index) => {
+    const candidate = entry as Partial<DecisionRecallItem>;
+    if (typeof candidate.id !== 'string' || candidate.id.trim().length === 0) {
+      throw new Error(`Decision ${index + 1} is missing id: ${json}`);
     }
-  }
-  return [...identifiers];
+    if (typeof candidate.summary !== 'string' || candidate.summary.trim().length === 0) {
+      throw new Error(`Decision ${index + 1} is missing summary: ${json}`);
+    }
+    if (!Array.isArray(candidate.params)) {
+      throw new Error(`Decision ${index + 1} params must be a string array: ${json}`);
+    }
+    const params = candidate.params
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => value.trim());
+
+    return {
+      id: candidate.id.trim(),
+      summary: candidate.summary.trim(),
+      params,
+    };
+  });
+
+  return {
+    status: parsed.status,
+    decisions,
+  };
 }
 
 function extractFirstJsonObject(text: string): string {
@@ -1044,6 +1126,67 @@ function extractFirstJsonObject(text: string): string {
   }
 
   throw new Error(`Unterminated JSON object in model response: ${text}`);
+}
+
+function extractCompletionText(payload: ChatCompletionResponse): string {
+  const directText = payload.choices?.[0]?.message?.content;
+  return typeof directText === 'string' ? directText.trim() : '';
+}
+
+function buildCompletionMeta(
+  payload: ChatCompletionResponse,
+  options: {
+    jsonMode: boolean;
+  },
+  text: string
+): CompletionMeta {
+  const choice = payload.choices?.[0];
+  const finishReason =
+    typeof choice?.finish_reason === 'string' && choice.finish_reason.trim().length > 0
+      ? choice.finish_reason
+      : undefined;
+  const hasReasoning =
+    typeof choice?.message?.reasoning === 'string' && choice.message.reasoning.trim().length > 0;
+  const invalidReasons: string[] = [];
+
+  if (text.length === 0) {
+    invalidReasons.push('empty_content');
+  }
+  if (finishReason === 'length') {
+    invalidReasons.push('finish_reason_length');
+  }
+  if (options.jsonMode && text.length > 0) {
+    invalidReasons.push(...detectJsonResponseIssues(text));
+  }
+
+  return {
+    mode: text.length > 0 ? 'content' : 'empty',
+    has_reasoning: hasReasoning,
+    finish_reason: finishReason,
+    invalid_reasons: [...new Set(invalidReasons)],
+  };
+}
+
+function detectJsonResponseIssues(text: string): string[] {
+  const issues: string[] = [];
+  const trimmed = text.trim();
+
+  try {
+    const json = extractFirstJsonObject(trimmed);
+    if (json !== trimmed) {
+      issues.push('non_json_wrapper');
+    }
+  } catch {
+    issues.push('invalid_json_object');
+  }
+
+  const normalized = normalizeText(trimmed);
+  const leakageMarkers = ['thinking process', '<think>', 'draft analysis', 'reasoning:'];
+  if (leakageMarkers.some((marker) => normalized.includes(normalizeText(marker)))) {
+    issues.push('reasoning_leakage');
+  }
+
+  return [...new Set(issues)];
 }
 
 function slugify(value: string): string {
@@ -1093,21 +1236,105 @@ function findGenericMarkers(answer: string): string[] {
   return markers.filter((marker) => normalizedAnswer.includes(normalizeText(marker)));
 }
 
-function scoreTaskContinuity(improvements: Improvement[], answer: string): ContinuityScore {
+function mergeMetaInvalidReasons(meta: CompletionMeta, extra: string[]): CompletionMeta {
+  return {
+    ...meta,
+    invalid_reasons: [...new Set([...meta.invalid_reasons, ...extra])],
+  };
+}
+
+function tryParseImprovementRecallPayload(
+  text: string
+): { value?: ImprovementRecallPayload; invalid_reasons: string[] } {
+  if (text.trim().length === 0) {
+    return { invalid_reasons: ['missing_json_payload'] };
+  }
+
+  try {
+    return {
+      value: parseImprovementRecallPayload(text),
+      invalid_reasons: [],
+    };
+  } catch (error) {
+    return {
+      invalid_reasons: [
+        `improvement_recall_parse_failed:${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ],
+    };
+  }
+}
+
+function tryParseDecisionRecallPayload(
+  text: string
+): { value?: DecisionRecallPayload; invalid_reasons: string[] } {
+  if (text.trim().length === 0) {
+    return { invalid_reasons: ['missing_json_payload'] };
+  }
+
+  try {
+    return {
+      value: parseDecisionRecallPayload(text),
+      invalid_reasons: [],
+    };
+  } catch (error) {
+    return {
+      invalid_reasons: [
+        `decision_recall_parse_failed:${error instanceof Error ? error.message : String(error)}`,
+      ],
+    };
+  }
+}
+
+function scoreTaskContinuity(
+  improvements: Improvement[],
+  payload: ImprovementRecallPayload | undefined,
+  answer: string,
+  meta: CompletionMeta
+): ContinuityScore {
+  const recallCorpus = payload
+    ? payload.improvements
+        .flatMap((improvement) => [
+          improvement.slug,
+          improvement.explanation,
+          ...improvement.evidence,
+        ])
+        .join('\n')
+    : answer;
   const slugScore = computeAnchorScore(
-    answer,
+    recallCorpus,
     improvements.map((improvement) => improvement.slug)
   );
   const evidenceScore = computeAnchorScore(
-    answer,
+    recallCorpus,
     improvements.flatMap((improvement) => improvement.evidence)
   );
-  const genericMarkers = findGenericMarkers(answer);
+  const genericMarkers = [
+    ...(payload?.status === 'no_context' ? ['status:no_context'] : []),
+    ...findGenericMarkers(answer),
+  ];
+  const invalidReasons = [...meta.invalid_reasons];
+
+  if (!payload) {
+    invalidReasons.push('missing_or_unparseable_payload');
+  } else {
+    if (payload.status === 'ok' && payload.improvements.length === 0) {
+      invalidReasons.push('ok_without_improvements');
+    }
+    if (payload.status === 'no_context' && payload.improvements.length > 0) {
+      invalidReasons.push('no_context_with_improvements');
+    }
+  }
 
   let verdict: ContinuityScore['verdict'] = 'generic_or_no_context';
-  if (slugScore.matched.length >= 2) {
+  if (invalidReasons.length > 0) {
+    verdict = 'invalid_response';
+  } else if (payload?.status === 'no_context') {
+    verdict = 'generic_or_no_context';
+  } else if (slugScore.matched.length === improvements.length && improvements.length > 0) {
     verdict = 'specific_recall';
-  } else if (slugScore.matched.length >= 1 || evidenceScore.matched.length >= 2) {
+  } else if (slugScore.matched.length >= 1 || evidenceScore.matched.length >= 1) {
     verdict = 'partial_recall';
   }
 
@@ -1115,21 +1342,49 @@ function scoreTaskContinuity(improvements: Improvement[], answer: string): Conti
     slug_recall: slugScore,
     evidence_recall: evidenceScore,
     generic_markers: genericMarkers,
+    invalid_reasons: [...new Set(invalidReasons)],
     verdict,
   };
 }
 
-function scoreDesignDecisionRecall(decisions: DecisionSeed[], answer: string): DecisionScore {
+function scoreDesignDecisionRecall(
+  decisions: DecisionSeed[],
+  payload: DecisionRecallPayload | undefined,
+  answer: string,
+  meta: CompletionMeta
+): DecisionScore {
+  const recallCorpus = payload
+    ? payload.decisions.flatMap((decision) => [decision.id, decision.summary, ...decision.params]).join('\n')
+    : answer;
   const decisionIds = decisions.map((decision) => decision.id);
-  const detailAnchors = ['0.65', '0.15', '48', '96', 'vector search', 'threshold', 'reranking'];
-  const decisionIdScore = computeAnchorScore(answer, decisionIds);
-  const detailScore = computeAnchorScore(answer, detailAnchors);
-  const genericMarkers = findGenericMarkers(answer);
+  const detailAnchors = ['0.65', '0.15', '48', '96', 'alpha', 'threshold', 'k_text', 'k_vec'];
+  const decisionIdScore = computeAnchorScore(recallCorpus, decisionIds);
+  const detailScore = computeAnchorScore(recallCorpus, detailAnchors);
+  const genericMarkers = [
+    ...(payload?.status === 'no_context' ? ['status:no_context'] : []),
+    ...findGenericMarkers(answer),
+  ];
+  const invalidReasons = [...meta.invalid_reasons];
+
+  if (!payload) {
+    invalidReasons.push('missing_or_unparseable_payload');
+  } else {
+    if (payload.status === 'ok' && payload.decisions.length === 0) {
+      invalidReasons.push('ok_without_decisions');
+    }
+    if (payload.status === 'no_context' && payload.decisions.length > 0) {
+      invalidReasons.push('no_context_with_decisions');
+    }
+  }
 
   let verdict: DecisionScore['verdict'] = 'generic_or_no_context';
-  if (decisionIdScore.matched.length >= 2) {
+  if (invalidReasons.length > 0) {
+    verdict = 'invalid_response';
+  } else if (payload?.status === 'no_context') {
+    verdict = 'generic_or_no_context';
+  } else if (decisionIdScore.matched.length === decisions.length && detailScore.matched.length >= 3) {
     verdict = 'specific_recall';
-  } else if (decisionIdScore.matched.length >= 1 || detailScore.matched.length >= 3) {
+  } else if (decisionIdScore.matched.length >= 1 || detailScore.matched.length >= 1) {
     verdict = 'partial_recall';
   }
 
@@ -1137,18 +1392,15 @@ function scoreDesignDecisionRecall(decisions: DecisionSeed[], answer: string): D
     decision_id_recall: decisionIdScore,
     detail_recall: detailScore,
     generic_markers: genericMarkers,
+    invalid_reasons: [...new Set(invalidReasons)],
     verdict,
   };
 }
 
 function formatImprovementClaim(improvement: Improvement): string {
-  return [
-    `improvement_id=${improvement.slug}`,
-    `file=${TARGET_FILE_LABEL}`,
-    `title=${improvement.title}`,
-    `why=${improvement.why}`,
-    `evidence=${improvement.evidence.join(', ') || 'none'}`,
-  ].join('; ');
+  const evidence =
+    improvement.evidence.length > 0 ? ` Evidence: ${improvement.evidence.join(', ')}.` : '';
+  return `${TARGET_FILE_LABEL} improvement ${improvement.slug}: ${improvement.why}${evidence}`;
 }
 
 function summarizeActivateResult(result: unknown): unknown {
@@ -1178,12 +1430,6 @@ function summarizeActivateResult(result: unknown): unknown {
       ? payload.claims.map((item) => ({
           id: item.claim?.id,
           text: item.claim?.text,
-          kind: item.claim?.kind,
-          scope: item.claim?.scope,
-          memory_type: item.claim?.memory_type,
-          score: item.score,
-          rank: item.rank,
-          source_layer: item.source_layer,
         }))
       : [],
   };
@@ -1194,17 +1440,23 @@ function buildToolTranscript(
   args: Record<string, unknown>,
   result: unknown
 ): string {
+  const payload = result as {
+    active_context_id?: string;
+    claims_count?: number;
+    claims?: Array<{ id?: string; text?: string }>;
+  };
+  const claimLines =
+    payload.claims && payload.claims.length > 0
+      ? payload.claims.map((claim) => `- ${claim.text ?? claim.id ?? 'unknown claim'}`)
+      : ['- none'];
+
   return [
-    'Simulated MCP tool call transcript:',
-    `Tool: ${toolName}`,
-    'Arguments:',
-    '```json',
-    JSON.stringify(args, null, 2),
-    '```',
-    'Result:',
-    '```json',
-    JSON.stringify(result, null, 2),
-    '```',
+    `Simulated MCP tool result from ${toolName}.`,
+    `Query: ${typeof args.q === 'string' ? args.q : 'n/a'}`,
+    `Active context: ${payload.active_context_id ?? 'n/a'}`,
+    `Claims returned: ${payload.claims_count ?? claimLines.length}`,
+    'Relevant memory claims:',
+    ...claimLines,
   ].join('\n');
 }
 
@@ -1277,6 +1529,8 @@ function buildReport(results: ExperimentResults): string {
     `- Ollama models endpoint: \`${results.configuration.ollama_models_url}\``,
     `- Model: \`${results.configuration.model}\``,
     `- Max tokens: \`${results.configuration.max_tokens}\``,
+    `- JSON retry max tokens: \`${results.configuration.json_retry_max_tokens}\``,
+    `- Reasoning effort: \`${results.configuration.reasoning_effort}\``,
     `- Temperature: \`${results.configuration.temperature}\``,
     `- Target file: \`${results.configuration.target_file}\``,
     `- MCP server: \`${results.configuration.mcp_server}\``,
@@ -1289,8 +1543,10 @@ function buildReport(results: ExperimentResults): string {
     '',
     `- WITH-MEMORY verdict: \`${experiment1.with_memory.score.verdict}\``,
     `- WITH-MEMORY slug recall: ${experiment1.with_memory.score.slug_recall.matched.length}/${experiment1.with_memory.score.slug_recall.total}`,
+    `- WITH-MEMORY invalid reasons: ${formatInlineList(experiment1.with_memory.score.invalid_reasons)}`,
     `- WITHOUT-MEMORY verdict: \`${experiment1.without_memory.score.verdict}\``,
     `- WITHOUT-MEMORY slug recall: ${experiment1.without_memory.score.slug_recall.matched.length}/${experiment1.without_memory.score.slug_recall.total}`,
+    `- WITHOUT-MEMORY invalid reasons: ${formatInlineList(experiment1.without_memory.score.invalid_reasons)}`,
     '',
     '### WITH-MEMORY recovered slugs',
     '',
@@ -1316,8 +1572,10 @@ function buildReport(results: ExperimentResults): string {
     '',
     `- WITH-MEMORY verdict: \`${experiment2.with_memory.score.verdict}\``,
     `- WITH-MEMORY decision recall: ${experiment2.with_memory.score.decision_id_recall.matched.length}/${experiment2.with_memory.score.decision_id_recall.total}`,
+    `- WITH-MEMORY invalid reasons: ${formatInlineList(experiment2.with_memory.score.invalid_reasons)}`,
     `- WITHOUT-MEMORY verdict: \`${experiment2.without_memory.score.verdict}\``,
     `- WITHOUT-MEMORY decision recall: ${experiment2.without_memory.score.decision_id_recall.matched.length}/${experiment2.without_memory.score.decision_id_recall.total}`,
+    `- WITHOUT-MEMORY invalid reasons: ${formatInlineList(experiment2.without_memory.score.invalid_reasons)}`,
     '',
     '### WITH-MEMORY recovered decision ids',
     '',
@@ -1352,6 +1610,10 @@ function renderFlatList(items: string[]): string[] {
     return ['- none'];
   }
   return items.map((item) => `- \`${item}\``);
+}
+
+function formatInlineList(items: string[]): string {
+  return items.length > 0 ? items.map((item) => `\`${item}\``).join(', ') : 'none';
 }
 
 function parsePositiveInt(value: string | undefined): number | undefined {
