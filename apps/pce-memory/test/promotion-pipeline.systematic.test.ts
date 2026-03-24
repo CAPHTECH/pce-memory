@@ -221,9 +221,7 @@ describe('promotion pipeline systematic boundaries', () => {
     const distill = await distillFromObservations([obs.observation_id]);
     const candidateHash = await readCandidateHash(distill['candidate_id'] as string);
 
-    expect(candidateHash).toBe(
-      `sha256:${computeContentHash(distill['distilled_text'] as string)}`
-    );
+    expect(candidateHash).toBe(`sha256:${computeContentHash(distill['distilled_text'] as string)}`);
   });
 
   it('accepts the configured maximum number of unique sources and rejects one more', async () => {
@@ -408,17 +406,32 @@ describe('promotion pipeline systematic failures', () => {
     const cases = [
       {
         id: 'pq_invalid_kind',
-        row: { ...base, proposed_kind: 'bogus', proposed_scope: 'project', proposed_boundary_class: 'internal' },
+        row: {
+          ...base,
+          proposed_kind: 'bogus',
+          proposed_scope: 'project',
+          proposed_boundary_class: 'internal',
+        },
         message: 'proposed_kind',
       },
       {
         id: 'pq_invalid_scope',
-        row: { ...base, proposed_kind: 'fact', proposed_scope: 'session', proposed_boundary_class: 'internal' },
+        row: {
+          ...base,
+          proposed_kind: 'fact',
+          proposed_scope: 'session',
+          proposed_boundary_class: 'internal',
+        },
         message: 'proposed_scope',
       },
       {
         id: 'pq_invalid_boundary',
-        row: { ...base, proposed_kind: 'fact', proposed_scope: 'project', proposed_boundary_class: 'ultra_secret' },
+        row: {
+          ...base,
+          proposed_kind: 'fact',
+          proposed_scope: 'project',
+          proposed_boundary_class: 'ultra_secret',
+        },
         message: 'proposed_boundary_class',
       },
     ];
@@ -543,7 +556,10 @@ describe('Property: promotion pipeline', () => {
   it('Property: candidate_hash is deterministic for the same ordered sources', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.array(fc.uuid().map((id) => `note-${id}`), { minLength: 1, maxLength: 4 }),
+        fc.array(
+          fc.uuid().map((id) => `note-${id}`),
+          { minLength: 1, maxLength: 4 }
+        ),
         async (texts) => {
           await resetSystem();
 
@@ -559,9 +575,7 @@ describe('Property: promotion pipeline', () => {
           const secondHash = await readCandidateHash(second['candidate_id'] as string);
 
           expect(firstHash).toBe(secondHash);
-          expect(firstHash).toBe(
-            `sha256:${computeContentHash(first['distilled_text'] as string)}`
-          );
+          expect(firstHash).toBe(`sha256:${computeContentHash(first['distilled_text'] as string)}`);
         }
       ),
       { numRuns: 10 }

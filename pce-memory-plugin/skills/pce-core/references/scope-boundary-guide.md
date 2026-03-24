@@ -82,11 +82,11 @@ Is this raw session evidence or temporary work state?
 
 ## Common Combinations
 
-| Scope / layer       | Boundary   | Example                                        |
-| ------------------- | ---------- | ---------------------------------------------- |
-| session / micro     | internal   | Internal API behavior notes during debugging   |
-| session / micro     | secret     | Temporary secret-bearing logs kept local only  |
-| project / meso      | internal   | Project-specific DB design decisions           |
-| project / meso      | public     | OSS library selection rationale                |
-| principle / macro   | public     | TDD adoption policy                            |
-| principle / macro   | internal   | Internal coding standards                      |
+| Scope / layer     | Boundary | Example                                       |
+| ----------------- | -------- | --------------------------------------------- |
+| session / micro   | internal | Internal API behavior notes during debugging  |
+| session / micro   | secret   | Temporary secret-bearing logs kept local only |
+| project / meso    | internal | Project-specific DB design decisions          |
+| project / meso    | public   | OSS library selection rationale               |
+| principle / macro | public   | TDD adoption policy                           |
+| principle / macro | internal | Internal coding standards                     |

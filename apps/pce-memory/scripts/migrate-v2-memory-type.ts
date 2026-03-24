@@ -2,12 +2,7 @@
 
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  closeDb,
-  getConnection,
-  initDb,
-  initSchema,
-} from '../src/db/connection.ts';
+import { closeDb, getConnection, initDb, initSchema } from '../src/db/connection.ts';
 import { isValidMemoryType, type MemoryType } from '../src/domain/types.ts';
 import { getEvidenceForClaims } from '../src/store/evidence.ts';
 import { normalizeRowsTimestamps } from '../src/utils/serialization.ts';
@@ -127,7 +122,9 @@ function getSessionMigrationCandidateId(claimId: string): string {
   return `pq_mig_${claimId.replace(/^clm_/, '')}`;
 }
 
-function buildSessionMigrationCandidateHash(claim: Pick<MigrationClaimRow, 'id' | 'content_hash'>): string {
+function buildSessionMigrationCandidateHash(
+  claim: Pick<MigrationClaimRow, 'id' | 'content_hash'>
+): string {
   return claim.content_hash;
 }
 
@@ -396,7 +393,7 @@ function isDirectExecution(metaUrl: string): boolean {
 
 if (isDirectExecution(import.meta.url)) {
   main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
     console.error(message);
     process.exitCode = 1;
   });

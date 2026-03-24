@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as E from 'fp-ts/Either';
-import {
-  getConnection,
-  initDb,
-  initSchema,
-  resetDbAsync,
-} from '../src/db/connection';
+import { getConnection, initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import { handleUpsert } from '../src/core/handlers';
 import { applyPolicyOp, resetMemoryState } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
@@ -576,7 +571,9 @@ describe('v2 memory_type migration', () => {
       ['pending']
     );
     const queueRows = queueReader.getRowObjects() as Array<{ cnt: number }>;
-    const createdCounts = reports.map((report) => report.summary.session_queue_candidates_created).sort();
+    const createdCounts = reports
+      .map((report) => report.summary.session_queue_candidates_created)
+      .sort();
 
     expect(queueRows[0]?.cnt).toBe(1);
     expect(createdCounts).toEqual([0, 1]);

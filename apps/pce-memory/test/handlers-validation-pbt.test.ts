@@ -132,52 +132,57 @@ describe('Property: handler validation and state invariants', () => {
     await applyPolicy();
 
     await fc.assert(
-      fc.asyncProperty(fc.array(nonSecretBoundaryArb, { minLength: 1, maxLength: 3 }), async (boundaries) => {
-        const observationIds: string[] = [];
+      fc.asyncProperty(
+        fc.array(nonSecretBoundaryArb, { minLength: 1, maxLength: 3 }),
+        async (boundaries) => {
+          const observationIds: string[] = [];
 
-        for (const boundary of boundaries) {
-          const content = `${boundary} review note alpha bravo charlie ${String.fromCharCode(
-            97 + observationIds.length
-          )}`;
-          const observe = expectSuccess(
-            await dispatchTool('pce_memory_observe', {
-              source_type: 'chat',
-              content,
-              boundary_class: boundary,
-              extract: { mode: 'noop' },
+          for (const boundary of boundaries) {
+            const content = `${boundary} review note alpha bravo charlie ${String.fromCharCode(
+              97 + observationIds.length
+            )}`;
+            const observe = expectSuccess(
+              await dispatchTool('pce_memory_observe', {
+                source_type: 'chat',
+                content,
+                boundary_class: boundary,
+                extract: { mode: 'noop' },
+              })
+            );
+            observationIds.push(observe.observation_id as string);
+          }
+
+          const distill = expectSuccess(
+            await dispatchTool('pce_memory_distill', {
+              source_observation_ids: observationIds,
+              note: 'property-based monotonicity check',
             })
           );
-          observationIds.push(observe.observation_id as string);
+
+          const expectedBoundary = boundaries.reduce((current, candidate) =>
+            BOUNDARY_STRICTNESS[candidate] > BOUNDARY_STRICTNESS[current] ? candidate : current
+          );
+
+          expect(distill.proposed_boundary_class).toBe(expectedBoundary);
+
+          const promote = expectSuccess(
+            await dispatchTool('pce_memory_promote', {
+              candidate_id: distill.candidate_id,
+              provenance: PROMOTE_PROVENANCE,
+            })
+          );
+
+          const conn = await getConnection();
+          const reader = await conn.runAndReadAll(
+            'SELECT boundary_class FROM claims WHERE id = $1',
+            [promote.claim_id]
+          );
+          const rows = reader.getRowObjects() as Array<{
+            boundary_class: 'public' | 'internal' | 'pii';
+          }>;
+          expect(rows[0]?.boundary_class).toBe(expectedBoundary);
         }
-
-        const distill = expectSuccess(
-          await dispatchTool('pce_memory_distill', {
-            source_observation_ids: observationIds,
-            note: 'property-based monotonicity check',
-          })
-        );
-
-        const expectedBoundary = boundaries.reduce((current, candidate) =>
-          BOUNDARY_STRICTNESS[candidate] > BOUNDARY_STRICTNESS[current] ? candidate : current
-        );
-
-        expect(distill.proposed_boundary_class).toBe(expectedBoundary);
-
-        const promote = expectSuccess(
-          await dispatchTool('pce_memory_promote', {
-            candidate_id: distill.candidate_id,
-            provenance: PROMOTE_PROVENANCE,
-          })
-        );
-
-        const conn = await getConnection();
-        const reader = await conn.runAndReadAll(
-          'SELECT boundary_class FROM claims WHERE id = $1',
-          [promote.claim_id]
-        );
-        const rows = reader.getRowObjects() as Array<{ boundary_class: 'public' | 'internal' | 'pii' }>;
-        expect(rows[0]?.boundary_class).toBe(expectedBoundary);
-      }),
+      ),
       { numRuns: 15 }
     );
   });
@@ -228,10 +233,7 @@ describe('Property: handler validation and state invariants', () => {
         ),
         async (invalidCall) => {
           const error = expectError(
-            await dispatchTool(
-              invalidCall.name,
-              invalidCall.args as Record<string, unknown>
-            )
+            await dispatchTool(invalidCall.name, invalidCall.args as Record<string, unknown>)
           );
           expect(error.code.length).toBeGreaterThan(0);
           expect(error.message.length).toBeGreaterThan(0);

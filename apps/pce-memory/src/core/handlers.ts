@@ -453,7 +453,10 @@ function validateRequiredProvenance(
   return { ok: true, value: { ...candidate, at: new Date(atMs).toISOString() } };
 }
 
-function resolveObservationSourceText(input: { content?: string | null; content_digest: string }): string {
+function resolveObservationSourceText(input: {
+  content?: string | null;
+  content_digest: string;
+}): string {
   if (typeof input.content === 'string' && input.content.trim().length > 0) {
     return input.content;
   }
@@ -778,18 +781,17 @@ export async function handleUpsert(args: Record<string, unknown>) {
     provenance,
     entities,
     relations,
-  } =
-    args as {
-      text?: string;
-      kind?: string;
-      scope?: string;
-      boundary_class?: string;
-      memory_type?: string;
-      content_hash?: string;
-      provenance?: Provenance;
-      entities?: EntityInput[];
-      relations?: RelationInput[];
-    };
+  } = args as {
+    text?: string;
+    kind?: string;
+    scope?: string;
+    boundary_class?: string;
+    memory_type?: string;
+    content_hash?: string;
+    provenance?: Provenance;
+    entities?: EntityInput[];
+    relations?: RelationInput[];
+  };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
 
@@ -957,7 +959,11 @@ export async function handleUpsert(args: Record<string, unknown>) {
     const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
       {
-        ...err(e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'UPSERT_FAILED', msg, reqId),
+        ...err(
+          e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'UPSERT_FAILED',
+          msg,
+          reqId
+        ),
         trace_id: traceId,
       },
       { isError: true }
@@ -1399,7 +1405,8 @@ export async function handleDistill(args: Record<string, unknown>) {
     const rawClaimIds =
       source_claim_ids === undefined
         ? []
-        : Array.isArray(source_claim_ids) && source_claim_ids.every((value) => typeof value === 'string')
+        : Array.isArray(source_claim_ids) &&
+            source_claim_ids.every((value) => typeof value === 'string')
           ? (source_claim_ids as string[])
           : null;
 
@@ -1422,7 +1429,10 @@ export async function handleDistill(args: Record<string, unknown>) {
 
     if (active_context_id !== undefined && typeof active_context_id !== 'string') {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'active_context_id must be a string', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'active_context_id must be a string', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -1480,22 +1490,32 @@ export async function handleDistill(args: Record<string, unknown>) {
     const observations = await findObservationsByIds(observationIds);
     if (observations.length !== observationIds.length) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'one or more observation sources were not found', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'one or more observation sources were not found', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
-    const observationsById = new Map(observations.map((observation) => [observation.id, observation]));
+    const observationsById = new Map(
+      observations.map((observation) => [observation.id, observation])
+    );
 
     const sourceClaims = await findClaimsByIds(claimIds);
     if (sourceClaims.length !== claimIds.length) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'one or more claim sources were not found', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'one or more claim sources were not found', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
     const sourceClaimsById = new Map(sourceClaims.map((claim) => [claim.id, claim]));
 
-    const activeContext = active_context_id ? await findActiveContextById(active_context_id) : undefined;
+    const activeContext = active_context_id
+      ? await findActiveContextById(active_context_id)
+      : undefined;
     if (active_context_id && !activeContext) {
       return createToolResult(
         { ...err('VALIDATION_ERROR', 'active_context_id not found', reqId), trace_id: traceId },
@@ -1552,12 +1572,18 @@ export async function handleDistill(args: Record<string, unknown>) {
 
     if (sourceTexts.length === 0) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'no source text available to distill', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'no source text available to distill', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
 
-    const maxSources = readPositiveIntEnv('PCE_PROMOTION_MAX_SOURCES', DEFAULT_PROMOTION_MAX_SOURCES);
+    const maxSources = readPositiveIntEnv(
+      'PCE_PROMOTION_MAX_SOURCES',
+      DEFAULT_PROMOTION_MAX_SOURCES
+    );
     if (sourceTexts.length > maxSources) {
       return createToolResult(
         {
@@ -1578,7 +1604,9 @@ export async function handleDistill(args: Record<string, unknown>) {
     }
 
     const commonClaimKinds = new Set(
-      [...allClaims.values()].map((claim) => claim.kind).filter((kind): kind is ClaimKind => isValidClaimKind(kind))
+      [...allClaims.values()]
+        .map((claim) => claim.kind)
+        .filter((kind): kind is ClaimKind => isValidClaimKind(kind))
     );
     const resolvedKind =
       (proposed_kind as ClaimKind | undefined) ??
@@ -1588,7 +1616,9 @@ export async function handleDistill(args: Record<string, unknown>) {
     const commonMemoryTypes = new Set(
       [...allClaims.values()]
         .map((claim) => claim.memory_type)
-        .filter((memoryType): memoryType is MemoryType => memoryType !== null && memoryType !== undefined)
+        .filter(
+          (memoryType): memoryType is MemoryType => memoryType !== null && memoryType !== undefined
+        )
     );
     const resolvedMemoryType =
       explicitMemoryType ??
@@ -1597,11 +1627,15 @@ export async function handleDistill(args: Record<string, unknown>) {
         : inferMemoryTypeForKind(resolvedKind));
 
     const resolvedScope =
-      (proposed_scope as DurableScope | undefined) ?? inferDurableScope(resolvedKind, resolvedMemoryType);
+      (proposed_scope as DurableScope | undefined) ??
+      inferDurableScope(resolvedKind, resolvedMemoryType);
     const targetLayer = mapDurableScopeToTargetLayer(resolvedScope);
     const proposedBoundaryClass = getMostRestrictiveBoundary(sourceBoundaries);
     const distilledText = sourceTexts.join('\n\n---\n\n');
-    const maxPromotionBytes = readPositiveIntEnv('PCE_PROMOTION_MAX_BYTES', DEFAULT_PROMOTION_MAX_BYTES);
+    const maxPromotionBytes = readPositiveIntEnv(
+      'PCE_PROMOTION_MAX_BYTES',
+      DEFAULT_PROMOTION_MAX_BYTES
+    );
     if (Buffer.byteLength(distilledText, 'utf8') > maxPromotionBytes) {
       return createToolResult(
         {
@@ -1796,7 +1830,11 @@ export async function handlePromote(args: Record<string, unknown>) {
     if (candidate.status !== 'pending') {
       return createToolResult(
         {
-          ...err('VALIDATION_ERROR', `candidate status must be pending (got ${candidate.status})`, reqId),
+          ...err(
+            'VALIDATION_ERROR',
+            `candidate status must be pending (got ${candidate.status})`,
+            reqId
+          ),
           trace_id: traceId,
         },
         { isError: true }
@@ -1804,13 +1842,19 @@ export async function handlePromote(args: Record<string, unknown>) {
     }
     if (!isValidClaimKind(candidate.proposed_kind)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'candidate proposed_kind is invalid', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'candidate proposed_kind is invalid', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
     if (!isDurableScope(candidate.proposed_scope)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'candidate proposed_scope is invalid', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'candidate proposed_scope is invalid', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -1848,7 +1892,11 @@ export async function handlePromote(args: Record<string, unknown>) {
     if (candidate.proposed_boundary_class === 'secret') {
       return createToolResult(
         {
-          ...err('VALIDATION_ERROR', 'secret candidates cannot be promoted to durable claims', reqId),
+          ...err(
+            'VALIDATION_ERROR',
+            'secret candidates cannot be promoted to durable claims',
+            reqId
+          ),
           trace_id: traceId,
         },
         { isError: true }
@@ -1866,7 +1914,10 @@ export async function handlePromote(args: Record<string, unknown>) {
     );
     if (!boundaryCheck.allowed) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'candidate failed boundary validation', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'candidate failed boundary validation', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -1912,7 +1963,9 @@ export async function handlePromote(args: Record<string, unknown>) {
             kind: candidate.proposed_kind,
             scope: candidate.proposed_scope,
             boundary_class: candidate.proposed_boundary_class,
-            ...(candidate.proposed_memory_type ? { memory_type: candidate.proposed_memory_type } : {}),
+            ...(candidate.proposed_memory_type
+              ? { memory_type: candidate.proposed_memory_type }
+              : {}),
             content_hash: candidate.candidate_hash,
             provenance: promotionProvenance,
           },
@@ -1923,7 +1976,9 @@ export async function handlePromote(args: Record<string, unknown>) {
           kind: candidate.proposed_kind,
           scope: candidate.proposed_scope,
           boundary_class: candidate.proposed_boundary_class,
-          ...(candidate.proposed_memory_type ? { memory_type: candidate.proposed_memory_type } : {}),
+          ...(candidate.proposed_memory_type
+            ? { memory_type: candidate.proposed_memory_type }
+            : {}),
           content_hash: candidate.candidate_hash,
           provenance: promotionProvenance,
         });
@@ -2043,7 +2098,11 @@ export async function handlePromote(args: Record<string, unknown>) {
     const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
       {
-        ...err(e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'DB_ERROR', msg, reqId),
+        ...err(
+          e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'DB_ERROR',
+          msg,
+          reqId
+        ),
         trace_id: traceId,
       },
       { isError: true }
@@ -2276,7 +2335,10 @@ export async function handleActivate(args: Record<string, unknown>) {
     }
     if (typeof top_k === 'number' && (!Number.isInteger(top_k) || top_k < 1 || top_k > 50)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'top_k must be an integer between 1 and 50', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'top_k must be an integer between 1 and 50', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -2353,9 +2415,7 @@ export async function handleActivate(args: Record<string, unknown>) {
       ...(resolvedMemoryTypeFilter ? { memoryTypeFilter: resolvedMemoryTypeFilter } : {}),
       includeBreakdown: true,
       ...(typeof hybridPolicy.alpha === 'number' ? { alpha: hybridPolicy.alpha } : {}),
-      ...(typeof hybridPolicy.threshold === 'number'
-        ? { threshold: hybridPolicy.threshold }
-        : {}),
+      ...(typeof hybridPolicy.threshold === 'number' ? { threshold: hybridPolicy.threshold } : {}),
       ...(typeof hybridPolicy.k_txt === 'number' ? { kText: hybridPolicy.k_txt } : {}),
       ...(typeof hybridPolicy.k_vec === 'number' ? { kVec: hybridPolicy.k_vec } : {}),
     };
@@ -2374,10 +2434,13 @@ export async function handleActivate(args: Record<string, unknown>) {
         }),
       ]);
 
-      const combinedResults = [...durableResults, ...observationResults].sort(compareActivateSearchItems);
+      const combinedResults = [...durableResults, ...observationResults].sort(
+        compareActivateSearchItems
+      );
       const cursorIndex =
         cursor !== undefined ? combinedResults.findIndex((item) => item.claim.id === cursor) : -1;
-      const pagedResults = cursorIndex >= 0 ? combinedResults.slice(cursorIndex + 1) : combinedResults;
+      const pagedResults =
+        cursorIndex >= 0 ? combinedResults.slice(cursorIndex + 1) : combinedResults;
 
       hasMore = pagedResults.length > resolvedTopK;
       searchResults = pagedResults.slice(0, resolvedTopK);

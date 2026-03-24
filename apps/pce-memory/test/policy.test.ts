@@ -82,7 +82,9 @@ describe('loadLatestPolicy', () => {
       expect(result.right.config_json.boundary.version).toBe(defaultPolicy.boundary.version);
       expect(result.right.config_json.boundary.scopes).toBeDefined();
       expect(result.right.config_json.boundary.boundary_classes).toBeDefined();
-      expect(result.right.config_json.retrieval?.hybrid?.alpha).toBe(defaultPolicy.retrieval?.hybrid?.alpha);
+      expect(result.right.config_json.retrieval?.hybrid?.alpha).toBe(
+        defaultPolicy.retrieval?.hybrid?.alpha
+      );
     }
   });
 });

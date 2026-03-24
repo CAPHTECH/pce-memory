@@ -310,7 +310,10 @@ describe('systematic boundary validation', () => {
 
     const distill = expectSuccess(
       await dispatchTool('pce_memory_distill', {
-        source_observation_ids: [publicObservation.observation_id, secretObservation.observation_id],
+        source_observation_ids: [
+          publicObservation.observation_id,
+          secretObservation.observation_id,
+        ],
       })
     );
 

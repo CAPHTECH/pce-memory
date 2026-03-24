@@ -248,7 +248,9 @@ async function migrateObservationsBoundaryClass(conn: DuckDBConnection): Promise
 
   console.error('[DB] Migrating observations: adding boundary_class column...');
   await conn.run("ALTER TABLE observations ADD COLUMN boundary_class TEXT DEFAULT 'internal'");
-  await conn.run("UPDATE observations SET boundary_class = 'internal' WHERE boundary_class IS NULL");
+  await conn.run(
+    "UPDATE observations SET boundary_class = 'internal' WHERE boundary_class IS NULL"
+  );
 }
 
 async function migrateActiveContextsV2(conn: DuckDBConnection): Promise<void> {

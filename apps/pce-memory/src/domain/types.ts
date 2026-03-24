@@ -16,7 +16,13 @@ export type ClaimKind = (typeof CLAIM_KINDS)[number];
 /**
  * Memory typeの有効な値
  */
-export const MEMORY_TYPES = ['evidence', 'working_state', 'knowledge', 'procedure', 'norm'] as const;
+export const MEMORY_TYPES = [
+  'evidence',
+  'working_state',
+  'knowledge',
+  'procedure',
+  'norm',
+] as const;
 
 /**
  * Memory typeのユニオン型

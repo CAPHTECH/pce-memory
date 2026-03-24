@@ -159,7 +159,9 @@ function parseObservationTags(tags: unknown): string[] | null {
   return null;
 }
 
-function buildActivatedObservationClaim(observation: Observation): ActivatedObservationClaim | null {
+function buildActivatedObservationClaim(
+  observation: Observation
+): ActivatedObservationClaim | null {
   if (typeof observation.content !== 'string' || observation.content.length === 0) {
     return null;
   }
@@ -276,7 +278,9 @@ export async function searchObservationsWithScores(
 
       const textScore = typeof row.text_score === 'number' ? row.text_score : 0;
       const score =
-        typeof row.final_score === 'number' ? row.final_score : textScore * recencyDecay(claim.created_at, 1);
+        typeof row.final_score === 'number'
+          ? row.final_score
+          : textScore * recencyDecay(claim.created_at, 1);
 
       return {
         claim,

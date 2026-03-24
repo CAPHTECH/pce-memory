@@ -120,9 +120,11 @@ describe('v2 design invariants', () => {
 
     expect(distill.proposed_boundary_class).toBe('pii');
     expect(
-      (distill.invariant_check_results as {
-        boundary_monotonicity: { max_source_boundary_class: string; passed: boolean };
-      }).boundary_monotonicity
+      (
+        distill.invariant_check_results as {
+          boundary_monotonicity: { max_source_boundary_class: string; passed: boolean };
+        }
+      ).boundary_monotonicity
     ).toEqual(
       expect.objectContaining({
         max_source_boundary_class: 'pii',
@@ -199,9 +201,9 @@ describe('v2 design invariants', () => {
     expect(rollbackRows[0]?.status).toBe('rolled_back');
     expect(rollbackRows[0]?.accepted_claim_id).toBe(promote.claim_id);
     expect(rollbackRows[0]?.rejected_reason).toBe('superseded by a safer policy');
-    expect(
-      JSON.parse(rollbackRows[0]?.provenance ?? '{}') as { rollback_of?: string }
-    ).toEqual(expect.objectContaining({ rollback_of: promote.claim_id }));
+    expect(JSON.parse(rollbackRows[0]?.provenance ?? '{}') as { rollback_of?: string }).toEqual(
+      expect.objectContaining({ rollback_of: promote.claim_id })
+    );
   });
 
   it('activate persists active_context_items', async () => {

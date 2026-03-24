@@ -295,7 +295,11 @@ describe('intent-aware activate', () => {
     await applyPolicy({ k_txt: 1, threshold: 0.0 });
     await upsertClaim({ text: 'lexical pool first match', kind: 'fact', memory_type: 'knowledge' });
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await upsertClaim({ text: 'lexical pool second match', kind: 'fact', memory_type: 'knowledge' });
+    await upsertClaim({
+      text: 'lexical pool second match',
+      kind: 'fact',
+      memory_type: 'knowledge',
+    });
 
     const result = await dispatchTool('pce_memory_activate', {
       scope: ['project'],
@@ -339,7 +343,11 @@ describe('intent-aware activate', () => {
 
   it('remains backward compatible when activate is called without new parameters', async () => {
     await applyPolicy();
-    await upsertClaim({ text: 'backward compatible activate', kind: 'fact', memory_type: 'knowledge' });
+    await upsertClaim({
+      text: 'backward compatible activate',
+      kind: 'fact',
+      memory_type: 'knowledge',
+    });
 
     const result = await dispatchTool('pce_memory_activate', {
       scope: ['project'],

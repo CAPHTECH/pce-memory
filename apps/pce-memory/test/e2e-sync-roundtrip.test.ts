@@ -103,13 +103,7 @@ function contentHashFor(text: string): string {
 }
 
 function claimExportPath(scope: 'project' | 'principle', text: string): string {
-  return path.join(
-    tempDir,
-    SYNC_DIR_NAME,
-    'claims',
-    scope,
-    `${computeContentHash(text)}.json`
-  );
+  return path.join(tempDir, SYNC_DIR_NAME, 'claims', scope, `${computeContentHash(text)}.json`);
 }
 
 function unwrapStructured<T extends Record<string, unknown>>(result: ToolResult): T {
@@ -225,7 +219,9 @@ async function readClaimExport(scope: 'project' | 'principle', text: string): Pr
 async function readAllExportedClaims(): Promise<ClaimExport[]> {
   const claimFiles = await listJsonFiles(path.join(tempDir, SYNC_DIR_NAME, 'claims'), true);
   return Promise.all(
-    claimFiles.map(async (filePath) => JSON.parse(await fs.readFile(filePath, 'utf-8')) as ClaimExport)
+    claimFiles.map(
+      async (filePath) => JSON.parse(await fs.readFile(filePath, 'utf-8')) as ClaimExport
+    )
   );
 }
 
@@ -430,7 +426,7 @@ describe('sync round-trip E2E', () => {
     expect(restoredClaim?.text).toBe(text);
     expect((await findEntityById('ent_roundtrip_actor'))?.name).toBe('Sync Agent');
     expect((await findEntityById('ent_roundtrip_concept'))?.name).toBe('Round Trip');
-    expect((await findRelationById('rel_roundtrip_actor_concept'))).toMatchObject({
+    expect(await findRelationById('rel_roundtrip_actor_concept')).toMatchObject({
       id: 'rel_roundtrip_actor_concept',
       src_id: 'ent_roundtrip_actor',
       dst_id: 'ent_roundtrip_concept',

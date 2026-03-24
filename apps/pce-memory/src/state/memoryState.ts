@@ -198,11 +198,7 @@ export function applyPolicyOp(
       const yamlContent = yaml ?? '';
 
       // DBに保存
-      const saveResult = await savePolicy(
-        parsedPolicy.version,
-        yamlContent,
-        parsedPolicy
-      )();
+      const saveResult = await savePolicy(parsedPolicy.version, yamlContent, parsedPolicy)();
       if (E.isLeft(saveResult)) {
         return saveResult;
       }

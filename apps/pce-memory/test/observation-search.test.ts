@@ -77,15 +77,17 @@ async function activateWithObservations(args: {
 async function setObservationCreatedAt(observationId: string, ageDays: number): Promise<void> {
   const conn = await getConnection();
   const createdAt = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString();
-  await conn.run('UPDATE observations SET created_at = $1 WHERE id = $2', [createdAt, observationId]);
+  await conn.run('UPDATE observations SET created_at = $1 WHERE id = $2', [
+    createdAt,
+    observationId,
+  ]);
 }
 
 describe('observation search via activate', () => {
   it('activate schema exposes include_observations', () => {
     const activateTool = TOOL_DEFINITIONS.find((tool) => tool.name === 'pce_memory_activate');
-    const includeObservationsSchema = activateTool?.inputSchema?.properties?.include_observations as
-      | { type?: string; default?: boolean }
-      | undefined;
+    const includeObservationsSchema = activateTool?.inputSchema?.properties
+      ?.include_observations as { type?: string; default?: boolean } | undefined;
 
     expect(includeObservationsSchema?.type).toBe('boolean');
     expect(includeObservationsSchema?.default).toBe(false);
@@ -157,7 +159,10 @@ describe('observation search via activate', () => {
   });
 
   it('observation recall still works when activate intent is provided', async () => {
-    const observation = await createObservation('resume task baton handoff next action', 'internal');
+    const observation = await createObservation(
+      'resume task baton handoff next action',
+      'internal'
+    );
 
     const activate = await activateWithObservations({
       q: 'resume task baton',

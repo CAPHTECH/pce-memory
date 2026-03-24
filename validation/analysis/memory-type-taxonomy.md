@@ -63,12 +63,12 @@ Retrieval today is effectively "scope + boundary + text/vector similarity + crit
 
 ### Lifecycle
 
-| Question                                               | Current behavior                                                                                                                                                                                 | Assessment                |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| Do different kinds have different promotion rules?     | Historically no. The old observe extraction shortcut always created `kind='fact'` and `scope='session'`, which was a weak mapping. | Weak mapping.             |
-| Do different kinds have different update rules?        | No. Feedback updates `utility`, `confidence`, and sometimes `recency_anchor` uniformly across all claims in `apps/pce-memory/src/store/feedback.ts:10-61`.                                       | Weak mapping.             |
-| Is task completion or task staleness modeled?          | Not in code. The review doc explicitly calls out the need for `task` completion handling in `docs/pce-memory-usefulness-review.ja.md:114-117`.                                                   | Missing.                  |
-| Are session/project/principle TTLs enforced on claims? | The policy defines scope TTL defaults in `packages/pce-policy-schemas/src/defaults.ts:7-10`, but claim rows have no per-claim expiry field in `apps/pce-memory/src/db/schema.sql:2-18`.          | Partial and inconsistent. |
+| Question                                               | Current behavior                                                                                                                                                                        | Assessment                |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| Do different kinds have different promotion rules?     | Historically no. The old observe extraction shortcut always created `kind='fact'` and `scope='session'`, which was a weak mapping.                                                      | Weak mapping.             |
+| Do different kinds have different update rules?        | No. Feedback updates `utility`, `confidence`, and sometimes `recency_anchor` uniformly across all claims in `apps/pce-memory/src/store/feedback.ts:10-61`.                              | Weak mapping.             |
+| Is task completion or task staleness modeled?          | Not in code. The review doc explicitly calls out the need for `task` completion handling in `docs/pce-memory-usefulness-review.ja.md:114-117`.                                          | Missing.                  |
+| Are session/project/principle TTLs enforced on claims? | The policy defines scope TTL defaults in `packages/pce-policy-schemas/src/defaults.ts:7-10`, but claim rows have no per-claim expiry field in `apps/pce-memory/src/db/schema.sql:2-18`. | Partial and inconsistent. |
 
 Lifecycle is the weakest part of the current taxonomy. `task` is the clearest example: it has a faster recency decay than `fact`, but it does not yet have open/closed/tombstoned semantics.
 

@@ -89,13 +89,7 @@ export class ContentHashCollisionError extends Error {
 /** g()再ランキング用フィールドを含むClaim入力型 */
 export type ClaimInput = Omit<
   Claim,
-  | 'id'
-  | 'memory_type'
-  | 'utility'
-  | 'confidence'
-  | 'created_at'
-  | 'updated_at'
-  | 'recency_anchor'
+  'id' | 'memory_type' | 'utility' | 'confidence' | 'created_at' | 'updated_at' | 'recency_anchor'
 > & {
   memory_type?: MemoryType;
   provenance?: Provenance;

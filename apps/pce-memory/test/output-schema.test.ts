@@ -63,7 +63,11 @@ describe('Output Schema - 基本テスト', () => {
       | { enum?: string[]; description?: string }
       | undefined;
     const provenanceSchema = upsertTool?.inputSchema?.properties?.provenance as
-      | { description?: string; properties?: { at?: { description?: string } }; required?: string[] }
+      | {
+          description?: string;
+          properties?: { at?: { description?: string } };
+          required?: string[];
+        }
       | undefined;
     expect(boundaryClassSchema?.enum).toEqual(['public', 'internal', 'pii']);
     expect(boundaryClassSchema?.description).toContain('secret is rejected by default');

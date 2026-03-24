@@ -451,7 +451,9 @@ describe('systematic retrieval planner edge coverage', () => {
     const rows = reader.getRowObjects() as Array<{ cnt: number }>;
     expect(rows[0]?.cnt).toBe(2);
     expect(await countActiveContextItems(firstBody.active_context_id)).toBe(firstBody.claims_count);
-    expect(await countActiveContextItems(secondBody.active_context_id)).toBe(secondBody.claims_count);
+    expect(await countActiveContextItems(secondBody.active_context_id)).toBe(
+      secondBody.claims_count
+    );
   });
 
   it('continues to activate after rollback while excluding rolled-back claims', async () => {

@@ -102,8 +102,11 @@ describe('promotion pipeline', () => {
     expect(distill.proposed_memory_type).toBe('knowledge');
     expect(distill.proposed_boundary_class).toBe('pii');
     expect(
-      (distill.invariant_check_results as { boundary_monotonicity: { max_source_boundary_class: string } })
-        .boundary_monotonicity.max_source_boundary_class
+      (
+        distill.invariant_check_results as {
+          boundary_monotonicity: { max_source_boundary_class: string };
+        }
+      ).boundary_monotonicity.max_source_boundary_class
     ).toBe('pii');
 
     const conn = await getConnection();
@@ -131,7 +134,9 @@ describe('promotion pipeline', () => {
     expect(JSON.parse(rows[0]?.evidence_ids ?? '[]')).toEqual(
       expect.arrayContaining([publicObs.observation_id, piiObs.observation_id])
     );
-    expect(rows[0]?.candidate_hash).toBe(`sha256:${computeContentHash(distill.distilled_text as string)}`);
+    expect(rows[0]?.candidate_hash).toBe(
+      `sha256:${computeContentHash(distill.distilled_text as string)}`
+    );
   });
 
   it('distill accepts active_context sources and records lineage', async () => {
@@ -155,12 +160,15 @@ describe('promotion pipeline', () => {
 
     expect(distill.proposed_kind).toBe('task');
     expect(distill.proposed_memory_type).toBe('working_state');
-    expect((distill.distilled_text as string).includes('Current branch is blocked on schema review')).toBe(true);
+    expect(
+      (distill.distilled_text as string).includes('Current branch is blocked on schema review')
+    ).toBe(true);
 
     const conn = await getConnection();
-    const reader = await conn.runAndReadAll('SELECT provenance FROM promotion_queue WHERE id = $1', [
-      distill.candidate_id,
-    ]);
+    const reader = await conn.runAndReadAll(
+      'SELECT provenance FROM promotion_queue WHERE id = $1',
+      [distill.candidate_id]
+    );
     const rows = reader.getRowObjects() as Array<{ provenance: string }>;
     const provenance = JSON.parse(rows[0]?.provenance ?? '{}') as {
       active_context_id?: string;

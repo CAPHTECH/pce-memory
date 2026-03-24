@@ -712,7 +712,10 @@ function mergeResults(
  * @param scopes 検索対象スコープ
  * @returns mean, std（stdが0の場合は1.0を返す）
  */
-async function getClaimStats(scopes: string[], filters: ClaimSearchFilters = {}): Promise<UtilityStats> {
+async function getClaimStats(
+  scopes: string[],
+  filters: ClaimSearchFilters = {}
+): Promise<UtilityStats> {
   if (scopes.length === 0) {
     return { mean: 0, std: 1 };
   }
@@ -839,7 +842,11 @@ function mergeResultsWithRerank(
         metrics.kind,
         stats
       );
-      intentBreakdown = calculateIntentScoreBreakdown(intent, metrics.kind, claim.memory_type ?? null);
+      intentBreakdown = calculateIntentScoreBreakdown(
+        intent,
+        metrics.kind,
+        claim.memory_type ?? null
+      );
       const adjustedRecencyTerm = intentBreakdown
         ? adjustRecencyTerm(baseGFactor.recency_term, intentBreakdown.recency_weight)
         : baseGFactor.recency_term;
