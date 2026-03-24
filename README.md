@@ -112,17 +112,33 @@ See [docs/local-validation-ollama.md](docs/local-validation-ollama.md) for machi
 
 PCE Memoryは以下のMCPツールを提供します：
 
-| Tool                           | Description                                     |
-| ------------------------------ | ----------------------------------------------- |
-| `pce_memory_policy_apply`      | ポリシー適用 (boundary/retrieval設定)           |
-| `pce_memory_observe`           | 観察を記録 (Observation → Claims)               |
-| `pce_memory_upsert`            | Claimを登録 (Long-term memory)                  |
-| `pce_memory_activate`          | Active Contextを構成 (Query → AC)               |
-| `pce_memory_boundary_validate` | 境界チェック / redact-before-send               |
-| `pce_memory_feedback`          | フィードバックを送信 (helpful/harmful/outdated) |
-| `pce_memory_state`             | 状態情報を取得 (state/policy_version)           |
+| Tool                           | Description                                               |
+| ------------------------------ | --------------------------------------------------------- |
+| `pce_memory_policy_apply`      | ポリシー適用と状態初期化                                  |
+| `pce_memory_observe`           | raw observation を記録（短期TTL、durable化はしない）      |
+| `pce_memory_distill`           | observation / claim / active context から昇格候補を作成   |
+| `pce_memory_promote`           | 候補を durable claim に昇格                               |
+| `pce_memory_rollback`          | durable claim の append-only repair                       |
+| `pce_memory_upsert`            | 既に蒸留済みの durable knowledge を直接登録               |
+| `pce_memory_activate`          | intent-aware に Active Context を構成                     |
+| `pce_memory_boundary_validate` | 境界チェック / redact-before-send                         |
+| `pce_memory_feedback`          | durable claim へのフィードバックを送信                    |
+| `pce_memory_state`             | 状態情報を取得 (state/policy_version)                     |
+| `pce_memory_sync_*`            | `.pce-shared/` との push / pull / status                  |
 
 詳細は [docs/mcp-tools.md](docs/mcp-tools.md) を参照してください。
+
+### Recommended V2 Flow
+
+現在の推奨フローは次のとおりです。
+
+```text
+observe -> distill -> promote -> activate(intent) -> feedback -> rollback
+```
+
+- `observe` は raw-only です。durable claim は inline で作りません。
+- `upsert` は already-distilled な durable knowledge の escape hatch です。
+- `scope=session` と `boundary_class=secret` の durable 書き込みは避け、`observe` を使います。
 
 ### Observation（`pce_memory_observe`）の保持とセキュリティ（要点）
 
@@ -136,10 +152,10 @@ PCE Memoryは以下のMCPツールを提供します：
 
 PCE Memoryは以下のコアモジュールで構成されます：
 
-- **Extractor**: 観察から主張を抽出 (Observation → Claims)
-- **Integrator**: 主張を統合・検証 (Claims + LCP → LCP')
-- **Retriever**: 文脈を検索・活性化 (Query + LCP → AC)
-- **Critic**: 主張を評価・更新 (Feedback → utility/confidence/recency)
+- **Observation Store**: raw observation を TTL 付きで保持し、必要に応じて redact / digest-only を適用
+- **Promotion Pipeline**: `distill -> promote -> rollback` で durable claim を管理
+- **Retriever**: `activate` で intent-aware に文脈を検索・活性化 (Query + LCP -> AC)
+- **Critic**: durable claim を評価・更新 (Feedback -> utility/confidence/recency)
 
 詳細は [docs/pce-memory-vision.md](docs/pce-memory-vision.md) を参照してください。
 

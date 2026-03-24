@@ -1,5 +1,7 @@
 # pce-memory MCP Tools Spec v0.1
 
+> Status note: the current server is v2-oriented. The recommended durable write path is `observe -> distill -> promote`, and `pce_memory_search` is not exposed by the current server surface. For the exact runtime tool list, prefer `ListTools` output or `apps/pce-memory/src/core/handlers.ts`.
+
 > **目的**: IDE/コードエージェント（Codex / Claude Code / Cursor 等）が **MCP（Model Context Protocol）** 経由で pce-memory を利用できるようにする最小〜完全仕様。  
 > **対象**: エージェント開発者・Ops・セキュリティ。
 
@@ -14,7 +16,7 @@
 - **応答**: すべての成功レスポンスは **`policy_version`** と **`provenance`**（可能な範囲）を含める。
 - **Idempotency**: `upsert` は **content_hash** で冪等。`feedback` は `(claim_id, ts_bucket)` で冪等。
 - **Logging**: すべての呼び出しは append-only 監査ログに記録（時刻・呼出・境界判定・由来）。
-- **Scoring / Retrieval**: `pce_memory_activate` / `pce_memory_search` は **policy (`retrieval.*`)** を読み取り、ハイブリッド結合（`alpha/k_*`）と再ランク（`use_quality`/`recency`）を適用する。スコアは `activation-ranking.md` の定義に従い **[0,1] 正規化**され、`score` は最終スコア（`combined*g`）を表す。必要に応じて詳細内訳は `include_meta:true` で返す。
+- **Scoring / Retrieval**: 現行実装では `pce_memory_activate` が **policy (`retrieval.*`)** を読み取り、ハイブリッド結合（`alpha/k_*`）と再ランク（`use_quality`/`recency`）を適用する。スコアは `activation-ranking.md` の定義に従い **[0,1] 正規化**され、`score` は最終スコア（`combined*g`）を表す。必要に応じて詳細内訳は `include_meta:true` で返す。
 
 ---
 
@@ -88,7 +90,7 @@
 
 ### 2.0 `pce_memory_observe`
 
-**目的**: 生データ（Observation）を**短期TTLで保持**し、必要に応じて Claim に昇格して Evidence を残す（Issue #30）。
+**目的**: 生データ（Observation）を**短期TTLで保持**する raw capture。durable memory 化は `distill -> promote` で行う。
 
 - **Request Schema**
 
@@ -180,7 +182,7 @@
 
 ### 2.1 `pce_memory_activate`
 
-**目的**: クエリとポリシーに基づき **アクティブコンテキスト（AC）** を構成（関数 `r(q, C^L, B, policy, critic)`）。
+**目的**: クエリとポリシーに基づき **アクティブコンテキスト（AC）** を構成する task-facing recall API（関数 `r(q, C^L, B, policy, critic)`）。
 
 - **Request Schema**
 
@@ -192,6 +194,19 @@
     "q": { "type": "string" },
     "scope": { "type": "array", "items": { "enum": ["session", "project", "principle"] } },
     "allow": { "type": "array", "items": { "type": "string" } },
+    "intent": {
+      "type": "string",
+      "enum": ["resume_task", "debug_incident", "design_decision", "policy_check"]
+    },
+    "kind_filter": {
+      "type": "array",
+      "items": { "enum": ["fact", "preference", "task", "policy_hint"] }
+    },
+    "memory_type_filter": {
+      "type": "array",
+      "items": { "enum": ["evidence", "working_state", "knowledge", "procedure", "norm"] }
+    },
+    "include_observations": { "type": "boolean", "default": false },
     "top_k": { "type": "integer", "minimum": 1, "maximum": 50 },
     "cursor": { "type": "string" },
     "include_meta": { "type": "boolean", "default": false }
@@ -256,9 +271,9 @@
 
 ---
 
-### 2.2 `pce_memory_search`
+### 2.2 `pce_memory_search` (legacy)
 
-**目的**: 既知の前提・規約・禁止事項を想起（AC の取得無し）。
+`pce_memory_search` は旧仕様です。現行サーバでは公開していません。検索と想起は `pce_memory_activate` を使用してください。
 
 - **Request Schema**
 
@@ -303,7 +318,7 @@
 
 ### 2.3 `pce_memory_upsert`
 
-**目的**: 重要な断片（Observation/Claim/Graph）を登録。**由来（provenance）必須**。
+**目的**: すでに蒸留済みの durable knowledge を登録する escape hatch。**由来（provenance）必須**。
 
 - **Request Schema**
 
@@ -314,7 +329,7 @@
   "properties": {
     "text": { "type": "string" },
     "kind": { "enum": ["fact", "preference", "task", "policy_hint"] },
-    "scope": { "enum": ["session", "project", "principle"] },
+    "scope": { "enum": ["project", "principle"] },
     "boundary_class": { "enum": ["public", "internal", "pii"] },
     "entities": { "type": "array", "items": { "$ref": "#/definitions/entity" } },
     "relations": { "type": "array", "items": { "$ref": "#/definitions/relation" } },
@@ -325,7 +340,9 @@
 }
 ```
 
-- **Note**: `secret` durable claims are rejected by default in `pce_memory_upsert`. Use `pce_memory_observe` for secret material so it can be handled in `digest_only` mode.
+- **Note**:
+  - `scope: "session"` は現行実装で拒否される。session working context は `pce_memory_observe` を使う。
+  - `secret` durable claims are rejected by default in `pce_memory_upsert`. Use `pce_memory_observe` for secret material so it can be handled in `digest_only` mode.
 
 - **Response Schema**
 

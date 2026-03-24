@@ -1,37 +1,14 @@
 # pce-memory
 
-PCE Memory - MCP Server for Process-Context Engine
-
-## Overview
-
-PCE Memory is the official MCP server implementation of Process-Context Engine (PCE).
-It provides context memory, retrieval, and integration capabilities for agents and LLM applications.
+PCE Memory is the MCP server implementation of Process-Context Engine (PCE).
 
 ## MCP Configuration
 
-> **Note:** Replace `your-project` with your actual project name to keep databases separate per project.
-
-### Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "pce-memory": {
-      "command": "npx",
-      "args": ["-y", "pce-memory"],
-      "env": {
-        "PCE_DB": "~/.pce/your-project.db"
-      }
-    }
-  }
-}
-```
+Use a per-project database path.
 
 ### Claude Code
 
-Add to `.mcp.json` in your project root:
+Add this to `.mcp.json`:
 
 ```json
 {
@@ -47,156 +24,206 @@ Add to `.mcp.json` in your project root:
 }
 ```
 
+### Claude Desktop
+
+Add the same server to `~/Library/Application Support/Claude/claude_desktop_config.json`.
+
 ### Cline / Roo Code
 
-Add to VS Code settings (`settings.json`):
-
-```json
-{
-  "cline.mcpServers": {
-    "pce-memory": {
-      "command": "npx",
-      "args": ["-y", "pce-memory"],
-      "env": {
-        "PCE_DB": "~/.pce/your-project.db"
-      }
-    }
-  }
-}
-```
-
-## Features
-
-- **MCP Protocol Support**: Model Context Protocol (MCP) v1.0.4 compliant
-- **Pace Layering**: Three-tier scope management (session / project / principle)
-- **Boundary-First Security**: Scope-based boundary management with Redact-before-send
-- **Hybrid Search**: Full-text search + Vector similarity search
-- **DuckDB Storage**: Fast local storage with embedded DuckDB
-- **Local Embeddings**: Local embedding generation via transformers.js
+Register the same stdio server in `settings.json`.
 
 ## Quick Start
 
 ```bash
-# Run directly with npx
+# run directly
 npx pce-memory
 
-# Or install globally
+# or install globally
 npm install -g pce-memory
 pce-memory
 ```
 
-## Commands
+## Recommended v2 workflow
 
-| Command            | Description                     |
-| ------------------ | ------------------------------- |
-| `pce-memory`       | MCP client (auto-starts daemon) |
-| `pce-daemon`       | Standalone daemon process       |
-| `pce-memory-stdio` | Direct stdio mode (no daemon)   |
+The current write path is:
 
-## MCP Tools
+```text
+observe -> distill -> promote -> activate(intent) -> feedback -> rollback
+```
 
-### pce_memory_policy_apply
+Rules:
 
-Apply policy (initialization)
+- `observe` is raw-only and does not create durable claims inline.
+- `upsert` is only for already-distilled durable knowledge.
+- `upsert` rejects `scope: "session"` and `boundary_class: "secret"`.
+- use `activate` as the task-facing recall API.
+- send `feedback` for durable `claim_id`s that were actually used.
 
-```typescript
+## Core tools
+
+### `pce_memory_policy_apply`
+
+Initialize the policy and state machine.
+
+```ts
+{ yaml?: string }
+```
+
+### `pce_memory_observe`
+
+Store raw session evidence with TTL.
+
+```ts
 {
-  yaml?: string  // Policy YAML (uses default if omitted)
+  source_type: "chat" | "tool" | "file" | "http" | "system",
+  content: string,
+  boundary_class?: "public" | "internal" | "pii" | "secret",
+  tags?: string[],
+  ttl_days?: number
 }
 ```
 
-### pce_memory_upsert
+### `pce_memory_distill`
 
-Register a claim (knowledge fragment)
+Create a promotion candidate from observations, claims, or an active context.
 
-```typescript
+```ts
 {
-  text: string,           // Claim content
+  source_observation_ids?: string[],
+  source_claim_ids?: string[],
+  active_context_id?: string,
+  proposed_kind?: "fact" | "preference" | "task" | "policy_hint",
+  proposed_scope?: "project" | "principle",
+  proposed_memory_type?: "working_state" | "knowledge" | "procedure" | "norm",
+  note?: string
+}
+```
+
+### `pce_memory_promote`
+
+Promote a pending candidate into durable memory.
+
+```ts
+{
+  candidate_id: string,
+  provenance: {
+    at: string,
+    actor?: string
+  },
+  reviewers?: string[],
+  review_note?: string
+}
+```
+
+### `pce_memory_activate`
+
+Recall task-relevant knowledge.
+
+```ts
+{
+  q?: string,
+  scope: ("session" | "project" | "principle")[],
+  allow: string[],
+  intent?: "resume_task" | "debug_incident" | "design_decision" | "policy_check",
+  kind_filter?: ("fact" | "preference" | "task" | "policy_hint")[],
+  memory_type_filter?: ("working_state" | "knowledge" | "procedure" | "norm" | "evidence")[],
+  include_observations?: boolean,
+  top_k?: number
+}
+```
+
+### `pce_memory_upsert`
+
+Escape hatch for already-distilled durable knowledge.
+
+```ts
+{
+  text: string,
   kind: "fact" | "preference" | "task" | "policy_hint",
-  scope: "session" | "project" | "principle",
-  boundary_class: "public" | "internal" | "pii" | "secret",
-  content_hash: string,   // Format: sha256:...
-  provenance: {           // Origin info (required)
-    at: string,           // ISO 8601 timestamp
-    actor?: string,
-    url?: string,
-    note?: string
+  scope: "project" | "principle",
+  boundary_class: "public" | "internal" | "pii",
+  memory_type?: "working_state" | "knowledge" | "procedure" | "norm" | "evidence",
+  provenance: {
+    at: string,
+    actor?: string
+  },
+  content_hash?: string
+}
+```
+
+### `pce_memory_rollback`
+
+Append-only repair for invalid durable claims.
+
+```ts
+{
+  claim_id: string,
+  reason: string,
+  provenance: {
+    at: string,
+    actor?: string
   }
 }
 ```
 
-### pce_memory_activate
+### `pce_memory_boundary_validate`
 
-Build active context (AC)
+Validate and redact text before reuse or output.
 
-```typescript
+```ts
 {
-  scope: string[],        // Target scopes
-  allow: string[],        // Allowed boundary classes
-  q?: string,             // Search query
-  top_k?: number          // Number of results (default: 10)
-}
-```
-
-### pce_memory_boundary_validate
-
-Pre-generation boundary check
-
-```typescript
-{
-  payload: string,        // Text to validate
+  payload: string,
   scope?: string,
   allow?: string[]
 }
 ```
 
-### pce_memory_feedback
+### `pce_memory_feedback`
 
-Update critic (adopt/reject/stale/duplicate)
+Record quality feedback for a durable claim.
 
-```typescript
+```ts
 {
   claim_id: string,
   signal: "helpful" | "harmful" | "outdated" | "duplicate",
-  score?: number          // -1.0 to 1.0
+  score?: number
 }
 ```
 
-### pce_memory_state
+### `pce_memory_state`
 
-Get current state
+Read the current state machine status.
 
-```typescript
-// Returns: { state: "Uninitialized" | "PolicyApplied" | "HasClaims" | "Ready" }
+```ts
+{ debug?: boolean }
 ```
 
-## State Machine
+### Other tools
 
+The server also exposes:
+
+- `pce_memory_health`
+- `pce_memory_upsert_entity`
+- `pce_memory_upsert_relation`
+- `pce_memory_query_entity`
+- `pce_memory_query_relation`
+- `pce_memory_sync_push`
+- `pce_memory_sync_pull`
+- `pce_memory_sync_status`
+
+## State machine
+
+The server restores and enforces these states:
+
+```text
+Uninitialized -> PolicyApplied -> HasClaims -> Ready
 ```
-Uninitialized
-     │
-     │ policy_apply
-     ▼
-PolicyApplied
-     │
-     │ upsert
-     ▼
- HasClaims
-     │
-     │ activate
-     ▼
-   Ready ◄──┐
-     │      │
-     └──────┘ (activate/upsert/feedback)
-```
 
-## Pace Layering (Scope)
+Notes:
 
-| Scope       | Change Rate | Use Case                                |
-| ----------- | ----------- | --------------------------------------- |
-| `session`   | Fast        | Session-specific temporary information  |
-| `project`   | Medium      | Project-specific patterns and decisions |
-| `principle` | Slow        | Universal principles and best practices |
+- `observe` can be used after policy initialization and does not create durable claims by itself.
+- `activate` becomes available once durable claims exist.
+- `feedback` is intended for durable claims that were activated and used.
 
 ## Requirements
 
