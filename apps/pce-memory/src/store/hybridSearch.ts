@@ -155,6 +155,33 @@ function normalizeLimit(limit: number): number {
   return Math.max(MIN_LIMIT, Math.floor(limit));
 }
 
+/**
+ * boundary_classフィルタを構築
+ * 未指定時はフィルタなし、空配列時は常に0件にする
+ */
+function buildBoundaryFilterCondition(
+  boundaryClasses: readonly string[] | undefined,
+  startParamIndex: number
+): { sql: string; params: string[] } {
+  if (boundaryClasses === undefined) {
+    return { sql: '', params: [] };
+  }
+
+  const normalizedBoundaryClasses = [...new Set(boundaryClasses.filter((bc) => bc.length > 0))];
+  if (normalizedBoundaryClasses.length === 0) {
+    return { sql: '1 = 0', params: [] };
+  }
+
+  const placeholders = normalizedBoundaryClasses
+    .map((_, index) => `$${startParamIndex + index}`)
+    .join(',');
+
+  return {
+    sql: `c.boundary_class IN (${placeholders})`,
+    params: normalizedBoundaryClasses,
+  };
+}
+
 // ========== 型定義 ==========
 
 /**
@@ -211,6 +238,8 @@ export interface HybridSearchConfig {
   includeBreakdown?: boolean;
   /** カーソル（ページネーション用、claim_idを使用） */
   cursor?: string;
+  /** 事前に許可されたboundary_classのみに絞り込む */
+  boundaryClasses?: string[];
 }
 
 /**
@@ -220,6 +249,13 @@ export interface ScoredClaim {
   claim: Claim;
   /** 融合スコア（g()適用後） */
   score: number;
+}
+
+function scoreFallbackClaims(claims: Claim[]): ScoredClaim[] {
+  return claims.map((claim, index) => ({
+    claim,
+    score: Math.max(0.1, 1.0 - index * 0.05),
+  }));
 }
 
 /**
@@ -274,7 +310,8 @@ export function getEmbeddingService(): EmbeddingService | null {
 export async function textSearch(
   query: string,
   scopes: string[],
-  limit: number = K_TEXT
+  limit: number = K_TEXT,
+  boundaryClasses?: string[]
 ): Promise<SearchResult[]> {
   // 空scopesの早期リターン
   if (scopes.length === 0) {
@@ -286,6 +323,10 @@ export async function textSearch(
 
   // スコープのプレースホルダー構築
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
+  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
+    boundaryClasses,
+    scopes.length + 1
+  );
 
   // クエリを単語に分割
   const words = splitQueryWords(query);
@@ -300,10 +341,11 @@ export async function textSearch(
       FROM claims c
       LEFT JOIN critic cr ON cr.claim_id = c.id
       WHERE c.scope IN (${scopePlaceholders})
+        ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
       ORDER BY text_score DESC
-      LIMIT $${scopes.length + 1}
+      LIMIT $${scopes.length + boundaryParams.length + 1}
     `;
-    const reader = await conn.runAndReadAll(sql, [...scopes, normalizedLimit]);
+    const reader = await conn.runAndReadAll(sql, [...scopes, ...boundaryParams, normalizedLimit]);
     const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
     const rows = normalizeRowsTimestamps(rawRows);
 
@@ -327,6 +369,10 @@ export async function textSearch(
 
   // 単語OR条件を構築
   const { sql: wordCondition, params: wordParams } = buildWordOrCondition(words, scopes.length + 1);
+  const boundaryWithWords = buildBoundaryFilterCondition(
+    boundaryClasses,
+    scopes.length + wordParams.length + 1
+  );
 
   // criticスコアとテキストマッチを組み合わせたスコア計算
   // TLA+ claimTextRelevant: いずれかの単語に対して LIKE '%word%' でマッチ
@@ -339,11 +385,17 @@ export async function textSearch(
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
       AND ${wordCondition}
+      ${boundaryWithWords.sql ? `AND ${boundaryWithWords.sql}` : ''}
     ORDER BY text_score DESC
-    LIMIT $${scopes.length + wordParams.length + 1}
+    LIMIT $${scopes.length + wordParams.length + boundaryWithWords.params.length + 1}
   `;
 
-  const reader = await conn.runAndReadAll(sql, [...scopes, ...wordParams, normalizedLimit]);
+  const reader = await conn.runAndReadAll(sql, [
+    ...scopes,
+    ...wordParams,
+    ...boundaryWithWords.params,
+    normalizedLimit,
+  ]);
   const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
   const rows = normalizeRowsTimestamps(rawRows);
 
@@ -379,7 +431,8 @@ export async function textSearch(
 export async function vectorSearch(
   queryEmbedding: readonly number[],
   scopes: string[],
-  limit: number = K_VEC
+  limit: number = K_VEC,
+  boundaryClasses?: string[]
 ): Promise<SearchResult[]> {
   // 空scopesの早期リターン
   if (scopes.length === 0) {
@@ -401,6 +454,10 @@ export async function vectorSearch(
 
   // スコープのプレースホルダー構築
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
+  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
+    boundaryClasses,
+    scopes.length + 1
+  );
 
   // DuckDB Node APIは配列パラメータを直接サポートしないため、
   // 配列リテラル文字列として埋め込む（検証済みなので安全）
@@ -417,11 +474,12 @@ export async function vectorSearch(
     FROM claims c
     INNER JOIN claim_vectors cv ON cv.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
+      ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
     ORDER BY vec_score DESC
-    LIMIT $${scopes.length + 1}
+    LIMIT $${scopes.length + boundaryParams.length + 1}
   `;
 
-  const reader = await conn.runAndReadAll(sql, [...scopes, normalizedLimit]);
+  const reader = await conn.runAndReadAll(sql, [...scopes, ...boundaryParams, normalizedLimit]);
   const rawRows = reader.getRowObjects() as unknown as (Claim & { vec_score: number })[];
   const rows = normalizeRowsTimestamps(rawRows);
 
@@ -512,13 +570,17 @@ function mergeResults(
  * @param scopes 検索対象スコープ
  * @returns mean, std（stdが0の場合は1.0を返す）
  */
-async function getClaimStats(scopes: string[]): Promise<UtilityStats> {
+async function getClaimStats(scopes: string[], boundaryClasses?: string[]): Promise<UtilityStats> {
   if (scopes.length === 0) {
     return { mean: 0, std: 1 };
   }
 
   const conn = await getConnection();
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
+  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
+    boundaryClasses,
+    scopes.length + 1
+  );
 
   const sql = `
     SELECT
@@ -526,9 +588,10 @@ async function getClaimStats(scopes: string[]): Promise<UtilityStats> {
       COALESCE(NULLIF(STDDEV_SAMP(utility), 0), 1.0) as std
     FROM claims
     WHERE scope IN (${scopePlaceholders})
+      ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
   `;
 
-  const reader = await conn.runAndReadAll(sql, scopes);
+  const reader = await conn.runAndReadAll(sql, [...scopes, ...boundaryParams]);
   const rows = reader.getRowObjects() as unknown as { mean: number | null; std: number }[];
   const row = rows[0];
 
@@ -713,10 +776,11 @@ export async function hybridSearch(
   const alpha = config?.alpha ?? ALPHA;
   const threshold = config?.threshold ?? THRESHOLD;
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
+  const boundaryClasses = config?.boundaryClasses;
 
   // クエリがない場合はcriticスコアで取得（既存動作）
   if (!query || query.trim().length === 0) {
-    return fallbackToTextOnly(scopes, normalizedLimit);
+    return fallbackToTextOnly(scopes, normalizedLimit, boundaryClasses);
   }
 
   // Step 1: クエリ埋め込み生成
@@ -741,8 +805,8 @@ export async function hybridSearch(
   // TLA+ Liveness_C_MergeEventuallyComplete: Promise.all()
   if (queryEmbedding) {
     const [textResults, vecResults] = await Promise.all([
-      textSearch(query, scopes, K_TEXT),
-      vectorSearch(queryEmbedding, scopes, K_VEC),
+      textSearch(query, scopes, K_TEXT, boundaryClasses),
+      vectorSearch(queryEmbedding, scopes, K_VEC, boundaryClasses),
     ]);
 
     // Step 3-5: マージ + 融合 + フィルタ + ソート（g()再ランキング対応）
@@ -758,7 +822,7 @@ export async function hybridSearch(
 
       // 並列でstatsとmetricsを取得
       const [stats, claimMetrics] = await Promise.all([
-        getClaimStats(scopes),
+        getClaimStats(scopes, boundaryClasses),
         fetchClaimMetrics(uniqueIds),
       ]);
 
@@ -781,7 +845,7 @@ export async function hybridSearch(
   }
 
   // Text-onlyフォールバック（埋め込み生成失敗時）
-  const textResults = await textSearch(query, scopes, normalizedLimit);
+  const textResults = await textSearch(query, scopes, normalizedLimit, boundaryClasses);
   return textResults
     .filter((r) => r.score >= threshold)
     .slice(0, normalizedLimit)
@@ -813,15 +877,12 @@ export async function hybridSearchWithScores(
   const alpha = config?.alpha ?? ALPHA;
   const threshold = config?.threshold ?? THRESHOLD;
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
+  const boundaryClasses = config?.boundaryClasses;
 
   // クエリがない場合はcriticスコアで取得（既存動作）
   if (!query || query.trim().length === 0) {
-    const claims = await fallbackToTextOnly(scopes, normalizedLimit);
-    // フォールバック時はcriticスコアを使用（0.5をデフォルト）
-    return claims.map((claim, index) => ({
-      claim,
-      score: Math.max(0.1, 1.0 - index * 0.05), // 順位ベースの近似スコア
-    }));
+    const claims = await fallbackToTextOnly(scopes, normalizedLimit, boundaryClasses);
+    return scoreFallbackClaims(claims);
   }
 
   // Step 1: クエリ埋め込み生成
@@ -844,8 +905,8 @@ export async function hybridSearchWithScores(
   // Step 2: 並列検索実行
   if (queryEmbedding) {
     const [textResults, vecResults] = await Promise.all([
-      textSearch(query, scopes, K_TEXT),
-      vectorSearch(queryEmbedding, scopes, K_VEC),
+      textSearch(query, scopes, K_TEXT, boundaryClasses),
+      vectorSearch(queryEmbedding, scopes, K_VEC, boundaryClasses),
     ]);
 
     // Step 3-5: マージ + 融合 + フィルタ + ソート
@@ -859,7 +920,7 @@ export async function hybridSearchWithScores(
       const uniqueIds = [...new Set(allClaimIds)];
 
       const [stats, claimMetrics] = await Promise.all([
-        getClaimStats(scopes),
+        getClaimStats(scopes, boundaryClasses),
         fetchClaimMetrics(uniqueIds),
       ]);
 
@@ -884,7 +945,7 @@ export async function hybridSearchWithScores(
   }
 
   // Text-onlyフォールバック
-  const textResults = await textSearch(query, scopes, normalizedLimit);
+  const textResults = await textSearch(query, scopes, normalizedLimit, boundaryClasses);
   return textResults
     .filter((r) => r.score >= threshold)
     .slice(0, normalizedLimit)
@@ -912,15 +973,20 @@ export async function hybridSearchPaginated(
   config?: Partial<HybridSearchConfig>
 ): Promise<PaginatedSearchResult> {
   const cursor = config?.cursor;
+  const boundaryClasses = config?.boundaryClasses;
+  const isQueryless = !query || query.trim().length === 0;
 
-  // カーソル指定時はlimit+1件取得してhas_moreを判定
-  const fetchLimit = limit + 1;
+  // カーソル指定時はランキング済み候補全体から位置を特定する必要がある。
+  // limit+1件だけでは2ページ目以降の has_more が誤るため、候補プール全体を取得する。
+  const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1;
 
-  // スコア付き検索を呼び出し（limit+1件取得）
-  const allResults = await hybridSearchWithScores(scopes, fetchLimit, query, {
-    ...config,
-    // cursorは内部で処理しないので除外
-  });
+  const allResults =
+    cursor && isQueryless
+      ? scoreFallbackClaims(await fallbackToTextOnly(scopes, undefined, boundaryClasses))
+      : await hybridSearchWithScores(scopes, fetchLimit, query, {
+          ...config,
+          // cursorは内部で処理しないので除外
+        });
 
   // カーソル以降のデータをフィルタ
   let filteredResults = allResults;
@@ -952,7 +1018,11 @@ export async function hybridSearchPaginated(
  * クエリなしの場合のフォールバック
  * criticスコアでソートして返す（既存listClaimsByScopeと同等）
  */
-async function fallbackToTextOnly(scopes: string[], limit: number): Promise<Claim[]> {
+async function fallbackToTextOnly(
+  scopes: string[],
+  limit?: number,
+  boundaryClasses?: string[]
+): Promise<Claim[]> {
   // 空scopesの早期リターン（hybridSearchで既にチェック済みだが防御的に）
   if (scopes.length === 0) {
     return [];
@@ -960,7 +1030,12 @@ async function fallbackToTextOnly(scopes: string[], limit: number): Promise<Clai
 
   const conn = await getConnection();
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
+  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
+    boundaryClasses,
+    scopes.length + 1
+  );
 
+  const limitClause = limit !== undefined ? `LIMIT $${scopes.length + boundaryParams.length + 1}` : '';
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
@@ -968,11 +1043,13 @@ async function fallbackToTextOnly(scopes: string[], limit: number): Promise<Clai
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
+      ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
     ORDER BY score DESC
-    LIMIT $${scopes.length + 1}
+    ${limitClause}
   `;
 
-  const reader = await conn.runAndReadAll(sql, [...scopes, limit]);
+  const params = limit !== undefined ? [...scopes, ...boundaryParams, limit] : [...scopes, ...boundaryParams];
+  const reader = await conn.runAndReadAll(sql, params);
   const rawRows = reader.getRowObjects() as unknown as Claim[];
   return normalizeRowsTimestamps(rawRows);
 }

@@ -7,6 +7,7 @@
 
 import { boundaryValidate, allowTagMatches as boundaryAllowTagMatches } from '@pce/boundary';
 import { computeContentHash } from '@pce/embeddings';
+import type { BoundaryPolicy } from '@pce/policy-schemas';
 import { upsertClaim, upsertClaimWithEmbedding, findClaimById } from '../store/claims.js';
 import type { Provenance } from '../store/claims.js';
 import { hybridSearchPaginated, getEmbeddingService } from '../store/hybridSearch.js';
@@ -120,6 +121,12 @@ const allowTagMatches = boundaryAllowTagMatches;
 
 function isAllowedByBoundary(allowList: string[], requestedAllow: string[]): boolean {
   return allowList.some((p) => requestedAllow.some((t) => allowTagMatches(p, t)));
+}
+
+function getAllowedBoundaryClasses(policy: BoundaryPolicy, requestedAllow: string[]): string[] {
+  return Object.entries(policy.boundary_classes)
+    .filter(([, boundary]) => isAllowedByBoundary(boundary.allow ?? [], requestedAllow))
+    .map(([boundaryClass]) => boundaryClass);
 }
 
 // ========== Upsert Helper Functions ==========
@@ -937,17 +944,14 @@ export async function handleActivate(args: Record<string, unknown>) {
       );
     }
 
-    const searchConfig = cursor !== undefined ? { cursor } : {};
-    const searchResult = await hybridSearchPaginated(scope, top_k ?? 12, q, searchConfig);
     const policy = getPolicy();
     const allowTags = allow as string[];
-    const allowedResults = searchResult.results.filter((r) => {
-      const bc = policy.boundary_classes[r.claim.boundary_class];
-      if (!bc) return false;
-      return isAllowedByBoundary(bc.allow ?? [], allowTags);
+    const allowedBoundaryClasses = getAllowedBoundaryClasses(policy, allowTags);
+    const searchResult = await hybridSearchPaginated(scope, top_k ?? 12, q, {
+      ...(cursor !== undefined ? { cursor } : {}),
+      boundaryClasses: allowedBoundaryClasses,
     });
-
-    const claims = allowedResults.map((r) => r.claim);
+    const claims = searchResult.results.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({ id: acId, claims });
 
@@ -957,7 +961,7 @@ export async function handleActivate(args: Record<string, unknown>) {
       evidenceMap = await getEvidenceForClaims(claimIds);
     }
 
-    const scoredItems = allowedResults.map((r) => ({
+    const scoredItems = searchResult.results.map((r) => ({
       claim: r.claim,
       score: r.score,
       evidences: evidenceMap?.get(r.claim.id) ?? [],
