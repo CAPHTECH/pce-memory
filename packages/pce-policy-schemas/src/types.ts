@@ -20,6 +20,7 @@ export interface BoundaryPolicy {
 export interface RetrievalPolicy {
   hybrid?: {
     alpha?: number;
+    threshold?: number;
     k_txt?: number;
     k_vec?: number;
     k_final?: number;

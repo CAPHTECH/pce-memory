@@ -7,7 +7,7 @@
  * - Inv_UtilityMonotonicity: utility増加 → g増加
  * - Inv_RecencyMonotonicity: 時間経過 → recency減少 → g減少
  */
-import type { ClaimKind } from '../domain/types.js';
+import type { ActivateIntent, ClaimKind, MemoryType } from '../domain/types.js';
 
 /** Kind別半減期（日） */
 export const KIND_HALF_LIVES = {
@@ -30,6 +30,15 @@ export interface GFactorBreakdown {
   g: number;
 }
 
+/** Intent由来の調整内訳 */
+export interface IntentScoreBreakdown {
+  intent: ActivateIntent;
+  kind_boost: number;
+  memory_type_boost: number;
+  recency_weight: number;
+  boost: number;
+}
+
 /** Hybrid Searchスコアの完全内訳 */
 export interface ScoreBreakdown {
   /** テキスト検索スコア */
@@ -40,9 +49,46 @@ export interface ScoreBreakdown {
   S: number;
   /** g()係数の内訳 */
   g: GFactorBreakdown;
+  /** intent-aware補正 */
+  intent?: IntentScoreBreakdown;
   /** 最終スコア: score_final = S × g */
   score_final: number;
 }
+
+type IntentProfile = {
+  recencyWeight: number;
+  kindBoosts: Partial<Record<ClaimKind, number>>;
+  memoryTypeBoosts: Partial<Record<MemoryType, number>>;
+};
+
+const DEFAULT_INTENT_PROFILE: IntentProfile = {
+  recencyWeight: 1.0,
+  kindBoosts: {},
+  memoryTypeBoosts: {},
+};
+
+const INTENT_PROFILES: Record<ActivateIntent, IntentProfile> = {
+  resume_task: {
+    recencyWeight: 1.6,
+    kindBoosts: { task: 1.3 },
+    memoryTypeBoosts: { working_state: 1.35, knowledge: 1.05 },
+  },
+  debug_incident: {
+    recencyWeight: 1.8,
+    kindBoosts: {},
+    memoryTypeBoosts: { evidence: 1.4, knowledge: 1.1, procedure: 1.05 },
+  },
+  design_decision: {
+    recencyWeight: 0.65,
+    kindBoosts: {},
+    memoryTypeBoosts: { knowledge: 1.2, norm: 1.2, procedure: 1.1 },
+  },
+  policy_check: {
+    recencyWeight: 0.25,
+    kindBoosts: { policy_hint: 1.45 },
+    memoryTypeBoosts: { norm: 1.5, knowledge: 1.05 },
+  },
+};
 
 /**
  * シグモイド関数
@@ -118,6 +164,44 @@ export function calculateG(
   };
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizedRecencyTerm(recencyTerm: number): number {
+  return clamp((recencyTerm - 0.3) / 0.7, 0, 1);
+}
+
+export function adjustRecencyTerm(recencyTerm: number, recencyWeight: number): number {
+  const safeWeight = Number.isFinite(recencyWeight) && recencyWeight > 0 ? recencyWeight : 1.0;
+  const normalized = normalizedRecencyTerm(recencyTerm);
+  const adjusted = Math.pow(normalized, safeWeight);
+  return 0.3 + 0.7 * adjusted;
+}
+
+export function calculateIntentScoreBreakdown(
+  intent: ActivateIntent | undefined,
+  kind: string,
+  memoryType?: MemoryType | null
+): IntentScoreBreakdown | undefined {
+  if (!intent) {
+    return undefined;
+  }
+
+  const profile = INTENT_PROFILES[intent] ?? DEFAULT_INTENT_PROFILE;
+  const typedKind = kind as ClaimKind;
+  const kind_boost = profile.kindBoosts[typedKind] ?? 1.0;
+  const memory_type_boost = memoryType ? (profile.memoryTypeBoosts[memoryType] ?? 1.0) : 1.0;
+
+  return {
+    intent,
+    kind_boost,
+    memory_type_boost,
+    recency_weight: profile.recencyWeight,
+    boost: kind_boost * memory_type_boost,
+  };
+}
+
 /**
  * Claimメトリクスからg()を計算
  *
@@ -162,7 +246,8 @@ export function calculateScoreBreakdown(
   textScore: number,
   vecScore: number,
   alpha: number,
-  gFactor: GFactorBreakdown
+  gFactor: GFactorBreakdown,
+  intent?: IntentScoreBreakdown
 ): ScoreBreakdown {
   const S = alpha * vecScore + (1 - alpha) * textScore;
   return {
@@ -170,6 +255,7 @@ export function calculateScoreBreakdown(
     s_vec: vecScore,
     S,
     g: gFactor,
-    score_final: S * gFactor.g,
+    ...(intent ? { intent } : {}),
+    score_final: S * gFactor.g * (intent?.boost ?? 1.0),
   };
 }

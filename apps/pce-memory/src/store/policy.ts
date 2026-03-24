@@ -8,7 +8,8 @@ import { pipe } from 'fp-ts/function';
 import { getConnection } from '../db/connection.js';
 import type { DomainError } from '../domain/errors.js';
 import { dbError } from '../domain/errors.js';
-import type { BoundaryPolicy } from '@pce/policy-schemas';
+import { defaultPolicy } from '@pce/policy-schemas';
+import type { BoundaryPolicy, PolicyDocument } from '@pce/policy-schemas';
 
 // ========== 型定義 ==========
 
@@ -17,7 +18,7 @@ export interface PolicyRecord {
   id: string;
   version: string;
   yaml_content: string;
-  config_json: BoundaryPolicy;
+  config_json: PolicyDocument;
   created_at: Date;
 }
 
@@ -30,25 +31,52 @@ export interface SavePolicyResult {
 // ========== 関数 ==========
 
 /**
+ * 旧形式（BoundaryPolicyのみ）を含む保存済みポリシーを正規化
+ */
+function isPolicyDocument(config: PolicyDocument | BoundaryPolicy): config is PolicyDocument {
+  return 'boundary' in config;
+}
+
+function normalizePolicyDocument(
+  version: string,
+  config: PolicyDocument | BoundaryPolicy
+): PolicyDocument {
+  if (isPolicyDocument(config) && typeof config.boundary === 'object' && config.boundary !== null) {
+    return {
+      version: config.version ?? version,
+      boundary: config.boundary,
+      ...(config.retrieval ? { retrieval: config.retrieval } : {}),
+    };
+  }
+
+  return {
+    version,
+    boundary: config as BoundaryPolicy,
+    ...(defaultPolicy.retrieval ? { retrieval: defaultPolicy.retrieval } : {}),
+  };
+}
+
+/**
  * ポリシーをDBに保存
  * @param version ポリシーバージョン
  * @param yamlContent 元のYAML文字列（空文字可）
- * @param policy パース済みBoundaryPolicy
+ * @param policy パース済みPolicyDocumentまたは旧BoundaryPolicy
  */
 export function savePolicy(
   version: string,
   yamlContent: string,
-  policy: BoundaryPolicy
+  policy: PolicyDocument | BoundaryPolicy
 ): TE.TaskEither<DomainError, SavePolicyResult> {
   return TE.tryCatch(
     async () => {
       const conn = await getConnection();
       const id = `pol_${crypto.randomUUID().slice(0, 8)}`;
+      const normalizedPolicy = normalizePolicyDocument(version, policy);
 
       await conn.run(
         `INSERT INTO policies (id, version, yaml_content, config_json)
          VALUES ($1, $2, $3, $4)`,
-        [id, version, yamlContent, JSON.stringify(policy)]
+        [id, version, yamlContent, JSON.stringify(normalizedPolicy)]
       );
 
       return { id, version };
@@ -87,11 +115,12 @@ export function loadLatestPolicy(): TE.TaskEither<DomainError, PolicyRecord | un
       }
 
       const row = rows[0]!;
+      const parsedConfig = JSON.parse(row.config_json) as PolicyDocument | BoundaryPolicy;
       return {
         id: row.id,
         version: row.version,
         yaml_content: row.yaml_content,
-        config_json: JSON.parse(row.config_json) as BoundaryPolicy,
+        config_json: normalizePolicyDocument(row.version, parsedConfig),
         created_at: row.created_at,
       };
     },
@@ -132,11 +161,12 @@ export function loadPolicyByVersion(
       }
 
       const row = rows[0]!;
+      const parsedConfig = JSON.parse(row.config_json) as PolicyDocument | BoundaryPolicy;
       return {
         id: row.id,
         version: row.version,
         yaml_content: row.yaml_content,
-        config_json: JSON.parse(row.config_json) as BoundaryPolicy,
+        config_json: normalizePolicyDocument(row.version, parsedConfig),
         created_at: row.created_at,
       };
     },

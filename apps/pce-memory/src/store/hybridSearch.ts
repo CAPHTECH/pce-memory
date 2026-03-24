@@ -21,8 +21,16 @@ import { getConnection } from '../db/connection.js';
 import type { Claim } from './claims.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
-import { calculateGFromClaim, type GFactorBreakdown, type ScoreBreakdown } from './rerank.js';
+import {
+  adjustRecencyTerm,
+  calculateGFromClaim,
+  calculateIntentScoreBreakdown,
+  calculateScoreBreakdown,
+  type GFactorBreakdown,
+  type ScoreBreakdown,
+} from './rerank.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
+import type { ActivateIntent, ClaimKind, MemoryType } from '../domain/types.js';
 
 // ========== ADR-0004 パラメータ ==========
 
@@ -192,6 +200,69 @@ function buildBoundaryFilterCondition(
   };
 }
 
+function buildColumnFilterCondition(
+  alias: string,
+  column: string,
+  values: readonly string[] | undefined,
+  startParamIndex: number
+): { sql: string; params: string[] } {
+  if (values === undefined) {
+    return { sql: '', params: [] };
+  }
+
+  const normalizedValues = [...new Set(values.filter((value) => value.length > 0))];
+  if (normalizedValues.length === 0) {
+    return { sql: '1 = 0', params: [] };
+  }
+
+  const placeholders = normalizedValues.map((_, index) => `$${startParamIndex + index}`).join(',');
+
+  return {
+    sql: `${alias}.${column} IN (${placeholders})`,
+    params: normalizedValues,
+  };
+}
+
+function buildClaimFilterConditions(
+  alias: string,
+  filters: ClaimSearchFilters,
+  startParamIndex: number
+): { sql: string; params: string[] } {
+  let nextParamIndex = startParamIndex;
+  const clauses: string[] = [];
+  const params: string[] = [];
+
+  const boundary = buildBoundaryFilterCondition(filters.boundaryClasses, nextParamIndex);
+  if (boundary.sql) {
+    clauses.push(boundary.sql);
+    params.push(...boundary.params);
+    nextParamIndex += boundary.params.length;
+  }
+
+  const kind = buildColumnFilterCondition(alias, 'kind', filters.kindFilter, nextParamIndex);
+  if (kind.sql) {
+    clauses.push(kind.sql);
+    params.push(...kind.params);
+    nextParamIndex += kind.params.length;
+  }
+
+  const memoryType = buildColumnFilterCondition(
+    alias,
+    'memory_type',
+    filters.memoryTypeFilter,
+    nextParamIndex
+  );
+  if (memoryType.sql) {
+    clauses.push(memoryType.sql);
+    params.push(...memoryType.params);
+  }
+
+  return {
+    sql: clauses.join(' AND '),
+    params,
+  };
+}
+
 // ========== 型定義 ==========
 
 /**
@@ -201,6 +272,12 @@ function buildBoundaryFilterCondition(
 interface SearchResult {
   claim: Claim;
   score: number;
+}
+
+interface ClaimSearchFilters {
+  boundaryClasses?: string[];
+  kindFilter?: ClaimKind[];
+  memoryTypeFilter?: MemoryType[];
 }
 
 /**
@@ -242,6 +319,10 @@ export interface HybridSearchConfig {
   alpha?: number;
   /** 閾値（オプション、デフォルト0.15） */
   threshold?: number;
+  /** テキスト候補上限（オプション、デフォルト48） */
+  kText?: number;
+  /** ベクトル候補上限（オプション、デフォルト96） */
+  kVec?: number;
   /** g()再ランキングを有効化（オプション、デフォルトtrue） */
   enableRerank?: boolean;
   /** デバッグ用: スコア内訳を含める（オプション、デフォルトfalse） */
@@ -250,6 +331,12 @@ export interface HybridSearchConfig {
   cursor?: string;
   /** 事前に許可されたboundary_classのみに絞り込む */
   boundaryClasses?: string[];
+  /** kindフィルタ */
+  kindFilter?: ClaimKind[];
+  /** memory_typeフィルタ */
+  memoryTypeFilter?: MemoryType[];
+  /** activate intent */
+  intent?: ActivateIntent;
 }
 
 /**
@@ -259,13 +346,49 @@ export interface ScoredClaim {
   claim: Claim;
   /** 融合スコア（g()適用後） */
   score: number;
+  /** スコア内訳 */
+  score_breakdown?: ScoreBreakdown;
+  /** source layer */
+  source_layer?: string;
 }
 
-function scoreFallbackClaims(claims: Claim[]): ScoredClaim[] {
-  return claims.map((claim, index) => ({
-    claim,
-    score: Math.max(0.1, 1.0 - index * 0.05),
-  }));
+function mapScopeToLayer(scope: string): 'micro' | 'meso' | 'macro' {
+  if (scope === 'principle') {
+    return 'macro';
+  }
+  if (scope === 'project') {
+    return 'meso';
+  }
+  return 'micro';
+}
+
+function buildTextOnlyScoreBreakdown(score: number): ScoreBreakdown {
+  return {
+    s_text: score,
+    s_vec: 0,
+    S: score,
+    g: {
+      utility_term: 1.0,
+      confidence_term: 1.0,
+      recency_term: 1.0,
+      g: 1.0,
+    },
+    score_final: score,
+  };
+}
+
+function resolveAlpha(alpha: number | undefined): number {
+  return typeof alpha === 'number' && Number.isFinite(alpha) ? alpha : ALPHA;
+}
+
+function resolveThreshold(threshold: number | undefined): number {
+  return typeof threshold === 'number' && Number.isFinite(threshold) ? threshold : THRESHOLD;
+}
+
+function resolveCandidateLimit(limit: number | undefined, fallback: number): number {
+  return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+    ? normalizeLimit(limit)
+    : fallback;
 }
 
 /**
@@ -321,7 +444,7 @@ export async function textSearch(
   query: string,
   scopes: string[],
   limit: number = K_TEXT,
-  boundaryClasses?: string[]
+  filters: ClaimSearchFilters = {}
 ): Promise<SearchResult[]> {
   // 空scopesの早期リターン
   if (scopes.length === 0) {
@@ -333,16 +456,13 @@ export async function textSearch(
 
   // スコープのプレースホルダー構築
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
-  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
-    boundaryClasses,
-    scopes.length + 1
-  );
 
   // クエリを単語に分割
   const words = splitQueryWords(query);
 
   // 空クエリの場合はスコープ内の全Claimを返す（criticスコア順）
   if (words.length === 0) {
+    const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);
     const sql = `
       SELECT
         c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
@@ -352,11 +472,15 @@ export async function textSearch(
       LEFT JOIN critic cr ON cr.claim_id = c.id
       WHERE c.scope IN (${scopePlaceholders})
         AND ${activeClaimFilter('c')}
-        ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
-      ORDER BY text_score DESC
-      LIMIT $${scopes.length + boundaryParams.length + 1}
+        ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}
+      ORDER BY text_score DESC, c.created_at DESC
+      LIMIT $${scopes.length + filterConditions.params.length + 1}
     `;
-    const reader = await conn.runAndReadAll(sql, [...scopes, ...boundaryParams, normalizedLimit]);
+    const reader = await conn.runAndReadAll(sql, [
+      ...scopes,
+      ...filterConditions.params,
+      normalizedLimit,
+    ]);
     const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
     const rows = normalizeRowsTimestamps(rawRows);
 
@@ -381,8 +505,9 @@ export async function textSearch(
 
   // 単語OR条件を構築
   const { sql: wordCondition, params: wordParams } = buildWordOrCondition(words, scopes.length + 1);
-  const boundaryWithWords = buildBoundaryFilterCondition(
-    boundaryClasses,
+  const filterConditions = buildClaimFilterConditions(
+    'c',
+    filters,
     scopes.length + wordParams.length + 1
   );
 
@@ -398,15 +523,15 @@ export async function textSearch(
     WHERE c.scope IN (${scopePlaceholders})
       AND ${activeClaimFilter('c')}
       AND ${wordCondition}
-      ${boundaryWithWords.sql ? `AND ${boundaryWithWords.sql}` : ''}
-    ORDER BY text_score DESC
-    LIMIT $${scopes.length + wordParams.length + boundaryWithWords.params.length + 1}
+      ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}
+    ORDER BY text_score DESC, c.created_at DESC
+    LIMIT $${scopes.length + wordParams.length + filterConditions.params.length + 1}
   `;
 
   const reader = await conn.runAndReadAll(sql, [
     ...scopes,
     ...wordParams,
-    ...boundaryWithWords.params,
+    ...filterConditions.params,
     normalizedLimit,
   ]);
   const rawRows = reader.getRowObjects() as unknown as (Claim & { text_score: number })[];
@@ -446,7 +571,7 @@ export async function vectorSearch(
   queryEmbedding: readonly number[],
   scopes: string[],
   limit: number = K_VEC,
-  boundaryClasses?: string[]
+  filters: ClaimSearchFilters = {}
 ): Promise<SearchResult[]> {
   // 空scopesの早期リターン
   if (scopes.length === 0) {
@@ -468,10 +593,7 @@ export async function vectorSearch(
 
   // スコープのプレースホルダー構築
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
-  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
-    boundaryClasses,
-    scopes.length + 1
-  );
+  const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);
 
   // DuckDB Node APIは配列パラメータを直接サポートしないため、
   // 配列リテラル文字列として埋め込む（検証済みなので安全）
@@ -489,12 +611,16 @@ export async function vectorSearch(
     INNER JOIN claim_vectors cv ON cv.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
       AND ${activeClaimFilter('c')}
-      ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
-    ORDER BY vec_score DESC
-    LIMIT $${scopes.length + boundaryParams.length + 1}
+      ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}
+    ORDER BY vec_score DESC, c.created_at DESC
+    LIMIT $${scopes.length + filterConditions.params.length + 1}
   `;
 
-  const reader = await conn.runAndReadAll(sql, [...scopes, ...boundaryParams, normalizedLimit]);
+  const reader = await conn.runAndReadAll(sql, [
+    ...scopes,
+    ...filterConditions.params,
+    normalizedLimit,
+  ]);
   const rawRows = reader.getRowObjects() as unknown as (Claim & { vec_score: number })[];
   const rows = normalizeRowsTimestamps(rawRows);
 
@@ -586,17 +712,14 @@ function mergeResults(
  * @param scopes 検索対象スコープ
  * @returns mean, std（stdが0の場合は1.0を返す）
  */
-async function getClaimStats(scopes: string[], boundaryClasses?: string[]): Promise<UtilityStats> {
+async function getClaimStats(scopes: string[], filters: ClaimSearchFilters = {}): Promise<UtilityStats> {
   if (scopes.length === 0) {
     return { mean: 0, std: 1 };
   }
 
   const conn = await getConnection();
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
-  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
-    boundaryClasses,
-    scopes.length + 1
-  );
+  const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);
 
   const sql = `
     SELECT
@@ -605,10 +728,10 @@ async function getClaimStats(scopes: string[], boundaryClasses?: string[]): Prom
     FROM claims c
     WHERE c.scope IN (${scopePlaceholders})
       AND ${activeClaimFilter('c')}
-      ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
+      ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}
   `;
 
-  const reader = await conn.runAndReadAll(sql, [...scopes, ...boundaryParams]);
+  const reader = await conn.runAndReadAll(sql, [...scopes, ...filterConditions.params]);
   const rows = reader.getRowObjects() as unknown as { mean: number | null; std: number }[];
   const row = rows[0];
 
@@ -673,7 +796,8 @@ function mergeResultsWithRerank(
   stats: UtilityStats,
   alpha: number,
   threshold: number,
-  includeBreakdown: boolean = false
+  includeBreakdown: boolean = false,
+  intent?: ActivateIntent
 ): RankedSearchResult[] {
   // ClaimIdでマップ化
   const textMap = new Map<string, SearchResult>();
@@ -702,21 +826,29 @@ function mergeResultsWithRerank(
     const textScore = textResult?.score ?? 0;
     const vecScore = vecResult?.score ?? 0;
 
-    // 融合スコア S = α × vecScore + (1-α) × textScore
-    const S = alpha * vecScore + (1 - alpha) * textScore;
-
     // メトリクス取得（存在しない場合はデフォルト値）
     const metrics = claimMetrics.get(id);
     let gFactor: GFactorBreakdown;
+    let intentBreakdown: ReturnType<typeof calculateIntentScoreBreakdown> = undefined;
 
     if (metrics) {
-      gFactor = calculateGFromClaim(
+      const baseGFactor = calculateGFromClaim(
         metrics.utility,
         metrics.confidence,
         metrics.ts_eff,
         metrics.kind,
         stats
       );
+      intentBreakdown = calculateIntentScoreBreakdown(intent, metrics.kind, claim.memory_type ?? null);
+      const adjustedRecencyTerm = intentBreakdown
+        ? adjustRecencyTerm(baseGFactor.recency_term, intentBreakdown.recency_weight)
+        : baseGFactor.recency_term;
+
+      gFactor = {
+        ...baseGFactor,
+        recency_term: adjustedRecencyTerm,
+        g: baseGFactor.utility_term * baseGFactor.confidence_term * adjustedRecencyTerm,
+      };
     } else {
       // メトリクスがない場合: g = 1.0（影響なし）
       gFactor = {
@@ -727,21 +859,14 @@ function mergeResultsWithRerank(
       };
     }
 
-    // 最終スコア: score_final = S × g
-    const scoreFinal = S * gFactor.g;
+    const breakdown = calculateScoreBreakdown(textScore, vecScore, alpha, gFactor, intentBreakdown);
+    const scoreFinal = breakdown.score_final;
 
-    // 閾値フィルタ
     if (scoreFinal >= threshold) {
       const result: RankedSearchResult = { claim, fusedScore: scoreFinal };
 
       if (includeBreakdown) {
-        result.breakdown = {
-          s_text: textScore,
-          s_vec: vecScore,
-          S,
-          g: gFactor,
-          score_final: scoreFinal,
-        };
+        result.breakdown = breakdown;
       }
 
       merged.push(result);
@@ -784,89 +909,8 @@ export async function hybridSearch(
   query?: string,
   config?: Partial<HybridSearchConfig>
 ): Promise<Claim[]> {
-  // 空scopesの早期リターン
-  if (scopes.length === 0) {
-    return [];
-  }
-
-  const normalizedLimit = normalizeLimit(limit);
-  const alpha = config?.alpha ?? ALPHA;
-  const threshold = config?.threshold ?? THRESHOLD;
-  const embeddingService = config?.embeddingService ?? globalEmbeddingService;
-  const boundaryClasses = config?.boundaryClasses;
-
-  // クエリがない場合はcriticスコアで取得（既存動作）
-  if (!query || query.trim().length === 0) {
-    return fallbackToTextOnly(scopes, normalizedLimit, boundaryClasses);
-  }
-
-  // Step 1: クエリ埋め込み生成
-  let queryEmbedding: readonly number[] | null = null;
-
-  if (embeddingService) {
-    const embedResult = await embeddingService.embed({
-      text: query,
-      sensitivity: 'internal',
-    })();
-
-    if (E.isRight(embedResult)) {
-      queryEmbedding = embedResult.right.embedding;
-    }
-    // 失敗時はText-onlyフォールバック（queryEmbedding = null）
-  }
-
-  const enableRerank = config?.enableRerank ?? true;
-  const includeBreakdown = config?.includeBreakdown ?? false;
-
-  // Step 2: 並列検索実行
-  // TLA+ Liveness_C_MergeEventuallyComplete: Promise.all()
-  if (queryEmbedding) {
-    const [textResults, vecResults] = await Promise.all([
-      textSearch(query, scopes, K_TEXT, boundaryClasses),
-      vectorSearch(queryEmbedding, scopes, K_VEC, boundaryClasses),
-    ]);
-
-    // Step 3-5: マージ + 融合 + フィルタ + ソート（g()再ランキング対応）
-    let merged: { claim: Claim; fusedScore: number }[];
-
-    if (enableRerank) {
-      // g()再ランキング有効: utility/confidence/recencyを考慮
-      const allClaimIds = [
-        ...textResults.map((r) => r.claim.id),
-        ...vecResults.map((r) => r.claim.id),
-      ];
-      const uniqueIds = [...new Set(allClaimIds)];
-
-      // 並列でstatsとmetricsを取得
-      const [stats, claimMetrics] = await Promise.all([
-        getClaimStats(scopes, boundaryClasses),
-        fetchClaimMetrics(uniqueIds),
-      ]);
-
-      merged = mergeResultsWithRerank(
-        textResults,
-        vecResults,
-        claimMetrics,
-        stats,
-        alpha,
-        threshold,
-        includeBreakdown
-      );
-    } else {
-      // g()再ランキング無効: 従来の融合スコアのみ
-      merged = mergeResults(textResults, vecResults, alpha, threshold);
-    }
-
-    // Step 6: 上位k件を返却
-    return merged.slice(0, normalizedLimit).map((r) => r.claim);
-  }
-
-  // Text-onlyフォールバック（埋め込み生成失敗時）
-  const textResults = await textSearch(query, scopes, normalizedLimit, boundaryClasses);
-  return textResults
-    .filter((r) => r.score >= threshold)
-    .slice(0, normalizedLimit)
-    .map((r) => r.claim);
+  const results = await hybridSearchWithScores(scopes, limit, query, config);
+  return results.map((result) => result.claim);
 }
 
 /**
@@ -891,23 +935,28 @@ export async function hybridSearchWithScores(
   }
 
   const normalizedLimit = normalizeLimit(limit);
-  const alpha = config?.alpha ?? ALPHA;
-  const threshold = config?.threshold ?? THRESHOLD;
+  const alpha = resolveAlpha(config?.alpha);
+  const threshold = resolveThreshold(config?.threshold);
+  const kText = resolveCandidateLimit(config?.kText, K_TEXT);
+  const kVec = resolveCandidateLimit(config?.kVec, K_VEC);
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
-  const boundaryClasses = config?.boundaryClasses;
-
-  // クエリがない場合はcriticスコアで取得（既存動作）
-  if (!query || query.trim().length === 0) {
-    const claims = await fallbackToTextOnly(scopes, normalizedLimit, boundaryClasses);
-    return scoreFallbackClaims(claims);
-  }
+  const includeBreakdown = config?.includeBreakdown ?? false;
+  const enableRerank = config?.enableRerank ?? true;
+  const filters: ClaimSearchFilters = {
+    ...(config?.boundaryClasses ? { boundaryClasses: config.boundaryClasses } : {}),
+    ...(config?.kindFilter ? { kindFilter: config.kindFilter } : {}),
+    ...(config?.memoryTypeFilter ? { memoryTypeFilter: config.memoryTypeFilter } : {}),
+  };
+  const hasQuery = Boolean(query && query.trim().length > 0);
+  const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;
+  const querylessUnlimited = !hasQuery && limit >= Number.MAX_SAFE_INTEGER / 2;
 
   // Step 1: クエリ埋め込み生成
   let queryEmbedding: readonly number[] | null = null;
 
-  if (embeddingService) {
+  if (hasQuery && embeddingService) {
     const embedResult = await embeddingService.embed({
-      text: query,
+      text: query!,
       sensitivity: 'internal',
     })();
 
@@ -916,18 +965,15 @@ export async function hybridSearchWithScores(
     }
   }
 
-  const enableRerank = config?.enableRerank ?? true;
-  const includeBreakdown = config?.includeBreakdown ?? false;
-
   // Step 2: 並列検索実行
   if (queryEmbedding) {
     const [textResults, vecResults] = await Promise.all([
-      textSearch(query, scopes, K_TEXT, boundaryClasses),
-      vectorSearch(queryEmbedding, scopes, K_VEC, boundaryClasses),
+      textSearch(query!, scopes, kText, filters),
+      vectorSearch(queryEmbedding, scopes, kVec, filters),
     ]);
 
     // Step 3-5: マージ + 融合 + フィルタ + ソート
-    let merged: { claim: Claim; fusedScore: number }[];
+    let merged: RankedSearchResult[];
 
     if (enableRerank) {
       const allClaimIds = [
@@ -937,7 +983,7 @@ export async function hybridSearchWithScores(
       const uniqueIds = [...new Set(allClaimIds)];
 
       const [stats, claimMetrics] = await Promise.all([
-        getClaimStats(scopes, boundaryClasses),
+        getClaimStats(scopes, filters),
         fetchClaimMetrics(uniqueIds),
       ]);
 
@@ -948,7 +994,8 @@ export async function hybridSearchWithScores(
         stats,
         alpha,
         threshold,
-        includeBreakdown
+        includeBreakdown,
+        config?.intent
       );
     } else {
       merged = mergeResults(textResults, vecResults, alpha, threshold);
@@ -958,17 +1005,54 @@ export async function hybridSearchWithScores(
     return merged.slice(0, normalizedLimit).map((r) => ({
       claim: r.claim,
       score: r.fusedScore,
+      source_layer: mapScopeToLayer(r.claim.scope),
+      ...(r.breakdown ? { score_breakdown: r.breakdown } : {}),
     }));
   }
 
-  // Text-onlyフォールバック
-  const textResults = await textSearch(query, scopes, normalizedLimit, boundaryClasses);
-  return textResults
-    .filter((r) => r.score >= threshold)
-    .slice(0, normalizedLimit)
-    .map((r) => ({
+  const textResults = hasQuery
+    ? await textSearch(query!, scopes, kText, filters)
+    : await fallbackToTextOnlyResults(
+        scopes,
+        querylessUnlimited ? undefined : normalizedLimit,
+        filters
+      );
+
+  const shouldIntentRerank = enableRerank && Boolean(config?.intent);
+  if (shouldIntentRerank) {
+    const uniqueIds = [...new Set(textResults.map((result) => result.claim.id))];
+    const [stats, claimMetrics] = await Promise.all([
+      getClaimStats(scopes, filters),
+      fetchClaimMetrics(uniqueIds),
+    ]);
+
+    const merged = mergeResultsWithRerank(
+      textResults,
+      [],
+      claimMetrics,
+      stats,
+      0,
+      textOnlyThreshold,
+      includeBreakdown,
+      config?.intent
+    );
+
+    return merged.slice(0, normalizedLimit).map((r) => ({
       claim: r.claim,
-      score: r.score,
+      score: r.fusedScore,
+      source_layer: mapScopeToLayer(r.claim.scope),
+      ...(r.breakdown ? { score_breakdown: r.breakdown } : {}),
+    }));
+  }
+
+  return textResults
+    .filter((result) => result.score >= textOnlyThreshold)
+    .slice(0, normalizedLimit)
+    .map((result) => ({
+      claim: result.claim,
+      score: result.score,
+      source_layer: mapScopeToLayer(result.claim.scope),
+      ...(includeBreakdown ? { score_breakdown: buildTextOnlyScoreBreakdown(result.score) } : {}),
     }));
 }
 
@@ -990,7 +1074,6 @@ export async function hybridSearchPaginated(
   config?: Partial<HybridSearchConfig>
 ): Promise<PaginatedSearchResult> {
   const cursor = config?.cursor;
-  const boundaryClasses = config?.boundaryClasses;
   const isQueryless = !query || query.trim().length === 0;
 
   // カーソル指定時はランキング済み候補全体から位置を特定する必要がある。
@@ -999,11 +1082,8 @@ export async function hybridSearchPaginated(
 
   const allResults =
     cursor && isQueryless
-      ? scoreFallbackClaims(await fallbackToTextOnly(scopes, undefined, boundaryClasses))
-      : await hybridSearchWithScores(scopes, fetchLimit, query, {
-          ...config,
-          // cursorは内部で処理しないので除外
-        });
+      ? await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)
+      : await hybridSearchWithScores(scopes, fetchLimit, query, config);
 
   // カーソル以降のデータをフィルタ
   let filteredResults = allResults;
@@ -1035,11 +1115,11 @@ export async function hybridSearchPaginated(
  * クエリなしの場合のフォールバック
  * criticスコアでソートして返す（既存listClaimsByScopeと同等）
  */
-async function fallbackToTextOnly(
+async function fallbackToTextOnlyResults(
   scopes: string[],
   limit?: number,
-  boundaryClasses?: string[]
-): Promise<Claim[]> {
+  filters: ClaimSearchFilters = {}
+): Promise<SearchResult[]> {
   // 空scopesの早期リターン（hybridSearchで既にチェック済みだが防御的に）
   if (scopes.length === 0) {
     return [];
@@ -1047,13 +1127,10 @@ async function fallbackToTextOnly(
 
   const conn = await getConnection();
   const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');
-  const { sql: boundaryCondition, params: boundaryParams } = buildBoundaryFilterCondition(
-    boundaryClasses,
-    scopes.length + 1
-  );
+  const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);
 
   const limitClause =
-    limit !== undefined ? `LIMIT $${scopes.length + boundaryParams.length + 1}` : '';
+    limit !== undefined ? `LIMIT $${scopes.length + filterConditions.params.length + 1}` : '';
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
@@ -1062,16 +1139,35 @@ async function fallbackToTextOnly(
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
       AND ${activeClaimFilter('c')}
-      ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
-    ORDER BY score DESC
+      ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}
+    ORDER BY score DESC, c.created_at DESC
     ${limitClause}
   `;
 
   const params =
-    limit !== undefined ? [...scopes, ...boundaryParams, limit] : [...scopes, ...boundaryParams];
+    limit !== undefined
+      ? [...scopes, ...filterConditions.params, limit]
+      : [...scopes, ...filterConditions.params];
   const reader = await conn.runAndReadAll(sql, params);
-  const rawRows = reader.getRowObjects() as unknown as Claim[];
-  return normalizeRowsTimestamps(rawRows);
+  const rawRows = reader.getRowObjects() as unknown as (Claim & { score: number })[];
+  const rows = normalizeRowsTimestamps(rawRows);
+  return rows.map((row) => ({
+    claim: {
+      id: row.id,
+      text: row.text,
+      kind: row.kind,
+      scope: row.scope,
+      boundary_class: row.boundary_class,
+      memory_type: row.memory_type ?? null,
+      content_hash: row.content_hash,
+      utility: row.utility,
+      confidence: row.confidence,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      recency_anchor: row.recency_anchor,
+    },
+    score: row.score,
+  }));
 }
 
 // ========== claim_vectors操作 ==========

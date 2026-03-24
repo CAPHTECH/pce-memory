@@ -78,9 +78,11 @@ describe('loadLatestPolicy', () => {
 
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result) && result.right) {
-      expect(result.right.config_json.version).toBe(defaultPolicy.boundary.version);
-      expect(result.right.config_json.scopes).toBeDefined();
-      expect(result.right.config_json.boundary_classes).toBeDefined();
+      expect(result.right.config_json.version).toBe('1.0');
+      expect(result.right.config_json.boundary.version).toBe(defaultPolicy.boundary.version);
+      expect(result.right.config_json.boundary.scopes).toBeDefined();
+      expect(result.right.config_json.boundary.boundary_classes).toBeDefined();
+      expect(result.right.config_json.retrieval?.hybrid?.alpha).toBe(defaultPolicy.retrieval?.hybrid?.alpha);
     }
   });
 });
@@ -149,6 +151,7 @@ describe('Policy persistence integration', () => {
     if (E.isRight(loadResult) && loadResult.right) {
       expect(loadResult.right.version).toBe('custom-1.0');
       expect(loadResult.right.config_json.version).toBe('custom-1.0');
+      expect(loadResult.right.config_json.boundary.version).toBe('custom-1.0');
     }
   });
 

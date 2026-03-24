@@ -150,6 +150,7 @@ describe('v2 schema primitives', () => {
       scope: ['project'],
       allow: ['answer:task'],
       q: 'v2 memory type',
+      intent: 'resume_task',
     });
     const claims = activate.structuredContent?.claims as Array<{
       claim: { content_hash: string; memory_type?: string | null };
@@ -171,7 +172,8 @@ describe('v2 schema primitives', () => {
       policy_version: string | null;
     }>;
 
-    expect(rows[0]?.intent).toBe('v2 memory type');
+    expect(activate.structuredContent?.intent).toBe('resume_task');
+    expect(rows[0]?.intent).toBe('resume_task');
     expect(rows[0]?.policy_version).toBeDefined();
   });
 });
