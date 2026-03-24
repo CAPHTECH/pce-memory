@@ -65,44 +65,18 @@ describe('Output Schema - 基本テスト', () => {
     const provenanceSchema = upsertTool?.inputSchema?.properties?.provenance as
       | { description?: string; properties?: { at?: { description?: string } }; required?: string[] }
       | undefined;
-    const conditionalRequirements = upsertTool?.inputSchema?.allOf as
-      | Array<{
-          if?: { properties?: { scope?: { enum?: string[] } }; required?: string[] };
-          then?: {
-            required?: string[];
-            properties?: { provenance?: { required?: string[] } };
-          };
-        }>
-      | undefined;
-
     expect(boundaryClassSchema?.enum).toEqual(['public', 'internal', 'pii']);
     expect(boundaryClassSchema?.description).toContain('secret is rejected by default');
     expect(boundaryClassSchema?.description).toContain('pce_memory_observe');
     expect(memoryTypeSchema?.enum).toEqual([...MEMORY_TYPES]);
     expect(memoryTypeSchema?.description).toContain('Optional v2 memory taxonomy');
     expect(provenanceSchema?.description).toContain('Optional for session scope');
-    expect(provenanceSchema?.required).toBeUndefined();
     expect(provenanceSchema?.properties?.at?.description).toContain(
       'Required for project and principle scopes'
     );
-    expect(conditionalRequirements).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          if: expect.objectContaining({
-            properties: expect.objectContaining({
-              scope: expect.objectContaining({ enum: ['project', 'principle'] }),
-            }),
-            required: ['scope'],
-          }),
-          then: expect.objectContaining({
-            required: ['provenance'],
-            properties: expect.objectContaining({
-              provenance: expect.objectContaining({ required: ['at'] }),
-            }),
-          }),
-        }),
-      ])
-    );
+
+    // allOf/anyOf are not used (Claude API does not support them at top level)
+    expect(upsertTool?.inputSchema?.allOf).toBeUndefined();
   });
 });
 

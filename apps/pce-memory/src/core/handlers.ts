@@ -4109,7 +4109,9 @@ export const TOOL_DEFINITIONS = [
         proposed_kind: { type: 'string', enum: [...CLAIM_KINDS] },
         proposed_scope: { type: 'string', enum: ['project', 'principle'] },
         proposed_memory_type: {
-          anyOf: [{ type: 'string', enum: [...MEMORY_TYPES] }, { type: 'null' }],
+          type: 'string',
+          enum: [...MEMORY_TYPES],
+          description: 'Proposed memory type (nullable)',
         },
         proposed_boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
         status: { type: 'string', enum: ['pending'] },
@@ -4340,24 +4342,6 @@ export const TOOL_DEFINITIONS = [
         },
       },
       required: ['text', 'kind', 'scope', 'boundary_class'],
-      allOf: [
-        {
-          if: {
-            properties: {
-              scope: { enum: ['project', 'principle'] },
-            },
-            required: ['scope'],
-          },
-          then: {
-            required: ['provenance'],
-            properties: {
-              provenance: {
-                required: ['at'],
-              },
-            },
-          },
-        },
-      ],
     },
     outputSchema: {
       type: 'object',
