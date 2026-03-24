@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-03-24
+
+### Added
+
+- **v2 Promotion Pipeline**: `pce_memory_distill`, `pce_memory_promote`, `pce_memory_rollback` tools for staged knowledge promotion with reviewable candidates, mandatory provenance, and append-only rollback
+- **Intent-Aware Activate**: `intent` parameter (`resume_task`, `debug_incident`, `design_decision`, `policy_check`) with per-intent scoring adjustments
+- **Type Filters**: `kind_filter` and `memory_type_filter` parameters in `pce_memory_activate` for precise retrieval
+- **Observation Search**: `include_observations` parameter in `pce_memory_activate` for short-term memory recall from micro layer
+- **Memory Type Taxonomy**: `memory_type` field (`evidence`, `working_state`, `knowledge`, `procedure`, `norm`) on claims as semantic axis alongside `kind`
+- **Schema Primitives**: `promotion_queue`, `active_context_items` tables; enriched `active_contexts` with `intent`, `expires_at`, `policy_version`
+- **Centralized Domain Types**: `ClaimKind` and `MemoryType` in `src/domain/types.ts`
+- **v2 Migration Script**: `scripts/migrate-v2-memory-type.ts` for backfilling `memory_type` on existing claims
+- **Policy-Driven Retrieval**: `retrieval.*` policy settings wired into runtime scoring (alpha, threshold, k_txt, k_vec)
+- **Active Context Items**: Per-item score breakdown, source layer, rank, and selection reason persisted
+- **Validation Framework**: Local validation workflow, task corpus, scoring rubric, and 4 architecture validation analyses
+- **Design Invariant Tests**: `test/v2-design-invariants.test.ts` locking v2 architectural contracts
+- **Systematic Tests**: Boundary/property-based/E2E tests across promotion, retrieval, migration, sync, and validation (+3600 lines)
+
+### Changed
+
+- **observe is raw-only**: `observe.extract.single_claim_v0` removed; use `distill` + `promote` for durable memory
+- **Session upsert rejected**: `pce_memory_upsert` with `scope=session` returns VALIDATION_ERROR; use `pce_memory_observe`
+- **Secret upsert rejected**: `pce_memory_upsert` with `boundary_class=secret` returns VALIDATION_ERROR; use `pce_memory_observe`
+- **Provenance enforced**: `provenance.at` required for `project` and `principle` scope upserts
+- **Boundary pre-filtering**: Boundary allow-tag filtering moved before ranking (fixes candidate budget waste)
+- **Layer-aware sync**: Session claims excluded from push; rolled-back claims excluded; `memory_type` preserved in round-trip
+- **Activate response enriched**: Returns `intent`, `source_layer`, `rank`, `score_breakdown`, `selection_reason` per claim
+
+### Fixed
+
+- Boundary filtering consumed candidate budget by running after ranking instead of before
+- `upsert(secret)` was accepted despite policy rejection
+- Provenance was not validated at runtime despite being documented as required
+- MCP tool schemas used `oneOf`/`allOf`/`anyOf` which Claude API rejects
+
 ## [0.10.0] - 2025-12-18
 
 ### Changed
