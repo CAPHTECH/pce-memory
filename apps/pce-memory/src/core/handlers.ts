@@ -14,6 +14,7 @@ import {
   findClaimById,
   findClaimsByIds,
   findClaimByContentHash,
+  ContentHashCollisionError,
 } from '../store/claims.js';
 import type { Claim, Provenance } from '../store/claims.js';
 import { hybridSearchPaginated, getEmbeddingService } from '../store/hybridSearch.js';
@@ -138,6 +139,89 @@ function validateString(field: string, val: unknown, max: number) {
   if (typeof val !== 'string' || val.length === 0 || val.length > max) {
     throw new Error(`INVALID_${field.toUpperCase()}`);
   }
+}
+
+function getUnknownFields(
+  args: Record<string, unknown>,
+  allowedFields: readonly string[]
+): string[] {
+  return Object.keys(args).filter((field) => !allowedFields.includes(field));
+}
+
+function isLeapYear(year: number): boolean {
+  return year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  switch (month) {
+    case 2:
+      return isLeapYear(year) ? 29 : 28;
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30;
+    default:
+      return 31;
+  }
+}
+
+function isValidIsoDateTime(value: string): boolean {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?(Z|([+-])(\d{2}):(\d{2}))$/.exec(
+      value
+    );
+  if (!match) {
+    return false;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = Number(match[9] ?? '0');
+  const offsetMinute = Number(match[10] ?? '0');
+
+  if (!Number.isInteger(year) || year < 0) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > getDaysInMonth(year, month)) return false;
+  if (hour < 0 || hour > 23) return false;
+  if (minute < 0 || minute > 59) return false;
+  if (second < 0 || second > 59) return false;
+  if (offsetHour < 0 || offsetHour > 23) return false;
+  if (offsetMinute < 0 || offsetMinute > 59) return false;
+
+  return !Number.isNaN(Date.parse(value));
+}
+
+function validateProvenanceAt(
+  value: unknown
+): { ok: true; value: string } | { ok: false; message: string } {
+  if (typeof value !== 'string' || value.length === 0) {
+    return { ok: false, message: 'provenance.at is required' };
+  }
+  if (!isValidIsoDateTime(value)) {
+    return {
+      ok: false,
+      message: 'provenance.at must be a valid ISO8601 datetime with timezone',
+    };
+  }
+  return { ok: true, value };
+}
+
+function hasPathTraversal(value: string): boolean {
+  const raw = value.replace(/\\/g, '/');
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(value).replace(/\\/g, '/');
+    } catch {
+      return raw;
+    }
+  })();
+  const pattern = /(?:^|\/)\.\.(?:\/|$)/;
+  return pattern.test(raw) || pattern.test(decoded);
 }
 
 function err(code: ErrorCode, message: string, request_id: string) {
@@ -319,8 +403,9 @@ function validateRequiredProvenance(
     return { ok: false, message: 'provenance.at is required' };
   }
   const candidate = provenance as Provenance;
-  if (typeof candidate.at !== 'string' || candidate.at.length === 0) {
-    return { ok: false, message: 'provenance.at is required' };
+  const validatedAt = validateProvenanceAt(candidate.at);
+  if (!validatedAt.ok) {
+    return validatedAt;
   }
   const atMs = Date.parse(candidate.at);
   if (Number.isNaN(atMs)) {
@@ -402,7 +487,7 @@ async function validateUpsertInput(
 
   // 状態検証
   if (!canDoUpsert()) {
-    const error = stateError('PolicyApplied or HasClaims', getStateType());
+    const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
     return {
       isValid: false,
       errorResponse: createToolResult(
@@ -458,6 +543,16 @@ async function validateUpsertInput(
     };
   }
 
+  if (!isValidClaimKind(kind)) {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown kind', reqId), trace_id: traceId },
+        { isError: true }
+      ),
+    };
+  }
+
   if (scope === 'session') {
     return {
       isValid: false,
@@ -470,6 +565,26 @@ async function validateUpsertInput(
           ),
           trace_id: traceId,
         },
+        { isError: true }
+      ),
+    };
+  }
+
+  if (!isDurableScope(scope)) {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown scope', reqId), trace_id: traceId },
+        { isError: true }
+      ),
+    };
+  }
+
+  if (!isDurableBoundaryClass(boundary_class)) {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown boundary_class', reqId), trace_id: traceId },
         { isError: true }
       ),
     };
@@ -660,6 +775,27 @@ export async function handleUpsert(args: Record<string, unknown>) {
   const scopeId = scopeResult.right;
 
   try {
+    const unknownFields = getUnknownFields(args, [
+      'text',
+      'kind',
+      'scope',
+      'boundary_class',
+      'memory_type',
+      'content_hash',
+      'provenance',
+      'entities',
+      'relations',
+    ]);
+    if (unknownFields.length > 0) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', `unknown fields: ${unknownFields.join(', ')}`, reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
     // バリデーション（ヘルパー関数に委譲）
     const validation = await validateUpsertInput(
       { text, kind, scope, boundary_class, content_hash },
@@ -682,24 +818,21 @@ export async function handleUpsert(args: Record<string, unknown>) {
       );
     }
 
-    if (
-      (scope === 'project' || scope === 'principle') &&
-      (typeof provenance !== 'object' ||
-        provenance === null ||
-        typeof provenance.at !== 'string' ||
-        provenance.at.length === 0)
-    ) {
-      return createToolResult(
-        {
-          ...err(
-            'VALIDATION_ERROR',
-            'provenance.at is required for non-session scope claims',
-            reqId
-          ),
-          trace_id: traceId,
-        },
-        { isError: true }
-      );
+    if (scope === 'project' || scope === 'principle') {
+      const validatedProvenance = validateRequiredProvenance(provenance);
+      if (!validatedProvenance.ok) {
+        const message =
+          validatedProvenance.message === 'provenance.at is required'
+            ? 'provenance.at is required for non-session scope claims'
+            : validatedProvenance.message;
+        return createToolResult(
+          {
+            ...err('VALIDATION_ERROR', message, reqId),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
     }
 
     if (memory_type !== undefined) {
@@ -791,7 +924,10 @@ export async function handleUpsert(args: Record<string, unknown>) {
     });
     const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
-      { ...err('UPSERT_FAILED', msg, reqId), trace_id: traceId },
+      {
+        ...err(e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'UPSERT_FAILED', msg, reqId),
+        trace_id: traceId,
+      },
       { isError: true }
     );
   } finally {
@@ -894,6 +1030,16 @@ export async function handleObserve(args: Record<string, unknown>) {
       );
     }
 
+    if (typeof source_id === 'string' && hasPathTraversal(source_id)) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'source_id contains path traversal segments', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
     let tagsList: string[] | undefined;
     if (tags !== undefined) {
       if (!Array.isArray(tags) || tags.some((t) => typeof t !== 'string')) {
@@ -972,13 +1118,13 @@ export async function handleObserve(args: Record<string, unknown>) {
 
     // provenanceは任意。ただし存在する場合は at が必須
     if (provenance !== undefined) {
-      if (
-        typeof provenance !== 'object' ||
-        provenance === null ||
-        typeof provenance.at !== 'string'
-      ) {
+      const validatedProvenance = validateRequiredProvenance(provenance);
+      if (!validatedProvenance.ok) {
         return createToolResult(
-          { ...err('VALIDATION_ERROR', 'provenance.at is required', reqId), trace_id: traceId },
+          {
+            ...err('VALIDATION_ERROR', validatedProvenance.message, reqId),
+            trace_id: traceId,
+          },
           { isError: true }
         );
       }
@@ -1864,7 +2010,10 @@ export async function handlePromote(args: Record<string, unknown>) {
     }
     const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
-      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      {
+        ...err(e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'DB_ERROR', msg, reqId),
+        trace_id: traceId,
+      },
       { isError: true }
     );
   } finally {

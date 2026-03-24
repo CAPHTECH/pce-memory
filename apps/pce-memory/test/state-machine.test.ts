@@ -310,10 +310,11 @@ describe('重複upsertとisNewフラグ', () => {
   it('重複upsertはisNew=falseを返す', async () => {
     const { upsertClaim } = await import('../src/store/claims');
     const hash = 'sha256:' + 'y'.repeat(64);
+    const text = 'original';
 
     // 最初の挿入
     const { claim: first, isNew: isFirstNew } = await upsertClaim({
-      text: 'original',
+      text,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'public',
@@ -323,7 +324,7 @@ describe('重複upsertとisNewフラグ', () => {
 
     // 同じhashで再度upsert
     const { claim: second, isNew: isSecondNew } = await upsertClaim({
-      text: 'duplicate attempt',
+      text,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'public',
