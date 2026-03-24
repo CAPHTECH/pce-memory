@@ -30,7 +30,11 @@ import {
   type ObservationSourceType,
 } from '../store/observations.js';
 import { analyzeTextSensitivity, redactPiiText } from '../audit/redactText.js';
-import { findActiveContextById, saveActiveContext } from '../store/activeContext.js';
+import {
+  findActiveContextById,
+  saveActiveContext,
+  saveActiveContextItems,
+} from '../store/activeContext.js';
 import {
   acceptPromotionQueueRow,
   findRollbackRecordByClaimId,
@@ -45,19 +49,22 @@ import { updateCritic } from '../store/critic.js';
 import { stateError } from '../domain/stateMachine.js';
 import type { ErrorCode } from '../domain/errors.js';
 import {
+  ACTIVATE_INTENTS,
   CLAIM_KINDS,
   ENTITY_TYPES,
   MEMORY_TYPES,
+  isValidActivateIntent,
   isValidClaimKind,
   isValidEntityType,
   isValidMemoryType,
 } from '../domain/types.js';
-import type { ClaimKind, MemoryType } from '../domain/types.js';
+import type { ActivateIntent, ClaimKind, MemoryType } from '../domain/types.js';
 import * as E from 'fp-ts/Either';
 
 import {
   applyPolicyOp,
   getPolicy,
+  getRetrievalPolicy,
   getPolicyVersion,
   getStateType,
   getStateSummary,
@@ -202,6 +209,46 @@ function mapScopeToLayer(scope: string): string {
   if (scope === 'principle') return 'macro';
   if (scope === 'project') return 'meso';
   return 'micro';
+}
+
+function formatScore(value: number | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : 'n/a';
+}
+
+function buildSelectionReason(item: {
+  score: number;
+  claim: { kind: string; scope: string; memory_type?: string | null };
+  score_breakdown?: {
+    s_text?: number;
+    s_vec?: number;
+    intent?: { boost?: number };
+  };
+  source_layer?: string;
+  rank: number;
+  intent?: ActivateIntent;
+}): string {
+  const parts = [
+    `rank=${item.rank}`,
+    `layer=${item.source_layer ?? mapScopeToLayer(item.claim.scope)}`,
+    `score=${formatScore(item.score)}`,
+    `kind=${item.claim.kind}`,
+  ];
+
+  if (item.claim.memory_type) {
+    parts.push(`memory_type=${item.claim.memory_type}`);
+  }
+  if (item.intent) {
+    parts.push(`intent=${item.intent}`);
+  }
+  if (item.score_breakdown) {
+    parts.push(`s_text=${formatScore(item.score_breakdown.s_text)}`);
+    parts.push(`s_vec=${formatScore(item.score_breakdown.s_vec)}`);
+    if (item.score_breakdown.intent?.boost !== undefined) {
+      parts.push(`intent_boost=${formatScore(item.score_breakdown.intent.boost)}`);
+    }
+  }
+
+  return parts.join('; ');
 }
 
 function mapDurableScopeToTargetLayer(scope: DurableScope): 'meso' | 'macro' {
@@ -1858,13 +1905,17 @@ export async function handleRollback(args: Record<string, unknown>) {
 }
 
 export async function handleActivate(args: Record<string, unknown>) {
-  const { scope, allow, top_k, q, cursor, include_meta } = args as {
+  const { scope, allow, top_k, q, cursor, include_meta, intent, kind_filter, memory_type_filter } =
+    args as {
     scope?: unknown;
     allow?: unknown;
     top_k?: number;
     q?: string;
     cursor?: string;
     include_meta?: boolean;
+    intent?: unknown;
+    kind_filter?: unknown;
+    memory_type_filter?: unknown;
   };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
@@ -1904,20 +1955,89 @@ export async function handleActivate(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+    if (typeof top_k === 'number' && (!Number.isInteger(top_k) || top_k < 1 || top_k > 50)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'top_k must be an integer between 1 and 50', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (intent !== undefined && !isValidActivateIntent(intent)) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', `intent must be one of ${ACTIVATE_INTENTS.join('|')}`, reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (
+      kind_filter !== undefined &&
+      (!Array.isArray(kind_filter) || kind_filter.some((value) => !isValidClaimKind(value)))
+    ) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            `kind_filter must be ClaimKind[] (${CLAIM_KINDS.join('|')})`,
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (
+      memory_type_filter !== undefined &&
+      (!Array.isArray(memory_type_filter) ||
+        memory_type_filter.some((value) => !isValidMemoryType(value)))
+    ) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            `memory_type_filter must be MemoryType[] (${MEMORY_TYPES.join('|')})`,
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
 
     const policy = getPolicy();
+    const retrievalPolicy = getRetrievalPolicy();
+    const hybridPolicy = retrievalPolicy.hybrid ?? {};
     const allowTags = allow as string[];
     const allowedBoundaryClasses = getAllowedBoundaryClasses(policy, allowTags);
-    const searchResult = await hybridSearchPaginated(scope, top_k ?? 12, q, {
+    const resolvedIntent = intent as ActivateIntent | undefined;
+    const resolvedKindFilter = kind_filter as ClaimKind[] | undefined;
+    const resolvedMemoryTypeFilter = memory_type_filter as MemoryType[] | undefined;
+    const resolvedTopK =
+      top_k ??
+      (typeof hybridPolicy.k_final === 'number' && Number.isFinite(hybridPolicy.k_final)
+        ? Math.max(1, Math.floor(hybridPolicy.k_final))
+        : 12);
+
+    const searchResult = await hybridSearchPaginated(scope, resolvedTopK, q, {
       ...(cursor !== undefined ? { cursor } : {}),
       boundaryClasses: allowedBoundaryClasses,
+      ...(resolvedIntent ? { intent: resolvedIntent } : {}),
+      ...(resolvedKindFilter ? { kindFilter: resolvedKindFilter } : {}),
+      ...(resolvedMemoryTypeFilter ? { memoryTypeFilter: resolvedMemoryTypeFilter } : {}),
+      includeBreakdown: true,
+      ...(typeof hybridPolicy.alpha === 'number' ? { alpha: hybridPolicy.alpha } : {}),
+      ...(typeof hybridPolicy.threshold === 'number'
+        ? { threshold: hybridPolicy.threshold }
+        : {}),
+      ...(typeof hybridPolicy.k_txt === 'number' ? { kText: hybridPolicy.k_txt } : {}),
+      ...(typeof hybridPolicy.k_vec === 'number' ? { kVec: hybridPolicy.k_vec } : {}),
     });
     const claims = searchResult.results.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({
       id: acId,
       claims,
-      ...(q !== undefined ? { intent: q } : {}),
+      ...(resolvedIntent ? { intent: resolvedIntent } : {}),
       policy_version: getPolicyVersion(),
     });
 
@@ -1927,11 +2047,41 @@ export async function handleActivate(args: Record<string, unknown>) {
       evidenceMap = await getEvidenceForClaims(claimIds);
     }
 
-    const scoredItems = searchResult.results.map((r) => ({
-      claim: r.claim,
-      score: r.score,
-      evidences: evidenceMap?.get(r.claim.id) ?? [],
-    }));
+    const scoredItems = searchResult.results.map((r, index) => {
+      const sourceLayer = r.source_layer ?? mapScopeToLayer(r.claim.scope);
+      const rank = index + 1;
+      const selectionReason = buildSelectionReason({
+        score: r.score,
+        claim: r.claim,
+        source_layer: sourceLayer,
+        rank,
+        ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
+        ...(resolvedIntent ? { intent: resolvedIntent } : {}),
+      });
+
+      return {
+        claim: r.claim,
+        score: r.score,
+        source_layer: sourceLayer,
+        rank,
+        ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
+        selection_reason: selectionReason,
+        evidences: evidenceMap?.get(r.claim.id) ?? [],
+      };
+    });
+
+    await saveActiveContextItems(
+      scoredItems.map((item) => ({
+        id: `aci_${crypto.randomUUID().slice(0, 8)}`,
+        active_context_id: acId,
+        claim_id: item.claim.id,
+        source_layer: item.source_layer,
+        score: item.score,
+        ...(item.score_breakdown ? { score_breakdown: item.score_breakdown } : {}),
+        selection_reason: item.selection_reason,
+        rank: item.rank,
+      }))
+    );
 
     transitionToReady(acId);
 
@@ -1947,6 +2097,7 @@ export async function handleActivate(args: Record<string, unknown>) {
     return createToolResult(
       {
         active_context_id: acId,
+        ...(resolvedIntent ? { intent: resolvedIntent } : {}),
         claims: scoredItems,
         claims_count: claims.length,
         next_cursor: searchResult.next_cursor,
@@ -4002,6 +4153,21 @@ export const TOOL_DEFINITIONS = [
         },
         top_k: { type: 'integer', minimum: 1, maximum: 50, description: 'Max claims to return' },
         q: { type: 'string', description: 'Search query string (partial match)' },
+        intent: {
+          type: 'string',
+          enum: [...ACTIVATE_INTENTS],
+          description: 'Intent profile for retrieval planning',
+        },
+        kind_filter: {
+          type: 'array',
+          items: { type: 'string', enum: [...CLAIM_KINDS] },
+          description: 'Optional claim kind filter applied before ranking',
+        },
+        memory_type_filter: {
+          type: 'array',
+          items: { type: 'string', enum: [...MEMORY_TYPES] },
+          description: 'Optional memory_type filter applied before ranking',
+        },
         cursor: { type: 'string', description: 'Pagination cursor' },
         include_meta: {
           type: 'boolean',
@@ -4015,6 +4181,11 @@ export const TOOL_DEFINITIONS = [
       type: 'object',
       properties: {
         active_context_id: { type: 'string', description: 'Active context ID' },
+        intent: {
+          type: 'string',
+          enum: [...ACTIVATE_INTENTS],
+          description: 'Echoed intent when provided',
+        },
         claims: {
           type: 'array',
           items: {
@@ -4022,6 +4193,20 @@ export const TOOL_DEFINITIONS = [
             properties: {
               claim: { type: 'object', description: 'Claim data' },
               score: { type: 'number', description: 'Relevance score' },
+              source_layer: {
+                type: 'string',
+                enum: ['micro', 'meso', 'macro'],
+                description: 'Layer derived from claim scope',
+              },
+              rank: { type: 'integer', minimum: 1, description: 'Returned rank' },
+              score_breakdown: {
+                type: 'object',
+                description: 'Hybrid and rerank score breakdown',
+              },
+              selection_reason: {
+                type: 'string',
+                description: 'Compact explanation of why the item was selected',
+              },
               evidences: { type: 'array', items: { type: 'object' }, description: 'Evidence list' },
             },
           },

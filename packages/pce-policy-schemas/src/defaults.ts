@@ -23,6 +23,7 @@ export const defaultPolicy: PolicyDocument = {
   retrieval: {
     hybrid: {
       alpha: 0.65,
+      threshold: 0.15,
       k_txt: 48,
       k_vec: 96,
       k_final: 12,
@@ -33,4 +34,8 @@ export const defaultPolicy: PolicyDocument = {
 
 export function defaultBoundaryPolicy() {
   return defaultPolicy.boundary;
+}
+
+export function defaultRetrievalPolicy() {
+  return defaultPolicy.retrieval;
 }

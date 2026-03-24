@@ -24,6 +24,21 @@ export const MEMORY_TYPES = ['evidence', 'working_state', 'knowledge', 'procedur
 export type MemoryType = (typeof MEMORY_TYPES)[number];
 
 /**
+ * Activate intentの有効な値
+ */
+export const ACTIVATE_INTENTS = [
+  'resume_task',
+  'debug_incident',
+  'design_decision',
+  'policy_check',
+] as const;
+
+/**
+ * Activate intentのユニオン型
+ */
+export type ActivateIntent = (typeof ACTIVATE_INTENTS)[number];
+
+/**
  * Entity型の有効な値
  * Graph Memory: Actor, Artifact, Event, Concept
  */
@@ -46,6 +61,13 @@ export function isValidClaimKind(kind: unknown): kind is ClaimKind {
  */
 export function isValidMemoryType(type: unknown): type is MemoryType {
   return typeof type === 'string' && MEMORY_TYPES.includes(type as MemoryType);
+}
+
+/**
+ * Activate intentが有効かチェック
+ */
+export function isValidActivateIntent(intent: unknown): intent is ActivateIntent {
+  return typeof intent === 'string' && ACTIVATE_INTENTS.includes(intent as ActivateIntent);
 }
 
 /**
