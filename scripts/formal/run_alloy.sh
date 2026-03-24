@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
 WORKDIR="$ROOT/docs/spec/alloy"
 CACHE="$ROOT/.cache/formal"
@@ -26,7 +26,8 @@ fi
 
 run_alloy_file() {
   local file="$1"
-  local filename=$(basename "$file")
+  local filename
+  filename=$(basename "$file")
 
   if [[ ! -f "$file" ]]; then
     echo "[Alloy] SKIP: $filename (not found)" >&2

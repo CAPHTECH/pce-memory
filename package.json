@@ -11,6 +11,9 @@
   "scripts": {
     "build": "pnpm -r --filter='./packages/*' --filter='./apps/*' run build",
     "dev": "pnpm -r --parallel --filter='./apps/*' run dev",
+    "local:codex": "bash scripts/local/run-codex-ollama.sh",
+    "local:claude": "bash scripts/local/run-claude-ollama.sh",
+    "local:validation:smoke": "bash scripts/local/run-validation-smoke.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
