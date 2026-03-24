@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS claims (
   kind TEXT NOT NULL,
   scope TEXT NOT NULL,
   boundary_class TEXT NOT NULL,
+  memory_type TEXT,
   content_hash TEXT UNIQUE NOT NULL,
   -- g()再ランキング用カラム（ADR-0004準拠）
   utility REAL DEFAULT 0.0,
@@ -23,7 +24,44 @@ ON claims(utility, confidence, updated_at, created_at);
 
 CREATE TABLE IF NOT EXISTS active_contexts (
   id TEXT PRIMARY KEY,
-  claims JSON
+  claims JSON,
+  intent TEXT,
+  expires_at TEXT,
+  policy_version TEXT
+);
+
+CREATE TABLE IF NOT EXISTS active_context_items (
+  id TEXT PRIMARY KEY,
+  active_context_id TEXT NOT NULL,
+  claim_id TEXT NOT NULL,
+  source_layer TEXT,
+  score REAL,
+  score_breakdown TEXT,
+  selection_reason TEXT,
+  rank INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS promotion_queue (
+  id TEXT PRIMARY KEY,
+  source_layer TEXT NOT NULL,
+  target_layer TEXT NOT NULL,
+  source_ids TEXT NOT NULL,
+  distilled_text TEXT NOT NULL,
+  candidate_hash TEXT NOT NULL,
+  proposed_kind TEXT NOT NULL,
+  proposed_scope TEXT NOT NULL,
+  proposed_boundary_class TEXT NOT NULL,
+  proposed_memory_type TEXT,
+  provenance TEXT NOT NULL,
+  evidence_ids TEXT NOT NULL,
+  policy_version_checked TEXT,
+  boundary_check_result TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  reviewers TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  accepted_claim_id TEXT,
+  rejected_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -41,6 +79,7 @@ CREATE TABLE IF NOT EXISTS feedback (
   claim_id TEXT NOT NULL,
   signal TEXT NOT NULL,
   score DOUBLE,
+  active_context_id TEXT,
   ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

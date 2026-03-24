@@ -127,6 +127,10 @@ function toClaimInput(claim: ClaimExport): ClaimInput {
     content_hash: claim.content_hash,
   };
 
+  if (claim.memory_type !== undefined) {
+    input.memory_type = claim.memory_type;
+  }
+
   // provenanceがある場合のみ設定（undefinedのプロパティは除外）
   if (claim.provenance) {
     const provenance: ClaimInput['provenance'] = {

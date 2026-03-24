@@ -83,6 +83,37 @@ describe('executePush', () => {
     }
   });
 
+  it('memory_type を含むClaimをエクスポート', async () => {
+    const text = 'memory type付きClaim';
+    const hash = `sha256:${computeContentHash(text)}`;
+
+    await upsertClaim({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      memory_type: 'knowledge',
+      content_hash: hash,
+    });
+
+    const result = await executePush({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      const claimFile = path.join(
+        tempDir,
+        '.pce-shared',
+        'claims',
+        'project',
+        `${hash.replace('sha256:', '')}.json`
+      );
+      const claimContent = JSON.parse(await fs.readFile(claimFile, 'utf-8')) as {
+        memory_type?: string;
+      };
+      expect(claimContent.memory_type).toBe('knowledge');
+    }
+  });
+
   it('sessionスコープはデフォルトでエクスポートしない', async () => {
     const text = 'セッション用Claim';
     const hash = `sha256:${computeContentHash(text)}`;

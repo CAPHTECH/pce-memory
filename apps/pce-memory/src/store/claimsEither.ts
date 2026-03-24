@@ -8,6 +8,7 @@ import { pipe } from 'fp-ts/function';
 import { getConnection } from '../db/connection.js';
 import type { DomainError } from '../domain/errors.js';
 import { dbError } from '../domain/errors.js';
+import type { MemoryType } from '../domain/types.js';
 
 export interface Claim {
   id: string;
@@ -15,6 +16,7 @@ export interface Claim {
   kind: string;
   scope: string;
   boundary_class: string;
+  memory_type?: MemoryType | null;
   content_hash: string;
 }
 
@@ -26,7 +28,7 @@ export const findClaimByIdE = (id: string): TE.TaskEither<DomainError, Claim | u
     async () => {
       const conn = await getConnection();
       const reader = await conn.runAndReadAll(
-        'SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE id = $1',
+        'SELECT id, text, kind, scope, boundary_class, memory_type, content_hash FROM claims WHERE id = $1',
         [id]
       );
       const rows = reader.getRowObjects() as unknown as Claim[];
@@ -46,7 +48,7 @@ export const findClaimByHashE = (
     async () => {
       const conn = await getConnection();
       const reader = await conn.runAndReadAll(
-        'SELECT id, text, kind, scope, boundary_class, content_hash FROM claims WHERE content_hash = $1',
+        'SELECT id, text, kind, scope, boundary_class, memory_type, content_hash FROM claims WHERE content_hash = $1',
         [contentHash]
       );
       const rows = reader.getRowObjects() as unknown as Claim[];
@@ -79,8 +81,8 @@ export const upsertClaimE = (c: Omit<Claim, 'id'>): TE.TaskEither<DomainError, C
           const conn = await getConnection();
           const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
           await conn.run(
-            'INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash) VALUES ($1, $2, $3, $4, $5, $6)',
-            [id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash]
+            'INSERT INTO claims (id, text, kind, scope, boundary_class, memory_type, content_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type ?? null, c.content_hash]
           );
           return { id, ...c };
         },
@@ -105,13 +107,13 @@ export const listClaimsByScopeE = (
 
       const placeholders = scopes.map((_, i) => `$${i + 1}`).join(',');
       const sql = hasQuery
-        ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, coalesce(cr.score, 0) as score
+        ? `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash, coalesce(cr.score, 0) as score
            FROM claims c
            LEFT JOIN critic cr ON cr.claim_id = c.id
            WHERE c.scope IN (${placeholders}) AND c.text LIKE $${scopes.length + 1}
            ORDER BY score DESC
            LIMIT $${scopes.length + 2}`
-        : `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash, coalesce(cr.score, 0) as score
+        : `SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash, coalesce(cr.score, 0) as score
            FROM claims c
            LEFT JOIN critic cr ON cr.claim_id = c.id
            WHERE c.scope IN (${placeholders})

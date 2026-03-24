@@ -335,7 +335,7 @@ export async function textSearch(
   if (words.length === 0) {
     const sql = `
       SELECT
-        c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+        c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
         c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
         COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
       FROM claims c
@@ -356,6 +356,7 @@ export async function textSearch(
         kind: row.kind,
         scope: row.scope,
         boundary_class: row.boundary_class,
+        memory_type: row.memory_type ?? null,
         content_hash: row.content_hash,
         utility: row.utility,
         confidence: row.confidence,
@@ -378,7 +379,7 @@ export async function textSearch(
   // TLA+ claimTextRelevant: いずれかの単語に対して LIKE '%word%' でマッチ
   const sql = `
     SELECT
-      c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
       COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
     FROM claims c
@@ -406,6 +407,7 @@ export async function textSearch(
       kind: row.kind,
       scope: row.scope,
       boundary_class: row.boundary_class,
+      memory_type: row.memory_type ?? null,
       content_hash: row.content_hash,
       utility: row.utility,
       confidence: row.confidence,
@@ -468,7 +470,7 @@ export async function vectorSearch(
   // norm_cosで[-1,1]を[0,1]に正規化
   const sql = `
     SELECT
-      c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
       norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score
     FROM claims c
@@ -490,6 +492,7 @@ export async function vectorSearch(
       kind: row.kind,
       scope: row.scope,
       boundary_class: row.boundary_class,
+      memory_type: row.memory_type ?? null,
       content_hash: row.content_hash,
       utility: row.utility,
       confidence: row.confidence,
@@ -1038,7 +1041,7 @@ async function fallbackToTextOnly(
   const limitClause =
     limit !== undefined ? `LIMIT $${scopes.length + boundaryParams.length + 1}` : '';
   const sql = `
-    SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
+    SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
            COALESCE(cr.score, 0) as score
     FROM claims c

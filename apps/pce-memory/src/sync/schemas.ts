@@ -5,8 +5,12 @@
  * content_hashの一致確認、boundary_classの制約等を型レベルで保証する。
  */
 import { z } from 'zod';
-import { CLAIM_KINDS, ENTITY_TYPES } from '../domain/types.js';
-import type { ClaimKind, EntityType as DomainEntityType } from '../domain/types.js';
+import { CLAIM_KINDS, ENTITY_TYPES, MEMORY_TYPES } from '../domain/types.js';
+import type {
+  ClaimKind,
+  EntityType as DomainEntityType,
+  MemoryType as DomainMemoryType,
+} from '../domain/types.js';
 
 // スコープ定義
 export const ScopeSchema = z.enum(['session', 'project', 'principle']);
@@ -19,6 +23,10 @@ export type BoundaryClass = z.infer<typeof BoundaryClassSchema>;
 // Kind定義
 export const KindSchema = z.enum(CLAIM_KINDS);
 export type Kind = ClaimKind;
+
+// Memory Type定義
+export const MemoryTypeSchema = z.enum(MEMORY_TYPES);
+export type MemoryType = DomainMemoryType;
 
 // Entity Type定義
 export const EntityTypeSchema = z.enum(ENTITY_TYPES);
@@ -57,6 +65,7 @@ export const ClaimExportSchema = z.object({
   kind: KindSchema,
   scope: ScopeSchema,
   boundary_class: BoundaryClassSchema,
+  memory_type: MemoryTypeSchema.optional(),
   content_hash: ContentHashSchema,
 
   // オプションフィールド

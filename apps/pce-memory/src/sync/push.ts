@@ -65,6 +65,9 @@ function toClaimExport(claim: Claim): ClaimExport {
     kind: claim.kind as ClaimExport['kind'],
     scope: claim.scope as ClaimExport['scope'],
     boundary_class: claim.boundary_class as ClaimExport['boundary_class'],
+    ...(claim.memory_type !== undefined && claim.memory_type !== null
+      ? { memory_type: claim.memory_type }
+      : {}),
     content_hash: claim.content_hash,
     ...(claim.provenance && { provenance: claim.provenance }),
   };
