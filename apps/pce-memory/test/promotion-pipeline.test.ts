@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { computeContentHash } from '@pce/embeddings';
 import { dispatchTool, TOOL_DEFINITIONS } from '../src/core/handlers';
 import { getConnection, initDb, initSchema, resetDbAsync } from '../src/db/connection';
-import { resetMemoryState } from '../src/state/memoryState';
+import { resetMemoryState, transitionToHasClaims } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
+import { upsertClaim } from '../src/store/claims';
 import { initRateState, resetRates } from '../src/store/rate';
 
 beforeEach(async () => {
@@ -27,6 +28,18 @@ function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
   expect(result.isError).toBeUndefined();
   expect(result.structuredContent).toBeDefined();
   return result.structuredContent!;
+}
+
+async function seedSessionClaim(text: string, kind: 'fact' | 'task' = 'fact') {
+  const result = await upsertClaim({
+    text,
+    kind,
+    scope: 'session',
+    boundary_class: 'internal',
+    content_hash: `sha256:${computeContentHash(text)}`,
+  });
+  transitionToHasClaims(result.isNew);
+  return result.claim;
 }
 
 describe('promotion pipeline', () => {
@@ -119,15 +132,7 @@ describe('promotion pipeline', () => {
   it('distill accepts active_context sources and records lineage', async () => {
     await applyPolicy();
 
-    const upsert = expectSuccess(
-      await dispatchTool('pce_memory_upsert', {
-        text: 'Current branch is blocked on schema review',
-        kind: 'task',
-        scope: 'session',
-        boundary_class: 'internal',
-        content_hash: `sha256:${computeContentHash('Current branch is blocked on schema review')}`,
-      })
-    );
+    const upsert = await seedSessionClaim('Current branch is blocked on schema review', 'task');
     const activate = expectSuccess(
       await dispatchTool('pce_memory_activate', {
         scope: ['session'],
@@ -164,24 +169,8 @@ describe('promotion pipeline', () => {
   it('promote accepts a pending candidate, creates a durable claim, and records claim lineage evidence', async () => {
     await applyPolicy();
 
-    const claimOne = expectSuccess(
-      await dispatchTool('pce_memory_upsert', {
-        text: 'We retry failed jobs with exponential backoff',
-        kind: 'fact',
-        scope: 'session',
-        boundary_class: 'internal',
-        content_hash: `sha256:${computeContentHash('We retry failed jobs with exponential backoff')}`,
-      })
-    );
-    const claimTwo = expectSuccess(
-      await dispatchTool('pce_memory_upsert', {
-        text: 'Retries stop after three attempts',
-        kind: 'fact',
-        scope: 'session',
-        boundary_class: 'internal',
-        content_hash: `sha256:${computeContentHash('Retries stop after three attempts')}`,
-      })
-    );
+    const claimOne = await seedSessionClaim('We retry failed jobs with exponential backoff');
+    const claimTwo = await seedSessionClaim('Retries stop after three attempts');
 
     const distill = expectSuccess(
       await dispatchTool('pce_memory_distill', {

@@ -303,6 +303,7 @@ async function validateUpsertInput(
   try {
     validateString('text', text, 5000);
     validateString('kind', kind, 128);
+    validateString('scope', scope, 128);
     validateString('boundary_class', boundary_class, 128);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -310,6 +311,23 @@ async function validateUpsertInput(
       isValid: false,
       errorResponse: createToolResult(
         { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { isError: true }
+      ),
+    };
+  }
+
+  if (scope === 'session') {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            "scope 'session' is no longer accepted by pce_memory_upsert; use pce_memory_observe for session-scoped working context",
+            reqId
+          ),
+          trace_id: traceId,
+        },
         { isError: true }
       ),
     };
