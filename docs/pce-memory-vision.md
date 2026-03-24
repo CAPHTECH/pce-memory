@@ -1,255 +1,329 @@
 # pce-memory Vision
 
 > **One-Line Declaration**
-> A **self-hostable process memory infrastructure** that enables humans and agents to share **context** under **boundaries**, continuously learning through **inscription** and **critic** mechanisms.
+> A self-hostable process memory infrastructure for humans and agents that keeps raw observations
+> local, distills durable knowledge deliberately, and activates the right context under explicit
+> boundaries.
 
 ---
 
 ## Why Now
 
-1. **Limitations of Stateless AI**  LLMs infer from scratch each time, unable to maintain continuous context, commitments, or provenance.
-2. **Context Drift and Leakage Risks**  As context expands, **off-purpose usage** and **confidentiality breaches** become more likely.
-3. **Pace Layering Disconnection**  The update tempos of sessions (fast), team procedures (medium), and institutions (slow) don't align, resulting in **knowledge that never settles or becomes frozen**.
-
-**pce-memory** implements the PCE (Process-Context Engine) principles through:
-
-- **Latent Context Pool (LCP)** and
-- **Active Context (AC)**,
-- **Boundaries and Invariants**,
-- **Inscription and Provenance**,
-- **Critic and Success Bundles**
-  to realize **"safely remember, quickly forget, and correctly recall as needed."**
+1. Stateless AI still reconstructs intent, context, and commitments from scratch in every session.
+2. Shared memory without strong boundaries quickly turns into leakage, contamination, and drift.
+3. Development work spans multiple tempos:
+   sessions move fast, project knowledge settles slower, and norms change slowest.
+4. The old scope-centric model is useful for bootstrapping, but it is not strong enough to govern
+   promotion, retrieval, and rollback at those different tempos.
 
 ---
 
 ## Mission
 
-> **Visualize the circulation of process and context, embedding reproducible learning loops into every development and operational environment.**
+> Visualize the circulation of process and context, and make learning loops reproducible across
+> development and operational environments.
 
 ---
 
 ## Vision
 
-- **Sovereign Memory**: Not exclusively dependent on SaaS; operable **locally/on-premises** with a **boundary-first** approach.
-- **Memory as Relationship**: Meaning is not a fixed object but a **function**. It evolves through LCP�AC circulation, translation, mediation, and inscription.
-- **Pace-Aligned Memory**: **Distill** from session (fast) � procedures (medium) � institutions (slow). In case of incidents, **rollback** (settle down).
-- **Revocable and Visible Memory**: Provenance is always traceable and **can be revoked at any time**. Errors are capitalized and recovered into learning.
-- **Coexistence Memory**: Humans, agents, and institutions collaborate under **the same boundary**, where **dangers are stopped in early stages and benefits are promoted to later stages**.
+`pce-memory` is built around three memory layers and one explicit lifecycle:
+
+- **Micro**: raw observations, evidence, and active working context
+- **Meso**: durable project knowledge and reusable procedures
+- **Macro**: reviewed principles, invariants, and policy-adjacent norms
+
+The governing lifecycle is:
+
+`observe -> distill -> promote -> activate(intent) -> feedback -> rollback`
+
+This architecture is designed to make three things true at the same time:
+
+1. **Memory stays useful** because raw task residue does not silently become canonical knowledge.
+2. **Memory stays safe** because boundaries are checked before ranking and before promotion.
+3. **Memory stays governable** because durable changes have lineage, review state, and rollback.
+
+This document describes the **target v2 architecture**. The current runtime and the v0.1 tool
+spec still expose legacy surfaces such as `pce_memory_upsert` and
+`observe.extract.single_claim_v0` until the migration plan in the v2 ADR is complete.
 
 ---
 
 ## Tenets
 
-1. **Boundary-First**: Determine **allow/edit/deny** upfront based on purpose, confidentiality, and provenance.
-2. **Provenance-by-Default**: All recalls come with evidence and pathways.
-3. **LCP/AC Dual-Phase**: Separate latent (long-term) and active (short-term), cycling through **selection � interpretation � evaluation � distillation**.
-4. **Pace-Aware**: Establish **promotion/rollback** procedures aligned with update tempo (fast/medium/slow).
-5. **Critic-in-the-Loop**: Continuously update **utility, confidence, and reproducibility** through explicit/implicit feedback.
-6. **Interoperable**: Connect with IDEs and agents via CLI/HTTP/MCP.
-7. **Self-Hostable & Portable**: **Portable** from DuckDB � Postgres/pgvector. Switchable embeddings between **OpenAI + local**.
-8. **Minimal Capture**: **Remember minimally, don't over-remember**. Staged as Observation � Claim � Graph.
-9. **Explainable Retrieval**: Hybrid search (Dense + BM25) + re-ranking (quality, trust, recency).
-10. **Ethics & Safety**: Block PII/Secrets at boundaries with strict **Redact-before-Send**.
+1. **Boundary-First**: filter by boundary before retrieval and before promotion.
+2. **Promotion Is Compilation**: durable memory must be distilled from source material, never
+   copied raw by default.
+3. **Separate Layer From Type**: layer answers "how durable and governable is this memory";
+   memory type answers "what kind of knowledge is this".
+4. **Intent-Aware Activation**: activation is a planner, not a pooled search endpoint.
+5. **Provenance-by-Default**: durable memory and recalled context must keep evidence and lineage.
+6. **Rollback Is First-Class**: repair is append-only and traceable.
+7. **Minimal Capture**: remember minimally, and keep raw material local unless promotion is
+   justified.
+8. **Self-Hostable and Portable**: local-first operation, portable from DuckDB to future
+   Postgres/pgvector deployment.
 
 ---
 
-## Problems We Solve (Problems � Outcomes)
+## Layer Model
 
-| Problem                    | Details                                   | pce-memory Solution                  | Target Outcome                      |
-| -------------------------- | ----------------------------------------- | ------------------------------------ | ----------------------------------- |
-| Lack of Context Continuity | Loss of prerequisites when resuming tasks | LCP�AC selection `r(q,C^L,B,policy)` | Reduced restart time                |
-| Leakage & Off-Purpose Use  | PII/confidential info mixed into recall   | Boundary pre-filter + Redact         | Virtually zero unauthorized recalls |
-| Knowledge Freeze/Drift     | Changes don't settle or become rigid      | Pace-aware distillation/rollback     | Healthy evolution of procedures     |
-| Lack of Reproducibility    | Can't answer "why this solution"          | Provenance + Inscription             | Auditable decision-making           |
-| Feedback Failure           | Learning doesn't accumulate               | Critic + Success Bundles             | Normalized continuous improvement   |
+| Layer | Role                                                   | Data shape                         | Sync posture          | Default lifetime |
+| ----- | ------------------------------------------------------ | ---------------------------------- | --------------------- | ---------------- |
+| Micro | observation, evidence, active context, live task state | raw and volatile                   | never sync by default | hours to days    |
+| Meso  | reusable project memory                                | durable and evidence-backed        | default sync surface  | project-scale    |
+| Macro | reviewed norms and principles                          | append-only or separately governed | explicit review only  | until superseded |
+
+### Semantic memory types
+
+The v2 model keeps the coarse compatibility layer:
+
+- `kind = fact | preference | task | policy_hint`
+
+And adds the semantic control plane:
+
+- `memory_type = evidence | working_state | knowledge | procedure | norm`
+
+Only micro artifacts use `evidence` as a first-class memory type. Durable meso and macro memory
+should use `working_state`, `knowledge`, `procedure`, or `norm`.
+
+This separation lets retrieval and promotion behave differently for:
+
+- evidence that should remain citeable and recent
+- working state that should age quickly
+- durable knowledge that benefits from hybrid search and critic signals
+- procedures that depend on lexical command and trigger matching
+- norms that should be deterministically included as guardrails
+
+---
+
+## Problems We Solve
+
+| Problem                 | Failure mode                                        | v2 answer                                      |
+| ----------------------- | --------------------------------------------------- | ---------------------------------------------- |
+| Context restart cost    | agents repeatedly rediscover local state            | activate an intent-specific active context     |
+| Knowledge contamination | local task residue becomes durable memory           | require distill and promotion review           |
+| Policy drift            | norms compete with task notes in one flat ranker    | give macro memory separate retrieval semantics |
+| Boundary leakage        | disallowed claims consume retrieval budget          | pre-filter by boundary before ranking          |
+| Weak auditability       | durable facts lack explicit lineage and repair path | persist promotion queue and rollback ancestry  |
 
 ---
 
 ## Product Pillars
 
-1. **Memory Core (LCP/AC)**
-   - Observation � Claim � Graph. Accumulate in LCP **with provenance**, select and summarize AC query-adaptively.
-2. **Boundary Engine**
-   - Invariants, pre/post-conditions, purpose tags. Define **Gate / Translate / Mediate**.
-3. **Retrieval & Activation**
-   - Hybrid search + re-ranking. Compose AC via **`r(q,C^L,B,policy)`**.
-4. **Critic & Telemetry**
-   - Update **utility/confidence/recency** via helpful/harmful/outdated/duplicate + adoption logs.
-5. **Inscription & Governance**
-   - Audit logs, version control, diffs. **Distill/rollback** procedures.
-6. **SDK / CLI / MCP**
-   - Unified I/F callable from Codex/Claude Code/Cursor for **search / upsert / feedback**.
+1. **Observation and Working Set**
+   - Capture micro artifacts in `observations` and active-context storage with TTL and scrub-on-expiry.
+
+2. **Distillation and Promotion Governance**
+   - Use an explicit promotion queue so durable knowledge is reviewed, evidence-backed, and
+     rollbackable.
+
+3. **Layer-Aware Retrieval**
+   - Treat activation as a planner that combines per-layer candidate generation with intent-aware
+     merge rules.
+
+4. **Boundary and Policy Engine**
+   - Apply boundary policy before capture, before promotion, and before retrieval composition.
+
+5. **Critic and Feedback**
+   - Update utility, confidence, and freshness from helpful or harmful usage signals.
+
+6. **Portability and Sync**
+   - Keep micro local, sync meso by default, and gate macro sync behind explicit review.
 
 ---
 
-## MCP-first (MVP): Function Provision to Agents
+## MCP-First API
 
-> The initial distribution format is **tool provision to agents** via **MCP (Model Context Protocol)**. Top priority is immediate usability from IDE/code assistants (Codex / Claude Code / Cursor, etc.).
+The initial distribution remains MCP-first so IDE agents and local tools share the same memory
+surface.
 
-### Provided Tools (Minimal)
+### Core v2 tools
 
-| Tool Name                      | Input (req)                                                                    | Output (resp)                                    | Purpose                                                |
-| ------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------ | -------------------- | -------------- | -------------------------- |
-| `pce_memory_search`            | `{ query, top_k?, scope?, allow? }`                                            | `[{ claim, scores, evidences, policy_version }]` | Recall known prerequisites, conventions, prohibitions  |
-| `pce_memory_activate`          | `{ q, scope?, allow? }`                                                        | `{ active_context_id, claims[] }`                | Compose AC from LCP (r function)                       |
-| `pce_memory_upsert`            | `{ text, kind?, scope?, boundary_class?, entities?, relations?, provenance? }` | `{ id }`                                         | Register important fragments (Observation/Claim/Graph) |
-| `pce_memory_feedback`          | `{ claim_id, signal: helpful                                                   | harmful                                          | outdated                                               | duplicate, score? }` | `{ ok: true }` | Evaluation loop via Critic |
-| `pce_memory_boundary_validate` | `{ payload, allow?, scope? }`                                                  | `{ allowed, reason, redacted? }`                 | Boundary check before generation / Redact-before-Send  |
-| `pce_memory_policy_apply`      | `{ yaml }`                                                                     | `{ version }`                                    | Apply policy (invariants, purpose tags)                |
+| Tool                           | Role                                       | Notes                                        |
+| ------------------------------ | ------------------------------------------ | -------------------------------------------- |
+| `pce_memory_observe`           | capture raw micro artifacts                | no durable inline claim creation             |
+| `pce_memory_distill`           | create a reviewable promotion candidate    | records lineage, boundary checks, and status |
+| `pce_memory_promote`           | create durable meso or macro memory        | provenance required                          |
+| `pce_memory_activate`          | compose active context for a task intent   | intent-aware planner API                     |
+| `pce_memory_feedback`          | send usefulness and correctness signals    | feeds critic and future ranking              |
+| `pce_memory_rollback`          | supersede or repair invalid durable memory | append-only                                  |
+| `pce_memory_boundary_validate` | evaluate boundary handling                 | shared safety primitive                      |
+| `pce_memory_policy_apply`      | update policy                              | governance channel                           |
 
-> All tools include **Provenance** and **policy_version** in responses to ensure auditability.
+### Supporting API posture
 
-### Representative Flow (Agent Side)
+- `search` may remain as a diagnostic or evaluation interface.
+- direct `upsert` is no longer the primary workflow and should be treated as a narrowly scoped
+  escape hatch for already-distilled durable knowledge.
 
-1. **Activation**: Get AC via `pce_memory_activate` and attach to prompt header (prerequisite injection).
-2. **Generation**: Check with `pce_memory_boundary_validate` before generating candidates (redact if needed).
-3. **Upsert**: Save decisions and design rationale via `pce_memory_upsert`. Provenance (commit/URL) mandatory.
-4. **Feedback**: Return adoption/rejection results via `pce_memory_feedback` for next re-ranking.
+### Representative flow
 
-### AC Generation Function r Outline (Pseudo)
-
-> AC = r(q, C^L, B, policy, critic)
-
-1. **Boundary Pre-filter**: Narrow LCP by `scope/allow/invariants`
-2. **Search**: `S = � * dense + � * BM25` (hybrid)
-3. **Re-rank**: `S' = S * g(utility, confidence, recency)` (critic reflection)
-4. **Redact**: Block confidential info per boundary (attach Provenance)
-5. **Compose**: Return top k as AC (issue `active_context_id`)
-
-### Safety Design
-
-- **Boundary-First**: Always call `validate` before/after generation. Pre-filter with `scope/allow` during recall.
-- **Redact-before-Send**: Auto-mask PII/Secrets within MCP tools. Transmission logs attached to Provenance.
-- **Fail-closed**: No permission when policy unloaded; return reason and action (`policy.apply`).
-
-### MCP Tool Quality Characteristics (Mini-Spec)
-
-| Tool              |                            Idempotency | Timeout | Payload | Errors (Example)               | Notes                            |
-| ----------------- | -------------------------------------: | ------: | ------: | ------------------------------ | -------------------------------- |
-| search            |                        safe (GET-like) |     10s |    32KB | BOUNDARY_DENIED / RATE_LIMIT   | With citations, read-only        |
-| activate          |                                   safe |     15s |    16KB | POLICY_MISSING / INVALID_SCOPE | AC ID and composition list       |
-| upsert            |          idempotent via `content_hash` |     10s |    64KB | DUPLICATE / INVALID_BOUNDARY   | Provenance required (commit/URL) |
-| feedback          | idempotent via `(claim_id, ts bucket)` |      3s |     4KB | UNKNOWN_CLAIM                  | Aggregated to critic             |
-| boundary.validate |                                   safe |      5s |    32KB | BOUNDARY_DENIED                | Returns redact result            |
-| policy.apply      |             non-idempotent (versioned) |     10s |   128KB | UNAUTHORIZED                   | GitOps approval recommended      |
-
-### MVP Targets
-
-- IDE: **Cursor / VS Code** (extension)
-- Agents: **Codex / Claude Code** (standardize search / upsert / feedback via MCP)
-
-> Future: HTTP/CLI provided as wrappers of MCP implementation. Prioritize MCP as core I/F first to minimize agent integration friction.
+1. `observe` captures raw material into micro storage.
+2. `distill` turns observations, claims, or active context into a promotion candidate.
+3. `promote` writes accepted knowledge into meso or macro memory.
+4. `activate(intent)` builds a short-lived active context for a concrete task.
+5. `feedback` updates critic signals after use.
+6. `rollback` repairs durable memory when a promoted item is later invalidated.
 
 ---
 
-## Definitions & Qualities
+## Activate Planner
 
-- **Critic**: An evaluator (two-phase: pre-guard / post-evaluation) that ingests adoption/rejection/correction signals and updates `utility/confidence/recency`.
-- **Success Bundle**: A metric bundle of { coherence, portability, counterfactual robustness, performative success, revocability, traceability, reproducibility }.
-- **Distill**: Procedure to promote AC achievements to LCP (mandatory deduplication, provenance attachment, boundary alignment).
-- **Rollback**: Procedure to revert LCP to safe side when errors or boundary violations are discovered (explicitly show impact scope and provenance).
-- **Invariants**: Core invariants of boundaries. Fail-closed on violation; exceptions granted only through manual review.
+`activate` should be planner-shaped rather than search-shaped.
+
+### Input
+
+```json
+{
+  "intent": "resume_task|debug_incident|design_decision|policy_check",
+  "q": "...",
+  "include_layers": ["micro", "meso", "macro"],
+  "kind_filter": ["task", "fact"],
+  "memory_type_filter": ["working_state", "knowledge"],
+  "allow": ["answer:task"],
+  "top_k": 12
+}
+```
+
+### Planner outline
+
+1. pre-filter by boundary, layer, and optional type filters
+2. generate candidates per layer
+3. score each layer with layer-local and type-local rules
+4. merge with intent-specific quotas and tie-break rules
+5. persist `active_contexts` and `active_context_items` with score breakdown and selection reason
+
+### Intent profiles
+
+| Intent            | Layer mix            | Type mix                                      | Special behavior                                         |
+| ----------------- | -------------------- | --------------------------------------------- | -------------------------------------------------------- |
+| `resume_task`     | micro > meso > macro | `working_state`, `task`, relevant `knowledge` | prioritize freshness and issue or branch affinity        |
+| `debug_incident`  | micro + meso         | `evidence`, `knowledge`, `procedure`          | prioritize error-token lexical match and recent evidence |
+| `design_decision` | meso + macro         | `knowledge`, `procedure`, `norm`              | prioritize evidence density and stable constraints       |
+| `policy_check`    | macro > meso         | `norm`, `policy_hint`, supporting `knowledge` | deterministic guardrail prepend and fail-closed bias     |
+
+---
+
+## Data Model Direction
+
+### Micro
+
+- `observations`
+- `evidence`
+- `active_contexts`
+- `active_context_items`
+
+Micro memory is volatile, boundary-sensitive, and not part of default sync.
+
+### Durable memory
+
+- meso durable project memory
+- macro principle catalog
+- `evidence` remains micro-only and is linked into durable memory through evidence refs
+
+The first implementation may still share one DuckDB file, but durable memory should not remain one
+flat pooled corpus.
+
+### Promotion queue
+
+The promotion queue is mandatory because it stores:
+
+- source lineage
+- proposed kind and memory type
+- target layer
+- boundary and policy checks
+- acceptance or rejection state
+- reviewer metadata
+- rollback ancestry
+
+---
+
+## Governance Rules
+
+1. No public write API creates durable canonical `session` memory.
+2. No raw observation is promoted directly into durable memory.
+3. Macro memory is not written ad hoc from observation input.
+4. `secret` content is never silently promoted.
+5. Boundary class can upgrade, never downgrade.
+6. Rollback records supersession instead of mutating durable history in place.
 
 ---
 
 ## Stakeholder Value
 
-- **Individual Developers**: Fast task resumption. IDE agents **read prerequisites first**.
-- **Teams**: Decisions are documented; **incident recurrence prevention knowledge** auto-promoted.
-- **Organizations**: **Safe AI utilization** compliant with norms/institutions (slow layer).
-- **Researchers**: Increased **reproducibility** via provenance and versioning.
+- **Developers** get faster task resumption without polluting project memory with local residue.
+- **Teams** get a reusable project knowledge base with clearer procedures and postmortem lineage.
+- **Organizations** get boundary-first AI memory with explicit policy and principle handling.
+- **Researchers and operators** get inspectable promotion, activation, and rollback records.
 
 ---
 
-## Success Bundles (North Star & KPIs)
+## Success Measures
 
-- **Boundary Compliance Rate** (unauthorized recall rate H 0)
-- **Provenance Coverage Rate** (rate of responses with provenance links)
-- **TTR (Time-to-Retrieval)** (time to useful recall)
-- **Distillation Half-Life** (average cycle time for AC�LCP promotion)
-- **Rollback MTTR** (time from error detection to rollback)
-- **Critic Convergence** (stability of utility/confidence)
+- boundary compliance rate
+- provenance coverage rate
+- time to useful activation
+- candidate-to-promotion latency
+- rollback MTTR
+- critic convergence by memory type
 
-### KPI Measurement Formulas (Examples)
+The v2 architecture adds one new measure that matters operationally:
 
-- **Boundary Compliance Rate (14-day moving window)**
-  = 1  (unauthorized recalls / total recalls)
-- **Provenance Coverage Rate (14 days)**
-  = responses with valid provenance links / total responses
-- **TTR p90 (14 days)**
-  = 90th percentile time to one useful recall (feedback=helpful)
-- **Distillation Half-Life (30 days)**
-  = median time (days) from AC to LCP promotion
-- **Rollback MTTR (30 days)**
-  = average time from "error detection" to "LCP repair"
-- **Critic Convergence (30 days)**
-  = weekly change rate of Var(utility) (� stabilization is good)
+- **promotion review throughput**: how quickly a good candidate moves from micro evidence into
+  durable meso or macro memory without bypassing governance
 
 ---
 
-## Roadmap (Themes)
+## Roadmap Direction
 
-- **v0.1**: Single-node Core (DuckDB), LCP/AC, basic Boundary, CLI/MCP
-- **v0.2**: Graph memory, Re-rank, Critic/Telemetry, Provenance enhancement
-- **v0.3**: Pace-aware distillation/rollback, Boundary UI, audit view
-- **v0.4**: Postgres/pgvector, organizational operations, template policies, connectors
-- **v1.0**: Operational foundation (SLO/SLA), audit trails, ecosystem release
+- **v2 architecture cutover**: promotion queue, memory types, active-context enrichment, and
+  intent-aware activation
+- **retrieval policy wiring**: runtime support for `retrieval.*` policy controls
+- **macro governance**: reviewed principle promotion and rollback workflows
+- **portability**: Postgres/pgvector and broader sync strategies after the v2 lifecycle is stable
 
 ---
 
 ## Non-Goals
 
-- Centralized SaaS lock-in
-- Full replacement as agent orchestrator
-- Capture for capture's sake (**over-capture**)
-- Black-box memory without provenance
+- centralized SaaS lock-in
+- direct raw-observation sync
+- black-box memory without provenance
+- durable session memory as a default user-facing feature
+- one flat retrieval model for every task intent
 
 ---
 
-## Trust & Safety
+## Trust and Safety
 
-- **Redact-before-Send**, **least privilege**, **data minimization**
-- Block PII/Secrets via `boundary_class`, **escalate to manual review**
-- Transparency: Always present **provenance, boundary, policy**
+- redact before send
+- least privilege by boundary
+- fail closed when policy is missing
+- show provenance, boundary, and policy metadata with durable memory and activation results
 
-## Threat Model (Minimal)
+### Threat model
 
-| Threat                | Description                                      | Countermeasure                                                    |
-| --------------------- | ------------------------------------------------ | ----------------------------------------------------------------- |
-| Cross-boundary Recall | Fragments outside boundary mixed into AC         | boundary.validate pre-filter / allowlist / fail-closed            |
-| Prompt Injection      | Recalled fragments contaminate generation system | Citations mandatory, dangerous token blocking, sandbox indication |
-| PII/Secret Leakage    | Confidential info sent to external APIs          | Redact-before-Send / scope-based blocking                         |
-| Duplication/Conflict  | Upsert resend/conflict                           | content_hash / CRDT strategy / manual review                      |
-| Audit Failure         | Missing provenance or policy_version             | Provenance mandatory, append-only logs                            |
-
----
-
-## Story (60-Second Scenario)
-
-> In the morning, when you open your IDE, pce-memory presents **yesterday's decisions**, **related designs**, and **prohibitions** at the top.
-> Generated proposals pass through **boundaries**, with dangers blocked early. Adopted fragments are **distilled** overnight
-> and **promoted** to team conventions. Failures are **rolled back with provenance**, preventing recurrence.
+| Threat                             | Failure mode                                 | Countermeasure                                                    |
+| ---------------------------------- | -------------------------------------------- | ----------------------------------------------------------------- |
+| Cross-boundary recall              | disallowed memory enters active context      | pre-filter by boundary before candidate generation                |
+| Memory contamination               | tentative evidence becomes durable knowledge | require distill and promotion review                              |
+| Prompt injection via recalled text | unsafe fragments shape generation            | cite sources, keep provenance, and preserve layer metadata        |
+| Policy drift                       | macro norms lose authority in pooled ranking | retrieve macro memory with deterministic or quota-based inclusion |
 
 ---
 
-## Call to Action
+## Story
 
-- **Starting Today**: Enable LCP/AC + Boundary in personal projects, completing one **prerequisite � proposal � distillation** cycle.
-- **This Month**: Articulate just 5 team **invariants** (constraints to protect) and embed them in Boundary.
-- **This Quarter**: Establish **promotion/rollback** operations with Critic and audit view.
+A coding agent debugging a production issue should not receive one flat pile of "session/project/
+principle" claims. It should receive:
 
-## Implementation Runbook (30-60-90)
+1. fresh evidence from the current incident
+2. relevant project knowledge and procedures
+3. required norms and policies
 
-- **Day 0-30**: Minimal Boundary set (5 invariants) / Connect MCP search+validate to IDE / Baseline KPIs
-- **Day 31-60**: Enable feedback�critic / Start manual review operations for distill / Test Redact-before-Send
-- **Day 61-90**: Rollback procedure drills / Set pace-aware promotion SLO / Publish audit view
+That is the point of the v2 redesign:
 
----
-
-### Terminology (Excerpt)
-
-- **LCP**: Latent Context Pool (long-term relational memory)
-- **AC**: Active Context (short-term working set)
-- **Boundary / Invariants**: Purpose, confidentiality, invariants
-- **Inscription / Provenance**: Inscription, provenance
-- **Critic / Success Bundle**: Critic, success bundle
+- micro stays local and recent
+- meso stays reusable and durable
+- macro stays authoritative and governable
