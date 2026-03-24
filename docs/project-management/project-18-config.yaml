@@ -68,13 +68,13 @@ issue_settings:
     start_date: 2026-04-11
     target_date: 2026-04-17
   "57":
-    status: Ready
+    status: Done
     priority: P0
     size: S
     start_date: 2026-03-25
     target_date: 2026-04-03
   "58":
-    status: Ready
+    status: Done
     priority: P0
     size: M
     start_date: 2026-03-25
