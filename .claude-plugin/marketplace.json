@@ -10,8 +10,8 @@
     {
       "name": "pce-memory-plugin",
       "source": "./pce-memory-plugin",
-      "description": "Autonomous knowledge management with pce-memory MCP server",
-      "version": "0.2.2",
+      "description": "Persistent knowledge management with pce-memory v2: observe/distill/promote pipeline, intent-aware activate, layer-aware sync",
+      "version": "0.3.1",
       "author": {
         "name": "CAPH TECH Inc."
       },
