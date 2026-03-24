@@ -52,13 +52,51 @@ describe('Output Schema - 基本テスト', () => {
     const upsertTool = TOOL_DEFINITIONS.find((tool) => tool.name === 'pce_memory_upsert');
     expect(upsertTool).toBeDefined();
 
+    expect(upsertTool?.description).toContain('project and principle scopes');
+    expect(upsertTool?.description).toContain('session claims may omit provenance');
+
     const boundaryClassSchema = upsertTool?.inputSchema?.properties?.boundary_class as
       | { enum?: string[]; description?: string }
+      | undefined;
+    const provenanceSchema = upsertTool?.inputSchema?.properties?.provenance as
+      | { description?: string; properties?: { at?: { description?: string } }; required?: string[] }
+      | undefined;
+    const conditionalRequirements = upsertTool?.inputSchema?.allOf as
+      | Array<{
+          if?: { properties?: { scope?: { enum?: string[] } }; required?: string[] };
+          then?: {
+            required?: string[];
+            properties?: { provenance?: { required?: string[] } };
+          };
+        }>
       | undefined;
 
     expect(boundaryClassSchema?.enum).toEqual(['public', 'internal', 'pii']);
     expect(boundaryClassSchema?.description).toContain('secret is rejected by default');
     expect(boundaryClassSchema?.description).toContain('pce_memory_observe');
+    expect(provenanceSchema?.description).toContain('Optional for session scope');
+    expect(provenanceSchema?.required).toBeUndefined();
+    expect(provenanceSchema?.properties?.at?.description).toContain(
+      'Required for project and principle scopes'
+    );
+    expect(conditionalRequirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          if: expect.objectContaining({
+            properties: expect.objectContaining({
+              scope: expect.objectContaining({ enum: ['project', 'principle'] }),
+            }),
+            required: ['scope'],
+          }),
+          then: expect.objectContaining({
+            required: ['provenance'],
+            properties: expect.objectContaining({
+              provenance: expect.objectContaining({ required: ['at'] }),
+            }),
+          }),
+        }),
+      ])
+    );
   });
 });
 

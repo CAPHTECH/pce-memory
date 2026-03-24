@@ -15,6 +15,8 @@ beforeEach(async () => {
 
 describe('E2E happy path (upsert->activate->validate->feedback)', () => {
   it('runs end-to-end without errors', async () => {
+    const provenance = { at: '2025-01-01T00:00:00.000Z' };
+
     // upsert
     const { claim, isNew } = await upsertClaim({
       text: 'foo',
@@ -22,6 +24,7 @@ describe('E2E happy path (upsert->activate->validate->feedback)', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: 'e2e1',
+      provenance,
     });
     expect(claim.id).toBeDefined();
     expect(isNew).toBe(true);
