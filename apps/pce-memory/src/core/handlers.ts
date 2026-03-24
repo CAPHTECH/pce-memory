@@ -17,7 +17,11 @@ import {
   ContentHashCollisionError,
 } from '../store/claims.js';
 import type { Claim, Provenance } from '../store/claims.js';
-import { hybridSearchPaginated, getEmbeddingService } from '../store/hybridSearch.js';
+import {
+  hybridSearchPaginated,
+  hybridSearchWithScores,
+  getEmbeddingService,
+} from '../store/hybridSearch.js';
 import { upsertEntity, linkClaimEntity, queryEntities } from '../store/entities.js';
 import type { EntityInput, EntityQueryFilters } from '../store/entities.js';
 import { upsertRelation, queryRelations } from '../store/relations.js';
@@ -28,6 +32,7 @@ import {
   gcExpiredObservations,
   findObservationsByIds,
   insertObservation,
+  searchObservationsWithScores,
   type InsertObservationInput,
   type ObservationSourceType,
 } from '../store/observations.js';
@@ -100,6 +105,7 @@ import {
 } from '../state/layerScopeState.js';
 import { safeJsonStringify } from '../utils/serialization.js';
 import { getConnection } from '../db/connection.js';
+import type { ScoreBreakdown } from '../store/rerank.js';
 
 // ========== Type Definitions ==========
 
@@ -340,6 +346,32 @@ function buildSelectionReason(item: {
   }
 
   return parts.join('; ');
+}
+
+type ActivateSearchItem = {
+  claim: Claim;
+  score: number;
+  source_layer?: string;
+  score_breakdown?: ScoreBreakdown;
+};
+
+function getActivateItemTimestamp(item: ActivateSearchItem): number {
+  const candidate = item.claim.updated_at ?? item.claim.created_at;
+  const timestamp = new Date(candidate).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function compareActivateSearchItems(left: ActivateSearchItem, right: ActivateSearchItem): number {
+  if (right.score !== left.score) {
+    return right.score - left.score;
+  }
+
+  const timestampDiff = getActivateItemTimestamp(right) - getActivateItemTimestamp(left);
+  if (timestampDiff !== 0) {
+    return timestampDiff;
+  }
+
+  return right.claim.id.localeCompare(left.claim.id);
 }
 
 function mapDurableScopeToTargetLayer(scope: DurableScope): 'meso' | 'macro' {
@@ -2174,14 +2206,25 @@ export async function handleRollback(args: Record<string, unknown>) {
 }
 
 export async function handleActivate(args: Record<string, unknown>) {
-  const { scope, allow, top_k, q, cursor, include_meta, intent, kind_filter, memory_type_filter } =
-    args as {
+  const {
+    scope,
+    allow,
+    top_k,
+    q,
+    cursor,
+    include_meta,
+    include_observations,
+    intent,
+    kind_filter,
+    memory_type_filter,
+  } = args as {
     scope?: unknown;
     allow?: unknown;
     top_k?: number;
     q?: string;
     cursor?: string;
     include_meta?: boolean;
+    include_observations?: unknown;
     intent?: unknown;
     kind_filter?: unknown;
     memory_type_filter?: unknown;
@@ -2189,8 +2232,15 @@ export async function handleActivate(args: Record<string, unknown>) {
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
   try {
-    if (!canDoActivate()) {
-      const error = stateError('HasClaims or Ready', getStateType());
+    const includeObservations = include_observations === true;
+    const activateAllowed =
+      canDoActivate() || (includeObservations && getStateType() === 'PolicyApplied');
+
+    if (!activateAllowed) {
+      const expectedState = includeObservations
+        ? 'PolicyApplied or HasClaims or Ready'
+        : 'HasClaims or Ready';
+      const error = stateError(expectedState, getStateType());
       return createToolResult(
         { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
         { isError: true }
@@ -2227,6 +2277,15 @@ export async function handleActivate(args: Record<string, unknown>) {
     if (typeof top_k === 'number' && (!Number.isInteger(top_k) || top_k < 1 || top_k > 50)) {
       return createToolResult(
         { ...err('VALIDATION_ERROR', 'top_k must be an integer between 1 and 50', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (include_observations !== undefined && typeof include_observations !== 'boolean') {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'include_observations must be boolean', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -2287,8 +2346,7 @@ export async function handleActivate(args: Record<string, unknown>) {
         ? Math.max(1, Math.floor(hybridPolicy.k_final))
         : 12);
 
-    const searchResult = await hybridSearchPaginated(scope, resolvedTopK, q, {
-      ...(cursor !== undefined ? { cursor } : {}),
+    const searchConfig = {
       boundaryClasses: allowedBoundaryClasses,
       ...(resolvedIntent ? { intent: resolvedIntent } : {}),
       ...(resolvedKindFilter ? { kindFilter: resolvedKindFilter } : {}),
@@ -2300,8 +2358,45 @@ export async function handleActivate(args: Record<string, unknown>) {
         : {}),
       ...(typeof hybridPolicy.k_txt === 'number' ? { kText: hybridPolicy.k_txt } : {}),
       ...(typeof hybridPolicy.k_vec === 'number' ? { kVec: hybridPolicy.k_vec } : {}),
-    });
-    const claims = searchResult.results.map((r) => r.claim);
+    };
+
+    let searchResults: ActivateSearchItem[];
+    let nextCursor: string | undefined;
+    let hasMore: boolean;
+
+    if (includeObservations) {
+      const candidateLimit = cursor !== undefined ? Number.MAX_SAFE_INTEGER : resolvedTopK + 1;
+      const [durableResults, observationResults] = await Promise.all([
+        hybridSearchWithScores(scope, candidateLimit, q, searchConfig),
+        searchObservationsWithScores(q, {
+          boundaryClasses: allowedBoundaryClasses,
+          limit: candidateLimit,
+        }),
+      ]);
+
+      const combinedResults = [...durableResults, ...observationResults].sort(compareActivateSearchItems);
+      const cursorIndex =
+        cursor !== undefined ? combinedResults.findIndex((item) => item.claim.id === cursor) : -1;
+      const pagedResults = cursorIndex >= 0 ? combinedResults.slice(cursorIndex + 1) : combinedResults;
+
+      hasMore = pagedResults.length > resolvedTopK;
+      searchResults = pagedResults.slice(0, resolvedTopK);
+      nextCursor =
+        hasMore && searchResults.length > 0
+          ? searchResults[searchResults.length - 1]!.claim.id
+          : undefined;
+    } else {
+      const searchResult = await hybridSearchPaginated(scope, resolvedTopK, q, {
+        ...(cursor !== undefined ? { cursor } : {}),
+        ...searchConfig,
+      });
+
+      searchResults = searchResult.results;
+      nextCursor = searchResult.next_cursor;
+      hasMore = searchResult.has_more;
+    }
+
+    const claims = searchResults.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({
       id: acId,
@@ -2316,7 +2411,7 @@ export async function handleActivate(args: Record<string, unknown>) {
       evidenceMap = await getEvidenceForClaims(claimIds);
     }
 
-    const scoredItems = searchResult.results.map((r, index) => {
+    const scoredItems = searchResults.map((r, index) => {
       const sourceLayer = r.source_layer ?? mapScopeToLayer(r.claim.scope);
       const rank = index + 1;
       const selectionReason = buildSelectionReason({
@@ -2369,8 +2464,8 @@ export async function handleActivate(args: Record<string, unknown>) {
         ...(resolvedIntent ? { intent: resolvedIntent } : {}),
         claims: scoredItems,
         claims_count: claims.length,
-        next_cursor: searchResult.next_cursor,
-        has_more: searchResult.has_more,
+        next_cursor: nextCursor,
+        has_more: hasMore,
         policy_version: getPolicyVersion(),
         state: getStateType(),
         request_id: reqId,
@@ -4425,6 +4520,12 @@ export const TOOL_DEFINITIONS = [
         include_meta: {
           type: 'boolean',
           description: 'Include metadata (evidence, etc.)',
+          default: false,
+        },
+        include_observations: {
+          type: 'boolean',
+          description:
+            'Also search transient observations for short-term recall and return them as micro-layer items.',
           default: false,
         },
       },
