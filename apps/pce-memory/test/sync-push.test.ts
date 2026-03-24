@@ -9,9 +9,10 @@ import * as E from 'fp-ts/Either';
 import { computeContentHash } from '@pce/embeddings';
 import packageJson from '../package.json' with { type: 'json' };
 import { executePush } from '../src/sync/push.js';
-import { upsertClaim } from '../src/store/claims.js';
+import { upsertClaim, markClaimRolledBack } from '../src/store/claims.js';
 import { upsertEntity } from '../src/store/entities.js';
 import { upsertRelation } from '../src/store/relations.js';
+import { insertPromotionQueueRow } from '../src/store/promotionQueue.js';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection.js';
 import { initRateState, resetRates } from '../src/store/rate.js';
 import { resetMemoryState } from '../src/state/memoryState.js';
@@ -114,23 +115,163 @@ describe('executePush', () => {
     }
   });
 
-  it('sessionスコープはデフォルトでエクスポートしない', async () => {
-    const text = 'セッション用Claim';
-    const hash = `sha256:${computeContentHash(text)}`;
+  it('sessionスコープは明示指定してもエクスポートしない', async () => {
+    const sessionText = 'セッション用Claim';
+    const sessionHash = `sha256:${computeContentHash(sessionText)}`;
+    const projectText = 'project scope claim';
+    const projectHash = `sha256:${computeContentHash(projectText)}`;
 
     await upsertClaim({
-      text,
+      text: sessionText,
       kind: 'fact',
       scope: 'session',
       boundary_class: 'internal',
-      content_hash: hash,
+      content_hash: sessionHash,
     });
 
-    const result = await executePush({ basePath: tempDir });
+    await upsertClaim({
+      text: projectText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: projectHash,
+    });
+
+    const result = await executePush({
+      basePath: tempDir,
+      scopeFilter: ['session', 'project'],
+    });
 
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
-      expect(result.right.exported.claims).toBe(0);
+      expect(result.right.exported.claims).toBe(1);
+
+      const sessionFile = path.join(
+        tempDir,
+        '.pce-shared',
+        'claims',
+        'session',
+        `${sessionHash.replace('sha256:', '')}.json`
+      );
+      const projectFile = path.join(
+        tempDir,
+        '.pce-shared',
+        'claims',
+        'project',
+        `${projectHash.replace('sha256:', '')}.json`
+      );
+
+      const sessionExists = await fs
+        .access(sessionFile)
+        .then(() => true)
+        .catch(() => false);
+      const projectExists = await fs
+        .access(projectFile)
+        .then(() => true)
+        .catch(() => false);
+
+      expect(sessionExists).toBe(false);
+      expect(projectExists).toBe(true);
+    }
+  });
+
+  it('tombstone または rollback 済みのClaimをエクスポートしない', async () => {
+    const active = await upsertClaim({
+      text: 'active claim',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash('active claim')}`,
+    });
+    const tombstoned = await upsertClaim({
+      text: 'tombstoned claim',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash('tombstoned claim')}`,
+    });
+    const rolledBack = await upsertClaim({
+      text: 'rolled back claim',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash('rolled back claim')}`,
+    });
+
+    await markClaimRolledBack(tombstoned.claim.id, {
+      tombstone_at: '2026-03-24T00:00:00.000Z',
+      rollback_reason: 'test tombstone',
+      superseded_by: 'rbk_test_tombstone',
+    });
+    await insertPromotionQueueRow({
+      id: 'rbk_sync_skip',
+      source_layer: 'meso',
+      target_layer: 'meso',
+      source_ids: JSON.stringify([rolledBack.claim.id]),
+      distilled_text: rolledBack.claim.text,
+      candidate_hash: `sha256:${computeContentHash('rollback marker for sync push test')}`,
+      proposed_kind: rolledBack.claim.kind,
+      proposed_scope: rolledBack.claim.scope,
+      proposed_boundary_class: rolledBack.claim.boundary_class,
+      proposed_memory_type: rolledBack.claim.memory_type ?? null,
+      provenance: JSON.stringify({
+        rollback_of: rolledBack.claim.id,
+        actor: 'vitest',
+      }),
+      evidence_ids: JSON.stringify([]),
+      policy_version_checked: 'test-policy',
+      boundary_check_result: JSON.stringify({ allowed: true, rollback: true }),
+      status: 'rolled_back',
+      created_at: '2026-03-24T00:00:00.000Z',
+      resolved_at: '2026-03-24T00:00:00.000Z',
+      accepted_claim_id: rolledBack.claim.id,
+      rejected_reason: 'test rollback',
+    });
+
+    const result = await executePush({ basePath: tempDir, scopeFilter: ['project'] });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.exported.claims).toBe(1);
+
+      const activeFile = path.join(
+        tempDir,
+        '.pce-shared',
+        'claims',
+        'project',
+        `${active.claim.content_hash.replace('sha256:', '')}.json`
+      );
+      const tombstonedFile = path.join(
+        tempDir,
+        '.pce-shared',
+        'claims',
+        'project',
+        `${tombstoned.claim.content_hash.replace('sha256:', '')}.json`
+      );
+      const rolledBackFile = path.join(
+        tempDir,
+        '.pce-shared',
+        'claims',
+        'project',
+        `${rolledBack.claim.content_hash.replace('sha256:', '')}.json`
+      );
+
+      const activeExists = await fs
+        .access(activeFile)
+        .then(() => true)
+        .catch(() => false);
+      const tombstonedExists = await fs
+        .access(tombstonedFile)
+        .then(() => true)
+        .catch(() => false);
+      const rolledBackExists = await fs
+        .access(rolledBackFile)
+        .then(() => true)
+        .catch(() => false);
+
+      expect(activeExists).toBe(true);
+      expect(tombstonedExists).toBe(false);
+      expect(rolledBackExists).toBe(false);
     }
   });
 
@@ -225,6 +366,40 @@ describe('executePush', () => {
     if (E.isRight(result)) {
       // 関連するEntityがエクスポートされていないのでRelationもエクスポートされない
       expect(result.right.exported.relations).toBe(0);
+    }
+  });
+
+  it('promotion_queue は sync 対象に含めない', async () => {
+    await insertPromotionQueueRow({
+      id: 'pq_local_only',
+      source_layer: 'micro',
+      target_layer: 'meso',
+      source_ids: JSON.stringify(['obs_1']),
+      distilled_text: 'local only candidate',
+      candidate_hash: `sha256:${computeContentHash('local only candidate')}`,
+      proposed_kind: 'fact',
+      proposed_scope: 'project',
+      proposed_boundary_class: 'internal',
+      proposed_memory_type: 'knowledge',
+      provenance: JSON.stringify({ actor: 'vitest', at: '2026-03-24T00:00:00.000Z' }),
+      evidence_ids: JSON.stringify([]),
+      policy_version_checked: 'test-policy',
+      boundary_check_result: JSON.stringify({ allowed: true }),
+      status: 'pending',
+      created_at: '2026-03-24T00:00:00.000Z',
+    });
+
+    const result = await executePush({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.exported.claims).toBe(0);
+      const promotionQueueDir = path.join(tempDir, '.pce-shared', 'promotion_queue');
+      const exists = await fs
+        .access(promotionQueueDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
     }
   });
 

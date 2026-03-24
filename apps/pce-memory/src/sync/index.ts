@@ -36,6 +36,7 @@ export {
   BOUNDARY_STRICTNESS,
   mergeBoundaryClass,
   isBoundarySyncable,
+  isScopeSyncable,
   isBoundaryUpgraded,
   type MergeAction,
 } from './merge.js';

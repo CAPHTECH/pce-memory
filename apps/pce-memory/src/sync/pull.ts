@@ -14,13 +14,14 @@ import { syncPullError, type DomainError } from '../domain/errors.js';
 import {
   upsertClaim,
   findClaimByContentHash,
-  updateClaimBoundaryClass,
+  updateClaimSyncMetadata,
   type ClaimInput,
 } from '../store/claims.js';
 import { upsertEntity, findEntityById, type EntityInput } from '../store/entities.js';
 import { upsertRelation, findRelationById, type RelationInput } from '../store/relations.js';
 import {
   DEFAULT_TARGET_DIR,
+  DEFAULT_SCOPE_FILTER,
   DEFAULT_BOUNDARY_FILTER,
   SYNC_BLOCKED_BOUNDARY,
   type Scope,
@@ -46,6 +47,7 @@ import {
 import {
   mergeBoundaryClass,
   isBoundarySyncable,
+  isScopeSyncable,
   isBoundaryUpgraded,
   type MergeAction,
 } from './merge.js';
@@ -207,6 +209,10 @@ async function importClaim(
   boundaryFilter: BoundaryClass[],
   dryRun: boolean
 ): Promise<MergeAction> {
+  if (!isScopeSyncable(claim.scope)) {
+    return 'skipped_scope';
+  }
+
   // 境界クラスフィルターチェック
   if (!isBoundarySyncable(claim.boundary_class, boundaryFilter)) {
     return 'skipped_duplicate';
@@ -226,13 +232,26 @@ async function importClaim(
       existing.boundary_class as BoundaryClass,
       claim.boundary_class
     );
+    const shouldBackfillMemoryType =
+      (existing.memory_type === null || existing.memory_type === undefined) &&
+      claim.memory_type !== undefined;
 
-    if (isBoundaryUpgraded(existing.boundary_class as BoundaryClass, merged)) {
-      // 格上げが必要
+    const shouldUpgradeBoundary = isBoundaryUpgraded(
+      existing.boundary_class as BoundaryClass,
+      merged
+    );
+
+    if (shouldUpgradeBoundary || shouldBackfillMemoryType) {
+      // boundary_class は格上げのみ、memory_type は未設定時のみ backfill する。
       if (!dryRun) {
-        await updateClaimBoundaryClass(existing.id, merged);
+        await updateClaimSyncMetadata(existing.id, {
+          ...(shouldUpgradeBoundary ? { boundaryClass: merged } : {}),
+          ...(shouldBackfillMemoryType && claim.memory_type !== undefined
+            ? { memoryType: claim.memory_type }
+            : {}),
+        });
       }
-      return 'upgraded_boundary';
+      return shouldUpgradeBoundary ? 'upgraded_boundary' : 'skipped_duplicate';
     }
 
     return 'skipped_duplicate';
@@ -383,9 +402,13 @@ export async function executePull(
     const claimsDir = path.join(syncDir, 'claims');
     if (await directoryExists(claimsDir)) {
       // スコープ別のディレクトリを処理
-      const scopes = options.scopeFilter ?? ['project', 'principle'];
+      const scopes = options.scopeFilter ?? DEFAULT_SCOPE_FILTER;
 
       for (const scope of scopes) {
+        if (!isScopeSyncable(scope)) {
+          continue;
+        }
+
         const scopeDir = path.join(claimsDir, scope);
         if (!(await directoryExists(scopeDir))) {
           continue;
@@ -442,6 +465,7 @@ export async function executePull(
               result.imported.claims.new++;
               break;
             case 'skipped_duplicate':
+            case 'skipped_scope':
             case 'skipped_tombstone':
               result.imported.claims.skippedDuplicate++;
               break;
@@ -452,6 +476,8 @@ export async function executePull(
         }
       }
     }
+
+    // promotion_queue はレビュー待ち・ロールバック監査のローカル状態なので Git sync から除外する。
 
     // 5. Entitiesをインポート
     const entitiesDir = path.join(syncDir, 'entities');

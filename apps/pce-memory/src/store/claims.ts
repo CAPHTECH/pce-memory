@@ -7,7 +7,11 @@ import type { MemoryType } from '../domain/types.js';
 
 function activeClaimFilter(alias: string): string {
   return `COALESCE(${alias}.tombstone, FALSE) = FALSE
-    AND NOT EXISTS (
+    AND NOT ${rollbackRecordExistsFilter(alias)}`;
+}
+
+function rollbackRecordExistsFilter(alias: string): string {
+  return `EXISTS (
       SELECT 1
       FROM promotion_queue pq
       WHERE pq.accepted_claim_id = ${alias}.id
@@ -51,12 +55,14 @@ export interface Claim {
   tombstone_at?: Date | string | null;
   rollback_reason?: string | null;
   superseded_by?: string | null;
+  has_rollback_record?: boolean;
   // 由来情報（mcp-tools.md §1.y準拠）
   provenance?: Provenance;
 }
 
-export interface ClaimRow extends Omit<Claim, 'provenance'> {
+export interface ClaimRow extends Omit<Claim, 'provenance' | 'has_rollback_record'> {
   provenance?: Provenance | string | null;
+  has_rollback_record?: unknown;
 }
 
 /**
@@ -117,6 +123,10 @@ function parseClaimProvenance(claim: ClaimRow): Claim {
     rollback_reason: claim.rollback_reason ?? null,
     superseded_by: claim.superseded_by ?? null,
   };
+
+  if (claim.has_rollback_record !== undefined && claim.has_rollback_record !== null) {
+    normalizedClaim.has_rollback_record = Boolean(claim.has_rollback_record);
+  }
 
   if (claim.provenance && typeof claim.provenance === 'string') {
     try {
@@ -273,13 +283,22 @@ export interface ClaimFilterOptions {
   boundaryClasses?: string[];
   since?: Date;
   limit?: number;
+  includeInactive?: boolean;
+  includeRollbackMetadata?: boolean;
 }
 
 export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<Claim[]> {
   const conn = await getConnection();
-  const conditions: string[] = [activeClaimFilter('c')];
+  const selectColumns = options.includeRollbackMetadata
+    ? `${CLAIM_COLUMNS}, ${rollbackRecordExistsFilter('c')} AS has_rollback_record`
+    : CLAIM_COLUMNS;
+  const conditions: string[] = [];
   const params: (string | number)[] = [];
   let paramIndex = 1;
+
+  if (!options.includeInactive) {
+    conditions.push(activeClaimFilter('c'));
+  }
 
   // スコープフィルター
   if (options.scopes && options.scopes.length > 0) {
@@ -305,7 +324,7 @@ export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<C
   }
 
   // クエリ構築
-  let sql = `SELECT ${CLAIM_COLUMNS} FROM claims c`;
+  let sql = `SELECT ${selectColumns} FROM claims c`;
   if (conditions.length > 0) {
     sql += ` WHERE ${conditions.join(' AND ')}`;
   }
@@ -333,6 +352,40 @@ export async function updateClaimBoundaryClass(id: string, boundaryClass: string
     'UPDATE claims SET boundary_class = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
     [boundaryClass, id]
   );
+}
+
+export interface UpdateClaimSyncMetadataInput {
+  boundaryClass?: string;
+  memoryType?: MemoryType;
+}
+
+export async function updateClaimSyncMetadata(
+  id: string,
+  input: UpdateClaimSyncMetadataInput
+): Promise<void> {
+  const assignments: string[] = [];
+  const values: Array<string> = [];
+
+  if (input.boundaryClass !== undefined) {
+    assignments.push(`boundary_class = $${values.length + 1}`);
+    values.push(input.boundaryClass);
+  }
+
+  if (input.memoryType !== undefined) {
+    assignments.push(`memory_type = $${values.length + 1}`);
+    values.push(input.memoryType);
+  }
+
+  if (assignments.length === 0) {
+    return;
+  }
+
+  const conn = await getConnection();
+  assignments.push('updated_at = CURRENT_TIMESTAMP');
+  await conn.run(`UPDATE claims SET ${assignments.join(', ')} WHERE id = $${values.length + 1}`, [
+    ...values,
+    id,
+  ]);
 }
 
 export interface RollbackClaimInput {

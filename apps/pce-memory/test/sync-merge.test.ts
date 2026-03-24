@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mergeBoundaryClass,
   isBoundarySyncable,
+  isScopeSyncable,
   isBoundaryUpgraded,
   BOUNDARY_STRICTNESS,
 } from '../src/sync/merge.js';
@@ -59,6 +60,17 @@ describe('isBoundarySyncable', () => {
   it('allowedClassesに含まれない場合はfalse', () => {
     expect(isBoundarySyncable('public', ['internal'])).toBe(false);
     expect(isBoundarySyncable('pii', ['public', 'internal'])).toBe(false);
+  });
+});
+
+describe('isScopeSyncable', () => {
+  it('session は常に false を返す', () => {
+    expect(isScopeSyncable('session')).toBe(false);
+  });
+
+  it('project と principle は true を返す', () => {
+    expect(isScopeSyncable('project')).toBe(true);
+    expect(isScopeSyncable('principle')).toBe(true);
   });
 });
 

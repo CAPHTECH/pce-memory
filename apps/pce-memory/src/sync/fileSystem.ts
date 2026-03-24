@@ -176,6 +176,7 @@ export async function initSyncDirectory(
     path.join(syncDir, 'entities'),
     path.join(syncDir, 'relations'),
   ];
+  // promotion_queue はレビュー・監査用のローカル状態なので同期ディレクトリを作らない。
 
   for (const dir of dirs) {
     const result = await ensureDirectory(dir);

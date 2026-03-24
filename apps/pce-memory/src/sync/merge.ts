@@ -5,7 +5,7 @@
  * - boundary_class格下げリスク: 同一content_hashで厳格な方を採用
  * - Entity/RelationのID衝突: ID一致時は既存優先（idempotent）
  */
-import type { BoundaryClass } from './schemas.js';
+import type { BoundaryClass, Scope } from './schemas.js';
 
 /**
  * 境界クラスの厳格度順序
@@ -61,6 +61,15 @@ export function isBoundarySyncable(
 }
 
 /**
+ * scope が同期対象レイヤーかどうかを判定
+ *
+ * session は micro memory としてローカル専用のため同期しない。
+ */
+export function isScopeSyncable(scope: Scope): boolean {
+  return scope !== 'session';
+}
+
+/**
  * boundary_classが格上げされたかどうかを判定
  *
  * @param before 変更前のboundary_class
@@ -77,5 +86,6 @@ export function isBoundaryUpgraded(before: BoundaryClass, after: BoundaryClass):
 export type MergeAction =
   | 'new' // 新規追加
   | 'skipped_duplicate' // 既存と同一で変更なし
+  | 'skipped_scope' // session などローカル専用スコープのため除外
   | 'upgraded_boundary' // boundary_classが格上げされた
   | 'skipped_tombstone'; // tombstoneフラグで除外（Phase 2）
