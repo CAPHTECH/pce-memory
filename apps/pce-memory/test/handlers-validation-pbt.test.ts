@@ -41,7 +41,7 @@ beforeEach(async () => {
 });
 
 function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
-  expect(result.isError).toBeUndefined();
+  expect(result.isError ?? false).toBe(false);
   expect(result.structuredContent).toBeDefined();
   return result.structuredContent!;
 }
@@ -56,6 +56,9 @@ function expectError(result: Awaited<ReturnType<typeof dispatchTool>>) {
 async function applyPolicy() {
   expectSuccess(await dispatchTool('pce_memory_policy_apply', {}));
 }
+
+const UPSERT_PROVENANCE = { at: new Date(Date.now() - 60_000).toISOString(), actor: 'claude' };
+const PROMOTE_PROVENANCE = { at: new Date(Date.now() - 30_000).toISOString(), actor: 'claude' };
 
 const safeTextArb = fc
   .array(fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789 '.split('')), {
@@ -84,7 +87,7 @@ const validUpsertInputArb: fc.Arbitrary<ValidUpsertInput> = fc
           : kind === 'preference'
             ? 'procedure'
             : 'knowledge',
-    provenance: { at: '2026-03-24T12:00:00.000Z', actor: 'claude' },
+    provenance: UPSERT_PROVENANCE,
   }));
 
 const nonSecretBoundaryArb = fc.constantFrom<'public' | 'internal' | 'pii'>(
@@ -163,7 +166,7 @@ describe('Property: handler validation and state invariants', () => {
         const promote = expectSuccess(
           await dispatchTool('pce_memory_promote', {
             candidate_id: distill.candidate_id,
-            provenance: { at: '2026-03-24T13:00:00.000Z', actor: 'claude' },
+            provenance: PROMOTE_PROVENANCE,
           })
         );
 

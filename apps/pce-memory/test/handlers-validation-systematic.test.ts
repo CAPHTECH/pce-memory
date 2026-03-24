@@ -7,7 +7,13 @@ import { resetLayerScopeState } from '../src/state/layerScopeState';
 import { resetMemoryState } from '../src/state/memoryState';
 import { initRateState, resetRates } from '../src/store/rate';
 
-const VALID_PROVENANCE = { at: '2026-03-24T12:00:00.000Z', actor: 'claude' };
+function isoOffset(msOffset: number): string {
+  return new Date(Date.now() + msOffset).toISOString();
+}
+
+function validProvenance(msOffset: number = -60_000) {
+  return { at: isoOffset(msOffset), actor: 'claude' };
+}
 
 async function setupRuntime() {
   await resetDbAsync();
@@ -27,7 +33,7 @@ beforeEach(async () => {
 });
 
 function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
-  expect(result.isError).toBeUndefined();
+  expect(result.isError ?? false).toBe(false);
   expect(result.structuredContent).toBeDefined();
   return result.structuredContent!;
 }
@@ -77,7 +83,7 @@ async function createPromotedClaim() {
   const promote = expectSuccess(
     await dispatchTool('pce_memory_promote', {
       candidate_id: candidate.candidate_id,
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
       review_note: 'approved for rollback validation',
     })
   );
@@ -106,7 +112,7 @@ describe('systematic boundary validation', () => {
           kind: 'fact',
           scope: 'project',
           boundary_class: invalidBoundaryClass.value,
-          provenance: VALID_PROVENANCE,
+          provenance: validProvenance(),
         });
 
         expectError(result);
@@ -122,7 +128,7 @@ describe('systematic boundary validation', () => {
         kind: 'fact',
         scope: 'project',
         boundary_class: 'secret',
-        provenance: VALID_PROVENANCE,
+        provenance: validProvenance(),
       });
 
       const error = expectError(result);
@@ -151,7 +157,7 @@ describe('systematic boundary validation', () => {
           kind: invalidKind.value,
           scope: 'project',
           boundary_class: 'internal',
-          provenance: VALID_PROVENANCE,
+          provenance: validProvenance(),
         });
 
         expectError(result);
@@ -180,7 +186,7 @@ describe('systematic boundary validation', () => {
           kind: 'fact',
           scope: invalidScope.value,
           boundary_class: 'internal',
-          provenance: VALID_PROVENANCE,
+          provenance: validProvenance(),
         });
 
         expectError(result);
@@ -196,7 +202,7 @@ describe('systematic boundary validation', () => {
         kind: 'task',
         scope: 'session',
         boundary_class: 'internal',
-        provenance: VALID_PROVENANCE,
+        provenance: validProvenance(),
       });
 
       const error = expectError(result);
@@ -377,14 +383,14 @@ describe('systematic edge-case validation', () => {
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
-      provenance: { at: '2026-03-24T23:59:59+14:00' },
+      provenance: { at: '2025-03-24T23:59:59+14:00', actor: 'claude' },
     });
     const second = await dispatchTool('pce_memory_upsert', {
       text: 'timezone edge minus twelve',
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
-      provenance: { at: '2026-03-24T00:00:00-12:00' },
+      provenance: { at: '2025-03-24T00:00:00-12:00', actor: 'claude' },
     });
 
     expectSuccess(first);
@@ -401,7 +407,7 @@ describe('systematic edge-case validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: 'sha256:' + '0'.repeat(64),
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
     });
 
     const error = expectError(result);
@@ -417,7 +423,7 @@ describe('systematic edge-case validation', () => {
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
       unexpected: 'field',
     });
 
@@ -434,7 +440,7 @@ describe('systematic edge-case validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       memory_type: 'archive',
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
     });
 
     const error = expectError(result);
@@ -451,7 +457,7 @@ describe('systematic edge-case validation', () => {
         scope: 'project',
         boundary_class: 'internal',
         memory_type: memoryType,
-        provenance: VALID_PROVENANCE,
+        provenance: validProvenance(),
       });
 
       expectSuccess(result);
@@ -472,7 +478,7 @@ describe('systematic security regression coverage', () => {
         scope: 'project',
         boundary_class: 'internal',
         content_hash: contentHash,
-        provenance: VALID_PROVENANCE,
+        provenance: validProvenance(),
       })
     );
 
@@ -491,7 +497,7 @@ describe('systematic security regression coverage', () => {
       kind: "fact'); DROP TABLE claims; --",
       scope: 'project',
       boundary_class: 'internal',
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
     });
 
     expectError(result);
@@ -506,7 +512,7 @@ describe('systematic security regression coverage', () => {
       kind: 'fact',
       scope: "project'); DROP TABLE claims; --",
       boundary_class: 'internal',
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
     });
 
     expectError(result);
@@ -523,7 +529,7 @@ describe('systematic security regression coverage', () => {
         kind: 'fact',
         scope: 'project',
         boundary_class: 'internal',
-        provenance: VALID_PROVENANCE,
+        provenance: validProvenance(),
       })
     );
 
@@ -582,7 +588,7 @@ describe('systematic security regression coverage', () => {
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
-      provenance: VALID_PROVENANCE,
+      provenance: validProvenance(),
     });
 
     expectError(result);
