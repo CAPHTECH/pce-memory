@@ -8,14 +8,31 @@ AI autonomously operates pce-memory. No manual user interaction required.
 
 - **Auto-bootstrap**: Checks state, initializes, and recalls knowledge at session start
 - **Auto-activate**: Detects task-like prompts and recalls relevant knowledge automatically
-- **Auto-record**: Records important design decisions automatically; final check at session end
-- **Auto-observe**: Records changes to architecturally significant files
+- **V2 write path guidance**: Durable memory follows `observe -> distill -> promote`, with `upsert` reserved as an escape hatch for already-distilled knowledge
+- **Layer-aware recall/sync**: Skills describe micro/meso/macro behavior, memory types, and sync boundaries
 
 ## Installation
 
 ```bash
 claude --plugin-dir ./pce-memory-plugin
 ```
+
+`.mcp.json` intentionally keeps `npx pce-memory@latest` until the next npm publish updates the package version reference.
+
+## V2 Workflow
+
+The plugin documentation and skills target the pce-memory v2 API:
+
+```text
+observe -> distill -> promote -> activate(intent) -> feedback -> rollback
+```
+
+- `observe` captures raw micro-memory only. It does not create durable claims inline.
+- `distill` creates a reviewable promotion candidate with lineage and proposed `kind` / `memory_type`.
+- `promote` turns a pending candidate into meso or macro durable memory with mandatory provenance.
+- `activate` remains the task-facing recall API and now supports `intent`, `kind_filter`, `memory_type_filter`, and `include_observations`.
+- `rollback` is the append-only repair path for invalid durable memory.
+- `upsert` still exists, but only as a narrow escape hatch for already-distilled project/principle knowledge.
 
 ## How It Works
 
@@ -25,14 +42,17 @@ claude --plugin-dir ./pce-memory-plugin
 | ------------------------ | ------------------------------------------------------------------- |
 | SessionStart             | Check state → policy_apply → activate (also fires after compaction) |
 | UserPromptSubmit         | Inject base protocol every message + activate on task detection     |
-| Stop                     | Auto-record important decisions with upsert                         |
-| PostToolUse(Write\|Edit) | Auto-record on architecturally significant file changes             |
+| Stop                     | Final reminder to persist important context                         |
+| PostToolUse(Write\|Edit) | Remind the agent to record architecturally significant changes      |
+
+The runtime hooks remain lightweight. The v2 durable-memory contract is documented in the skills so agents can choose `observe`, `distill`, `promote`, `activate(intent)`, `feedback`, and `rollback` correctly.
 
 ### Skills (AI internal reference)
 
-- **pce-core**: activate/upsert/feedback workflow guide
+- **pce-core**: v2 core workflow, activate planning, and upsert escape hatch
+- **pce-promotion**: distill/promote/rollback pipeline guide
 - **pce-graph**: Entity and relation management
-- **pce-sync**: push/pull/status, CRDT merge
+- **pce-sync**: push/pull/status, memory_type-aware sync, layer-aware export/import rules
 
 ### Agent
 
