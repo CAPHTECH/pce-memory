@@ -1,6 +1,6 @@
 import { getConnection } from '../db/connection.js';
 import type { Claim } from './claims.js';
-import { safeJsonStringify } from '../utils/serialization.js';
+import { normalizeRowsTimestamps, safeJsonStringify } from '../utils/serialization.js';
 
 export interface ActiveContext {
   id: string;
@@ -34,4 +34,39 @@ export async function saveActiveContext(ac: ActiveContext): Promise<void> {
       ac.policy_version ?? null,
     ]
   );
+}
+
+export async function findActiveContextById(id: string): Promise<ActiveContext | undefined> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    'SELECT id, claims, intent, expires_at, policy_version FROM active_contexts WHERE id = $1',
+    [id]
+  );
+  const rawRows = reader.getRowObjects() as Array<{
+    id: string;
+    claims: Claim[] | string;
+    intent?: string | null;
+    expires_at?: Date | string | null;
+    policy_version?: string | null;
+  }>;
+  const rows = normalizeRowsTimestamps(rawRows);
+  const row = rows[0];
+  if (!row) {
+    return undefined;
+  }
+
+  const claims =
+    typeof row.claims === 'string'
+      ? ((JSON.parse(row.claims) as Claim[]) ?? [])
+      : ((row.claims as Claim[]) ?? []);
+
+  return {
+    id: row.id,
+    claims,
+    ...(row.intent !== null && row.intent !== undefined ? { intent: row.intent } : {}),
+    ...(row.expires_at !== undefined ? { expires_at: row.expires_at ?? null } : {}),
+    ...(row.policy_version !== null && row.policy_version !== undefined
+      ? { policy_version: row.policy_version }
+      : {}),
+  };
 }

@@ -84,6 +84,7 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
       source_type TEXT NOT NULL,
       source_id TEXT,
       content TEXT,
+      boundary_class TEXT NOT NULL DEFAULT 'internal',
       content_digest TEXT NOT NULL,
       content_length INTEGER NOT NULL,
       actor TEXT,
@@ -119,12 +120,13 @@ async function migrateLegacyObservations(conn: DuckDBConnection): Promise<void> 
     const length = Buffer.byteLength(content, 'utf8');
 
     await conn.run(
-      `INSERT INTO ${tempName} (id, source_type, source_id, content, content_digest, content_length, actor, tags, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::TIMESTAMP, $10::TIMESTAMP) ON CONFLICT DO NOTHING`,
+      `INSERT INTO ${tempName} (id, source_type, source_id, content, boundary_class, content_digest, content_length, actor, tags, created_at, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::TIMESTAMP, $11::TIMESTAMP) ON CONFLICT DO NOTHING`,
       [
         id,
         sourceType,
         sourceId,
         content,
+        'internal',
         digest,
         length,
         actor,
@@ -213,6 +215,40 @@ async function migrateClaimsMemoryType(conn: DuckDBConnection): Promise<void> {
 
   console.error('[DB] Migrating claims: adding memory_type column...');
   await conn.run('ALTER TABLE claims ADD COLUMN memory_type TEXT');
+}
+
+async function migrateClaimsRollbackColumns(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'claims'))) return;
+
+  const cols = await getTableColumns(conn, 'claims');
+  if (!cols.has('tombstone')) {
+    console.error('[DB] Migrating claims: adding tombstone column...');
+    await conn.run('ALTER TABLE claims ADD COLUMN tombstone BOOLEAN DEFAULT FALSE');
+    await conn.run('UPDATE claims SET tombstone = FALSE WHERE tombstone IS NULL');
+  }
+  if (!cols.has('tombstone_at')) {
+    console.error('[DB] Migrating claims: adding tombstone_at column...');
+    await conn.run('ALTER TABLE claims ADD COLUMN tombstone_at TIMESTAMP');
+  }
+  if (!cols.has('rollback_reason')) {
+    console.error('[DB] Migrating claims: adding rollback_reason column...');
+    await conn.run('ALTER TABLE claims ADD COLUMN rollback_reason TEXT');
+  }
+  if (!cols.has('superseded_by')) {
+    console.error('[DB] Migrating claims: adding superseded_by column...');
+    await conn.run('ALTER TABLE claims ADD COLUMN superseded_by TEXT');
+  }
+}
+
+async function migrateObservationsBoundaryClass(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'observations'))) return;
+
+  const cols = await getTableColumns(conn, 'observations');
+  if (cols.has('boundary_class')) return;
+
+  console.error('[DB] Migrating observations: adding boundary_class column...');
+  await conn.run("ALTER TABLE observations ADD COLUMN boundary_class TEXT DEFAULT 'internal'");
+  await conn.run("UPDATE observations SET boundary_class = 'internal' WHERE boundary_class IS NULL");
 }
 
 async function migrateActiveContextsV2(conn: DuckDBConnection): Promise<void> {
@@ -356,7 +392,9 @@ export async function initSchema() {
   await migrateClaimVectorsDropFK(conn); // PR #32: DuckDB FK制約バグ対策
   await migrateFeedbackActiveContextId(conn); // feedback表にactive_context_idカラム追加
   await migrateClaimsMemoryType(conn); // Issue #60: claims表にmemory_typeカラム追加
+  await migrateClaimsRollbackColumns(conn); // Issue #61: claims表にrollback列を追加
   await migrateActiveContextsV2(conn); // Issue #60: active_contexts表をv2列で拡張
+  await migrateObservationsBoundaryClass(conn); // Issue #61: observations表にboundary_class追加
 
   const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())

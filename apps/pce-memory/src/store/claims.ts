@@ -5,6 +5,16 @@ import { saveClaimVector, splitQueryWords, buildWordOrCondition } from './hybrid
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
 import type { MemoryType } from '../domain/types.js';
 
+function activeClaimFilter(alias: string): string {
+  return `COALESCE(${alias}.tombstone, FALSE) = FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM promotion_queue pq
+      WHERE pq.accepted_claim_id = ${alias}.id
+        AND pq.status = 'rolled_back'
+    )`;
+}
+
 /**
  * Provenance: 由来情報（mcp-tools.md §1.y準拠）
  */
@@ -37,6 +47,10 @@ export interface Claim {
   updated_at: Date | string;
   // recency計算の基準時刻（positive feedbackでのみ更新）
   recency_anchor: Date | string;
+  tombstone?: boolean;
+  tombstone_at?: Date | string | null;
+  rollback_reason?: string | null;
+  superseded_by?: string | null;
   // 由来情報（mcp-tools.md §1.y準拠）
   provenance?: Provenance;
 }
@@ -76,7 +90,7 @@ export type ClaimInput = Omit<
 
 /** 全カラムのSELECT句 */
 const CLAIM_COLUMNS =
-  'id, text, kind, scope, boundary_class, memory_type, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance';
+  'id, text, kind, scope, boundary_class, memory_type, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance, tombstone, tombstone_at, rollback_reason, superseded_by';
 
 /**
  * DBから取得したClaimのprovenanceフィールドをパース
@@ -98,6 +112,10 @@ function parseClaimProvenance(claim: ClaimRow): Claim {
     created_at: claim.created_at,
     updated_at: claim.updated_at,
     recency_anchor: claim.recency_anchor,
+    tombstone: Boolean(claim.tombstone),
+    tombstone_at: claim.tombstone_at ?? null,
+    rollback_reason: claim.rollback_reason ?? null,
+    superseded_by: claim.superseded_by ?? null,
   };
 
   if (claim.provenance && typeof claim.provenance === 'string') {
@@ -125,7 +143,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   try {
     // 既存レコードをチェック
     const reader = await conn.runAndReadAll(
-      `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
+      `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
       [c.content_hash]
     );
     const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
@@ -153,7 +171,7 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
   } catch (e: unknown) {
     // UNIQUE 制約違反などは既存レコードを返す（idempotent upsert）
     const reader = await conn.runAndReadAll(
-      `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
+      `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
       [c.content_hash]
     );
     const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
@@ -196,6 +214,7 @@ export async function listClaimsByScope(
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
        WHERE c.scope IN (${placeholders})
+         AND ${activeClaimFilter('c')}
        ORDER BY score DESC
        LIMIT $${scopes.length + 1}`;
     const reader = await conn.runAndReadAll(sql, [...scopes, limit]);
@@ -210,7 +229,7 @@ export async function listClaimsByScope(
               coalesce(cr.score, 0) as score
        FROM claims c
        LEFT JOIN critic cr ON cr.claim_id = c.id
-       WHERE c.scope IN (${placeholders}) AND ${wordCondition}
+       WHERE c.scope IN (${placeholders}) AND ${activeClaimFilter('c')} AND ${wordCondition}
        ORDER BY score DESC
        LIMIT $${scopes.length + wordParams.length + 1}`;
 
@@ -235,7 +254,7 @@ export async function findClaimById(id: string): Promise<Claim | undefined> {
 export async function findClaimByContentHash(contentHash: string): Promise<Claim | undefined> {
   const conn = await getConnection();
   const reader = await conn.runAndReadAll(
-    `SELECT ${CLAIM_COLUMNS} FROM claims WHERE content_hash = $1`,
+    `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
     [contentHash]
   );
   const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
@@ -258,14 +277,14 @@ export interface ClaimFilterOptions {
 
 export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<Claim[]> {
   const conn = await getConnection();
-  const conditions: string[] = [];
+  const conditions: string[] = [activeClaimFilter('c')];
   const params: (string | number)[] = [];
   let paramIndex = 1;
 
   // スコープフィルター
   if (options.scopes && options.scopes.length > 0) {
     const placeholders = options.scopes.map((_, i) => `$${paramIndex + i}`).join(',');
-    conditions.push(`scope IN (${placeholders})`);
+    conditions.push(`c.scope IN (${placeholders})`);
     params.push(...options.scopes);
     paramIndex += options.scopes.length;
   }
@@ -273,20 +292,20 @@ export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<C
   // 境界クラスフィルター
   if (options.boundaryClasses && options.boundaryClasses.length > 0) {
     const placeholders = options.boundaryClasses.map((_, i) => `$${paramIndex + i}`).join(',');
-    conditions.push(`boundary_class IN (${placeholders})`);
+    conditions.push(`c.boundary_class IN (${placeholders})`);
     params.push(...options.boundaryClasses);
     paramIndex += options.boundaryClasses.length;
   }
 
   // 日時フィルター（増分エクスポート用）
   if (options.since) {
-    conditions.push(`created_at >= $${paramIndex}`);
+    conditions.push(`c.created_at >= $${paramIndex}`);
     params.push(options.since.toISOString());
     paramIndex++;
   }
 
   // クエリ構築
-  let sql = `SELECT ${CLAIM_COLUMNS} FROM claims`;
+  let sql = `SELECT ${CLAIM_COLUMNS} FROM claims c`;
   if (conditions.length > 0) {
     sql += ` WHERE ${conditions.join(' AND ')}`;
   }
@@ -316,13 +335,57 @@ export async function updateClaimBoundaryClass(id: string, boundaryClass: string
   );
 }
 
+export interface RollbackClaimInput {
+  tombstone_at: string;
+  rollback_reason: string;
+  superseded_by: string;
+}
+
+export async function markClaimRolledBack(id: string, input: RollbackClaimInput): Promise<void> {
+  const conn = await getConnection();
+  await conn.run(
+    `UPDATE claims
+     SET tombstone = TRUE,
+         tombstone_at = $1::TIMESTAMP,
+         rollback_reason = $2,
+         superseded_by = $3,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $4`,
+    [input.tombstone_at, input.rollback_reason, input.superseded_by, id]
+  );
+}
+
+export async function findClaimsByIds(ids: string[]): Promise<Claim[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const conn = await getConnection();
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+  const reader = await conn.runAndReadAll(
+    `SELECT ${CLAIM_COLUMNS}
+     FROM claims c
+     WHERE c.id IN (${placeholders})
+       AND ${activeClaimFilter('c')}`,
+    ids
+  );
+  const rawRows = reader.getRowObjects() as unknown as ClaimRow[];
+  const claims = parseClaimsProvenance(normalizeRowsTimestamps(rawRows));
+  const claimsById = new Map(claims.map((claim) => [claim.id, claim]));
+  return ids.map((id) => claimsById.get(id)).filter((claim): claim is Claim => claim !== undefined);
+}
+
 /**
  * DBに登録されているClaimの総数を取得
  * サーバー再起動時の状態復元に使用
  */
 export async function countClaims(): Promise<number> {
   const conn = await getConnection();
-  const reader = await conn.runAndReadAll('SELECT COUNT(*) as cnt FROM claims');
+  const reader = await conn.runAndReadAll(
+    `SELECT COUNT(*) as cnt
+     FROM claims c
+     WHERE ${activeClaimFilter('c')}`
+  );
   const rows = reader.getRowObjects() as unknown as { cnt: number | bigint }[];
   return rows[0] ? Number(rows[0].cnt) : 0;
 }

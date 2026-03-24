@@ -52,6 +52,16 @@ const MAX_EMBEDDING_MAGNITUDE = 10.0;
 
 // ========== ユーティリティ関数 ==========
 
+function activeClaimFilter(alias: string): string {
+  return `COALESCE(${alias}.tombstone, FALSE) = FALSE
+    AND NOT EXISTS (
+      SELECT 1
+      FROM promotion_queue pq
+      WHERE pq.accepted_claim_id = ${alias}.id
+        AND pq.status = 'rolled_back'
+    )`;
+}
+
 /**
  * 埋め込みベクトルが有効か検証
  * - 空ベクトル禁止
@@ -341,6 +351,7 @@ export async function textSearch(
       FROM claims c
       LEFT JOIN critic cr ON cr.claim_id = c.id
       WHERE c.scope IN (${scopePlaceholders})
+        AND ${activeClaimFilter('c')}
         ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
       ORDER BY text_score DESC
       LIMIT $${scopes.length + boundaryParams.length + 1}
@@ -385,6 +396,7 @@ export async function textSearch(
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
+      AND ${activeClaimFilter('c')}
       AND ${wordCondition}
       ${boundaryWithWords.sql ? `AND ${boundaryWithWords.sql}` : ''}
     ORDER BY text_score DESC
@@ -476,6 +488,7 @@ export async function vectorSearch(
     FROM claims c
     INNER JOIN claim_vectors cv ON cv.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
+      AND ${activeClaimFilter('c')}
       ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
     ORDER BY vec_score DESC
     LIMIT $${scopes.length + boundaryParams.length + 1}
@@ -589,8 +602,9 @@ async function getClaimStats(scopes: string[], boundaryClasses?: string[]): Prom
     SELECT
       AVG(utility) as mean,
       COALESCE(NULLIF(STDDEV_SAMP(utility), 0), 1.0) as std
-    FROM claims
-    WHERE scope IN (${scopePlaceholders})
+    FROM claims c
+    WHERE c.scope IN (${scopePlaceholders})
+      AND ${activeClaimFilter('c')}
       ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
   `;
 
@@ -623,8 +637,8 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
     SELECT
       id, utility, confidence, kind,
       COALESCE(recency_anchor, created_at) as ts_eff
-    FROM claims
-    WHERE id IN (${placeholders})
+    FROM claims c
+    WHERE c.id IN (${placeholders}) AND ${activeClaimFilter('c')}
   `;
 
   const reader = await conn.runAndReadAll(sql, claimIds);
@@ -1047,6 +1061,7 @@ async function fallbackToTextOnly(
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
     WHERE c.scope IN (${scopePlaceholders})
+      AND ${activeClaimFilter('c')}
       ${boundaryCondition ? `AND ${boundaryCondition}` : ''}
     ORDER BY score DESC
     ${limitClause}
