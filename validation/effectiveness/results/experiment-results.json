@@ -1,0 +1,722 @@
+{
+  "generated_at": "2026-03-24T22:05:47.094Z",
+  "configuration": {
+    "ollama_chat_url": "http://localhost:11434/v1/chat/completions",
+    "ollama_models_url": "http://localhost:11434/v1/models",
+    "model": "qwen3.5:122b-a10b",
+    "max_tokens": 1500,
+    "json_retry_max_tokens": 3000,
+    "reasoning_effort": "none",
+    "temperature": 0,
+    "target_file": "apps/pce-memory/src/store/hybridSearch.ts",
+    "mcp_server": "apps/pce-memory/dist/index.js"
+  },
+  "preflight": {
+    "available_models": [
+      "qwen3.5:9b",
+      "qwen3.5:35b",
+      "qwen3.5:122b-a10b",
+      "bge-m3:latest",
+      "qwen3-next:80b-a3b-instruct-q4_K_M",
+      "qwen3:30b-a3b",
+      "qwen3-coder-next:latest",
+      "claude-sonnet-4-5-20250929:latest",
+      "qwen3-coder:30b",
+      "gpt-oss:120b"
+    ]
+  },
+  "experiments": {
+    "task_continuity": {
+      "with_memory": {
+        "condition": "with_memory",
+        "phase_a": {
+          "prompt": "Analyze `apps/pce-memory/src/store/hybridSearch.ts` and identify exactly 3 concrete improvements.\nYou are given a grounded digest of the file focused on scoring, filtering, pagination, and vector persistence.\nReturn JSON only.\nSchema:\n- Top-level object with key \"improvements\".\n- \"improvements\" must be an array of exactly 3 objects.\n- Each object must contain: \"slug\" (string), \"title\" (string), \"why\" (string), \"evidence\" (string array).\nRules:\n- Make each slug specific and stable.\n- Keep each title under 12 words.\n- Cite only identifiers, constants, or function names that are present in the file.\n- Focus on actionable code improvements rather than style nits.\n- Do not emit placeholder text such as \"kebab-case-id\" or \"short title\".\n\nFile: apps/pce-memory/src/store/hybridSearch.ts\nDigest:\n```ts\n// Core constants and validation (lines 38-95)\nconst ALPHA = 0.65;\n\n/** 採用閾値（TLA+ Threshold = 15 / 100） */\nconst THRESHOLD = 0.15;\n\n/** テキスト検索上限（3× of k_final） */\nconst K_TEXT = 48;\n\n/** ベクトル検索上限（6× of k_final） */\nconst K_VEC = 96;\n\n/** criticスコアが存在しない場合のデフォルト値 */\nconst DEFAULT_CRITIC_SCORE = 0.5;\n\n/** 最小limit値 */\nconst MIN_LIMIT = 1;\n\n/** 埋め込み次元数の上限（一般的なモデルの最大値） */\nconst MAX_EMBEDDING_DIM = 4096;\n\n/** 埋め込み値の絶対値上限（正規化ベクトルは通常[-1, 1]範囲） */\nconst MAX_EMBEDDING_MAGNITUDE = 10.0;\n\n// ========== ユーティリティ関数 ==========\n\nfunction activeClaimFilter(alias: string): string {\n  return `COALESCE(${alias}.tombstone, FALSE) = FALSE\n    AND NOT EXISTS (\n      SELECT 1\n      FROM promotion_queue pq\n      WHERE pq.accepted_claim_id = ${alias}.id\n        AND pq.status = 'rolled_back'\n    )`;\n}\n\n/**\n * 埋め込みベクトルが有効か検証\n * - 空ベクトル禁止\n * - 次元数上限チェック（DoS防止）\n * - 各値の有限性チェック（NaN/Infinity禁止）\n * - 各値の絶対値上限チェック（異常値検出）\n *\n * @param embedding 検証対象のベクトル\n * @throws Error 不正な値が含まれる場合\n */\nfunction validateEmbedding(embedding: readonly number[]): void {\n  if (embedding.length === 0) {\n    throw new Error('Embedding vector must not be empty');\n  }\n  if (embedding.length > MAX_EMBEDDING_DIM) {\n    throw new Error(`Embedding dimension ${embedding.length} exceeds maximum ${MAX_EMBEDDING_DIM}`);\n  }\n  for (let i = 0; i < embedding.length; i++) {\n    const v = embedding[i];\n    if (typeof v !== 'number' || !Number.isFinite(v)) {\n      throw new Error(`Invalid embedding value at index ${i}: ${v}`);\n    }\n    if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {\n\n// Vector search excerpt (lines 570-614)\nexport async function vectorSearch(\n  queryEmbedding: readonly number[],\n  scopes: string[],\n  limit: number = K_VEC,\n  filters: ClaimSearchFilters = {}\n): Promise<SearchResult[]> {\n  // 空scopesの早期リターン\n  if (scopes.length === 0) {\n    return [];\n  }\n\n  // 埋め込みベクトルの検証\n  validateEmbedding(queryEmbedding);\n\n  const conn = await getConnection();\n  const normalizedLimit = normalizeLimit(limit);\n\n  // claim_vectorsが空の場合は空配列を返す\n  const countReader = await conn.runAndReadAll('SELECT COUNT(*) as cnt FROM claim_vectors');\n  const countRows = countReader.getRowObjects() as unknown as { cnt: number | bigint }[];\n  if (!countRows[0] || Number(countRows[0].cnt) === 0) {\n    return [];\n  }\n\n  // スコープのプレースホルダー構築\n  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');\n  const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);\n\n  // DuckDB Node APIは配列パラメータを直接サポートしないため、\n  // 配列リテラル文字列として埋め込む（検証済みなので安全）\n  const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`;\n\n  // cos_simマクロでベクトル類似度計算\n  // TLA+ claimVecRelevant: cos_sim >= threshold で判定\n  // norm_cosで[-1,1]を[0,1]に正規化\n  const sql = `\n    SELECT\n      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,\n      c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,\n      norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score\n    FROM claims c\n    INNER JOIN claim_vectors cv ON cv.claim_id = c.id\n    WHERE c.scope IN (${scopePlaceholders})\n      AND ${activeClaimFilter('c')}\n      ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}\n\n// Hybrid search scoring and fallback excerpt (lines 940-1056)\nif (scopes.length === 0) {\n    return [];\n  }\n\n  const normalizedLimit = normalizeLimit(limit);\n  const alpha = resolveAlpha(config?.alpha);\n  const threshold = resolveThreshold(config?.threshold);\n  const kText = resolveCandidateLimit(config?.kText, K_TEXT);\n  const kVec = resolveCandidateLimit(config?.kVec, K_VEC);\n  const embeddingService = config?.embeddingService ?? globalEmbeddingService;\n  const includeBreakdown = config?.includeBreakdown ?? false;\n  const enableRerank = config?.enableRerank ?? true;\n  const filters: ClaimSearchFilters = {\n    ...(config?.boundaryClasses ? { boundaryClasses: config.boundaryClasses } : {}),\n    ...(config?.kindFilter ? { kindFilter: config.kindFilter } : {}),\n    ...(config?.memoryTypeFilter ? { memoryTypeFilter: config.memoryTypeFilter } : {}),\n  };\n  const hasQuery = Boolean(query && query.trim().length > 0);\n  const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;\n  const querylessUnlimited = !hasQuery && limit >= Number.MAX_SAFE_INTEGER / 2;\n\n  // Step 1: クエリ埋め込み生成\n  let queryEmbedding: readonly number[] | null = null;\n\n  if (hasQuery && embeddingService) {\n    const embedResult = await embeddingService.embed({\n      text: query!,\n      sensitivity: 'internal',\n    })();\n\n    if (E.isRight(embedResult)) {\n      queryEmbedding = embedResult.right.embedding;\n    }\n  }\n\n  // Step 2: 並列検索実行\n  if (queryEmbedding) {\n    const [textResults, vecResults] = await Promise.all([\n      textSearch(query!, scopes, kText, filters),\n      vectorSearch(queryEmbedding, scopes, kVec, filters),\n    ]);\n\n    // Step 3-5: マージ + 融合 + フィルタ + ソート\n    let merged: RankedSearchResult[];\n\n    if (enableRerank) {\n      const allClaimIds = [\n        ...textResults.map((r) => r.claim.id),\n        ...vecResults.map((r) => r.claim.id),\n      ];\n      const uniqueIds = [...new Set(allClaimIds)];\n\n      const [stats, claimMetrics] = await Promise.all([\n        getClaimStats(scopes, filters),\n        fetchClaimMetrics(uniqueIds),\n      ]);\n\n      merged = mergeResultsWithRerank(\n        textResults,\n        vecResults,\n        claimMetrics,\n        stats,\n        alpha,\n        threshold,\n        includeBreakdown,\n        config?.intent\n      );\n    } else {\n      merged = mergeResults(textResults, vecResults, alpha, threshold);\n    }\n\n    // Step 6: 上位k件を返却（スコア付き）\n    return merged.slice(0, normalizedLimit).map((r) => ({\n      claim: r.claim,\n      score: r.fusedScore,\n      source_layer: mapScopeToLayer(r.claim.scope),\n      ...(r.breakdown ? { score_breakdown: r.breakdown } : {}),\n    }));\n  }\n\n  const textResults = hasQuery\n    ? await textSearch(query!, scopes, kText, filters)\n    : await fallbackToTextOnlyResults(\n        scopes,\n        querylessUnlimited ? undefined : normalizedLimit,\n        filters\n      );\n\n  const shouldIntentRerank = enableRerank && Boolean(config?.intent);\n  if (shouldIntentRerank) {\n    const uniqueIds = [...new Set(textResults.map((result) => result.claim.id))];\n    const [stats, claimMetrics] = await Promise.all([\n      getClaimStats(scopes, filters),\n      fetchClaimMetrics(uniqueIds),\n    ]);\n\n    const merged = mergeResultsWithRerank(\n      textResults,\n      [],\n      claimMetrics,\n      stats,\n      0,\n      textOnlyThreshold,\n      includeBreakdown,\n      config?.intent\n    );\n\n    return merged.slice(0, normalizedLimit).map((r) => ({\n      claim: r.claim,\n      score: r.fusedScore,\n      source_layer: mapScopeToLayer(r.claim.scope),\n      ...(r.breakdown ? { score_breakdown: r.breakdown } : {}),\n    }));\n  }\n\n  return textResults\n    .filter((result) => result.score >= textOnlyThreshold)\n\n// Pagination excerpt (lines 1077-1116)\nexport async function hybridSearchPaginated(\n  scopes: string[],\n  limit: number,\n  query?: string,\n  config?: Partial<HybridSearchConfig>\n): Promise<PaginatedSearchResult> {\n  const cursor = config?.cursor;\n  const isQueryless = !query || query.trim().length === 0;\n\n  // カーソル指定時はランキング済み候補全体から位置を特定する必要がある。\n  // limit+1件だけでは2ページ目以降の has_more が誤るため、候補プール全体を取得する。\n  const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1;\n\n  const allResults =\n    cursor && isQueryless\n      ? await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)\n      : await hybridSearchWithScores(scopes, fetchLimit, query, config);\n\n  // カーソル以降のデータをフィルタ\n  let filteredResults = allResults;\n  if (cursor) {\n    const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor);\n    if (cursorIndex >= 0) {\n      // カーソルの次から取得\n      filteredResults = allResults.slice(cursorIndex + 1);\n    }\n  }\n\n  // has_more判定とlimit適用\n  const has_more = filteredResults.length > limit;\n  const results = filteredResults.slice(0, limit);\n\n  // 次カーソル（最後のclaim_id）\n  const next_cursor =\n    has_more && results.length > 0 ? results[results.length - 1]!.claim.id : undefined;\n\n  return {\n    results,\n    next_cursor,\n    has_more,\n\n// Vector persistence excerpt (lines 1189-1204)\nexport async function saveClaimVector(\n  claimId: string,\n  embedding: readonly number[],\n  modelVersion: string\n): Promise<void> {\n  // 埋め込みベクトルの検証（SQLインジェクション防止）\n  validateEmbedding(embedding);\n\n  const conn = await getConnection();\n  // DuckDB Node APIは配列パラメータを直接サポートしないため、\n  // 配列リテラル文字列として埋め込む（検証済みなので安全）\n  const embeddingLiteral = `[${embedding.join(',')}]`;\n  await conn.run(\n    `INSERT INTO claim_vectors (claim_id, embedding, model_version)\n     VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)\n     ON CONFLICT (claim_id)\n```",
+          "response": "{\n  \"improvements\": [\n    {\n      \"slug\": \"prevent-sql-injection-via-embedding-literal\",\n      \"title\": \"Replace embedding literal string interpolation with parameterized arrays\",\n      \"why\": \"The code constructs SQL by interpolating `embeddingLiteral` directly into the query string in `vectorSearch` and `saveClaimVector`. Although `validateEmbedding` is called, relying on string concatenation for array data in SQL is fragile and bypasses standard parameterization mechanisms, increasing the risk of injection if validation logic changes or is bypassed.\",\n      \"evidence\": [\n        \"const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`\",\n        \"const embeddingLiteral = `[${embedding.join(',')}]`\",\n        \"VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)\"\n      ]\n    },\n    {\n      \"slug\": \"optimize-paginated-query-performance\",\n      \"title\": \"Avoid fetching Number.MAX_SAFE_INTEGER results for cursor pagination\",\n      \"why\": \"In `hybridSearchPaginated`, when a cursor is present, the code fetches `Number.MAX_SAFE_INTEGER` results to find the cursor position. This causes massive memory usage and latency for large datasets. A more efficient approach would be to use a database-side cursor or seek-based pagination logic instead of loading the entire result set into memory.\",\n      \"evidence\": [\n        \"const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1\",\n        \"await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)\",\n        \"const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)\"\n      ]\n    },\n    {\n      \"slug\": \"enforce-embedding-magnitude-check-completion\",\n      \"title\": \"Complete the magnitude validation loop in validateEmbedding\",\n      \"why\": \"The `validateEmbedding` function checks `Math.abs(v) > MAX_EMBEDding_MAGNITUDE` but the provided digest cuts off before the `throw` statement or closing brace. If this check is incomplete or missing the error throw, invalid vectors with extreme values could pass validation, potentially causing numerical instability in `cos_sim` calculations.\",\n      \"evidence\": [\n        \"if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {\",\n        \"validateEmbedding(queryEmbedding)\",\n        \"validateEmbedding(embedding)\"\n      ]\n    }\n  ]\n}",
+          "parsed": {
+            "improvements": [
+              {
+                "slug": "prevent-sql-injection-via-embedding-literal",
+                "title": "Replace embedding literal string interpolation with parameterized arrays",
+                "why": "The code constructs SQL by interpolating `embeddingLiteral` directly into the query string in `vectorSearch` and `saveClaimVector`. Although `validateEmbedding` is called, relying on string concatenation for array data in SQL is fragile and bypasses standard parameterization mechanisms, increasing the risk of injection if validation logic changes or is bypassed.",
+                "evidence": [
+                  "const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`",
+                  "const embeddingLiteral = `[${embedding.join(',')}]`",
+                  "VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)"
+                ]
+              },
+              {
+                "slug": "optimize-paginated-query-performance",
+                "title": "Avoid fetching Number.MAX_SAFE_INTEGER results for cursor pagination",
+                "why": "In `hybridSearchPaginated`, when a cursor is present, the code fetches `Number.MAX_SAFE_INTEGER` results to find the cursor position. This causes massive memory usage and latency for large datasets. A more efficient approach would be to use a database-side cursor or seek-based pagination logic instead of loading the entire result set into memory.",
+                "evidence": [
+                  "const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1",
+                  "await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)",
+                  "const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)"
+                ]
+              },
+              {
+                "slug": "enforce-embedding-magnitude-check-completion",
+                "title": "Complete the magnitude validation loop in validateEmbedding",
+                "why": "The `validateEmbedding` function checks `Math.abs(v) > MAX_EMBEDding_MAGNITUDE` but the provided digest cuts off before the `throw` statement or closing brace. If this check is incomplete or missing the error throw, invalid vectors with extreme values could pass validation, potentially causing numerical instability in `cos_sim` calculations.",
+                "evidence": [
+                  "if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {",
+                  "validateEmbedding(queryEmbedding)",
+                  "validateEmbedding(embedding)"
+                ]
+              }
+            ]
+          },
+          "meta": {
+            "mode": "content",
+            "has_reasoning": false,
+            "finish_reason": "stop",
+            "invalid_reasons": []
+          }
+        },
+        "phase_b": {
+          "question": "What improvements were identified in the previous session for hybridSearch.ts?",
+          "response": "{\n  \"status\": \"ok\",\n  \"improvements\": [\n    {\n      \"slug\": \"optimize-paginated-query-performance\",\n      \"explanation\": \"The code fetches an excessive number of results when a cursor is present, causing high memory usage and latency.\",\n      \"evidence\": [\n        \"const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1\",\n        \"await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)\",\n        \"const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)\"\n      ]\n    },\n    {\n      \"slug\": \"prevent-sql-injection-via-embedding-literal\",\n      \"explanation\": \"SQL queries are constructed by interpolating embedding literals directly, which bypasses standard parameterization and increases injection risk.\",\n      \"evidence\": [\n        \"const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`\",\n        \"const embeddingLiteral = `[${embedding.join(',')}]`\",\n        \"VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)\"\n      ]\n    },\n    {\n      \"slug\": \"enforce-embedding-magnitude-check-completion\",\n      \"explanation\": \"The validation logic for embedding magnitude appears incomplete as the provided code snippet cuts off before the error throw statement.\",\n      \"evidence\": [\n        \"if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {\",\n        \"validateEmbedding(queryEmbedding)\",\n        \"validateEmbedding(embedding)\"\n      ]\n    }\n  ]\n}",
+          "parsed": {
+            "status": "ok",
+            "improvements": [
+              {
+                "slug": "optimize-paginated-query-performance",
+                "explanation": "The code fetches an excessive number of results when a cursor is present, causing high memory usage and latency.",
+                "evidence": [
+                  "const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1",
+                  "await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)",
+                  "const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)"
+                ]
+              },
+              {
+                "slug": "prevent-sql-injection-via-embedding-literal",
+                "explanation": "SQL queries are constructed by interpolating embedding literals directly, which bypasses standard parameterization and increases injection risk.",
+                "evidence": [
+                  "const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`",
+                  "const embeddingLiteral = `[${embedding.join(',')}]`",
+                  "VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)"
+                ]
+              },
+              {
+                "slug": "enforce-embedding-magnitude-check-completion",
+                "explanation": "The validation logic for embedding magnitude appears incomplete as the provided code snippet cuts off before the error throw statement.",
+                "evidence": [
+                  "if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {",
+                  "validateEmbedding(queryEmbedding)",
+                  "validateEmbedding(embedding)"
+                ]
+              }
+            ]
+          },
+          "meta": {
+            "mode": "content",
+            "has_reasoning": false,
+            "finish_reason": "stop",
+            "invalid_reasons": []
+          }
+        },
+        "tool_transcript": "Simulated MCP tool result from pce_memory_activate.\nQuery: hybridSearch.ts previous session improvements\nActive context: ac_6540938d\nClaims returned: 3\nRelevant memory claims:\n- apps/pce-memory/src/store/hybridSearch.ts improvement optimize-paginated-query-performance: In `hybridSearchPaginated`, when a cursor is present, the code fetches `Number.MAX_SAFE_INTEGER` results to find the cursor position. This causes massive memory usage and latency for large datasets. A more efficient approach would be to use a database-side cursor or seek-based pagination logic instead of loading the entire result set into memory. Evidence: const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1, await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config), const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor).\n- apps/pce-memory/src/store/hybridSearch.ts improvement prevent-sql-injection-via-embedding-literal: The code constructs SQL by interpolating `embeddingLiteral` directly into the query string in `vectorSearch` and `saveClaimVector`. Although `validateEmbedding` is called, relying on string concatenation for array data in SQL is fragile and bypasses standard parameterization mechanisms, increasing the risk of injection if validation logic changes or is bypassed. Evidence: const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`, const embeddingLiteral = `[${embedding.join(',')}]`, VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2).\n- apps/pce-memory/src/store/hybridSearch.ts improvement enforce-embedding-magnitude-check-completion: The `validateEmbedding` function checks `Math.abs(v) > MAX_EMBEDding_MAGNITUDE` but the provided digest cuts off before the `throw` statement or closing brace. If this check is incomplete or missing the error throw, invalid vectors with extreme values could pass validation, potentially causing numerical instability in `cos_sim` calculations. Evidence: if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {, validateEmbedding(queryEmbedding), validateEmbedding(embedding).",
+        "memory_actions": {
+          "observe": {
+            "observation_id": "obs_c70ce6bb",
+            "claim_ids": [],
+            "effective_boundary_class": "internal",
+            "content_stored": true,
+            "content_redacted": false,
+            "policy_version": "0.1",
+            "state": "PolicyApplied",
+            "request_id": "425a1553-1532-4951-be6b-c32af1c3955e",
+            "trace_id": "7bbc6e61-cbb0-4736-be65-f87c8273ce41"
+          },
+          "upserts": [
+            {
+              "id": "clm_d14738a5",
+              "is_new": true,
+              "content_hash": "sha256:7c22a6a2633812362a14163aca7616f4af4e41db18bb74762aba41659300328a",
+              "policy_version": "0.1",
+              "state": "HasClaims",
+              "request_id": "4eb9fb31-63ae-4be9-b824-d2db29ff69c8",
+              "trace_id": "2728e3c7-fe38-4ed4-8737-5558fed5c012"
+            },
+            {
+              "id": "clm_6fe534c4",
+              "is_new": true,
+              "content_hash": "sha256:fbbb1dc15602058713b26b0b907f9c5f7ac684ca7d98c93d5162eb151eb28f32",
+              "policy_version": "0.1",
+              "state": "HasClaims",
+              "request_id": "ee56d8d1-08be-4867-bfe6-a3a115038389",
+              "trace_id": "f0503f56-6480-4094-8bcd-fcdf4136dcc5"
+            },
+            {
+              "id": "clm_447a7555",
+              "is_new": true,
+              "content_hash": "sha256:ad391551b411c090007a397f7ccdadd32c3c88e3a7be883d84e653b0a1d64d16",
+              "policy_version": "0.1",
+              "state": "HasClaims",
+              "request_id": "2a94179d-c408-4052-9491-a415d1ad660f",
+              "trace_id": "71736405-c2aa-4252-8cf9-a664442bba46"
+            }
+          ],
+          "activate": {
+            "active_context_id": "ac_6540938d",
+            "intent": "resume_task",
+            "claims": [
+              {
+                "claim": {
+                  "id": "clm_6fe534c4",
+                  "text": "apps/pce-memory/src/store/hybridSearch.ts improvement optimize-paginated-query-performance: In `hybridSearchPaginated`, when a cursor is present, the code fetches `Number.MAX_SAFE_INTEGER` results to find the cursor position. This causes massive memory usage and latency for large datasets. A more efficient approach would be to use a database-side cursor or seek-based pagination logic instead of loading the entire result set into memory. Evidence: const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1, await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config), const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor).",
+                  "kind": "fact",
+                  "scope": "project",
+                  "boundary_class": "internal",
+                  "memory_type": "knowledge",
+                  "content_hash": "sha256:fbbb1dc15602058713b26b0b907f9c5f7ac684ca7d98c93d5162eb151eb28f32",
+                  "utility": 0,
+                  "confidence": 0.5,
+                  "created_at": "2026-03-25T07:04:40.830Z",
+                  "updated_at": "2026-03-25T07:04:40.830Z",
+                  "recency_anchor": "2026-03-25T07:04:40.830Z"
+                },
+                "score": 0.42458080054089375,
+                "source_layer": "meso",
+                "rank": 1,
+                "score_breakdown": {
+                  "s_text": 0.5,
+                  "s_vec": 0.7675965825174448,
+                  "S": 0.6739377786363392,
+                  "g": {
+                    "utility_term": 0.8,
+                    "confidence_term": 0.75,
+                    "recency_term": 1,
+                    "g": 0.6000000000000001
+                  },
+                  "intent": {
+                    "intent": "resume_task",
+                    "kind_boost": 1,
+                    "memory_type_boost": 1.05,
+                    "recency_weight": 1.6,
+                    "boost": 1.05
+                  },
+                  "score_final": 0.42458080054089375
+                },
+                "selection_reason": "rank=1; layer=meso; score=0.4246; kind=fact; memory_type=knowledge; intent=resume_task; s_text=0.5000; s_vec=0.7676; intent_boost=1.0500",
+                "evidences": []
+              },
+              {
+                "claim": {
+                  "id": "clm_d14738a5",
+                  "text": "apps/pce-memory/src/store/hybridSearch.ts improvement prevent-sql-injection-via-embedding-literal: The code constructs SQL by interpolating `embeddingLiteral` directly into the query string in `vectorSearch` and `saveClaimVector`. Although `validateEmbedding` is called, relying on string concatenation for array data in SQL is fragile and bypasses standard parameterization mechanisms, increasing the risk of injection if validation logic changes or is bypassed. Evidence: const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`, const embeddingLiteral = `[${embedding.join(',')}]`, VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2).",
+                  "kind": "fact",
+                  "scope": "project",
+                  "boundary_class": "internal",
+                  "memory_type": "knowledge",
+                  "content_hash": "sha256:7c22a6a2633812362a14163aca7616f4af4e41db18bb74762aba41659300328a",
+                  "utility": 0,
+                  "confidence": 0.5,
+                  "created_at": "2026-03-25T07:04:40.810Z",
+                  "updated_at": "2026-03-25T07:04:40.810Z",
+                  "recency_anchor": "2026-03-25T07:04:40.810Z"
+                },
+                "score": 0.4040075873015484,
+                "source_layer": "meso",
+                "rank": 2,
+                "score_breakdown": {
+                  "s_text": 0.5,
+                  "s_vec": 0.7173567455471266,
+                  "S": 0.6412818846056323,
+                  "g": {
+                    "utility_term": 0.8,
+                    "confidence_term": 0.75,
+                    "recency_term": 1,
+                    "g": 0.6000000000000001
+                  },
+                  "intent": {
+                    "intent": "resume_task",
+                    "kind_boost": 1,
+                    "memory_type_boost": 1.05,
+                    "recency_weight": 1.6,
+                    "boost": 1.05
+                  },
+                  "score_final": 0.4040075873015484
+                },
+                "selection_reason": "rank=2; layer=meso; score=0.4040; kind=fact; memory_type=knowledge; intent=resume_task; s_text=0.5000; s_vec=0.7174; intent_boost=1.0500",
+                "evidences": []
+              },
+              {
+                "claim": {
+                  "id": "clm_447a7555",
+                  "text": "apps/pce-memory/src/store/hybridSearch.ts improvement enforce-embedding-magnitude-check-completion: The `validateEmbedding` function checks `Math.abs(v) > MAX_EMBEDding_MAGNITUDE` but the provided digest cuts off before the `throw` statement or closing brace. If this check is incomplete or missing the error throw, invalid vectors with extreme values could pass validation, potentially causing numerical instability in `cos_sim` calculations. Evidence: if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {, validateEmbedding(queryEmbedding), validateEmbedding(embedding).",
+                  "kind": "fact",
+                  "scope": "project",
+                  "boundary_class": "internal",
+                  "memory_type": "knowledge",
+                  "content_hash": "sha256:ad391551b411c090007a397f7ccdadd32c3c88e3a7be883d84e653b0a1d64d16",
+                  "utility": 0,
+                  "confidence": 0.5,
+                  "created_at": "2026-03-25T07:04:40.845Z",
+                  "updated_at": "2026-03-25T07:04:40.845Z",
+                  "recency_anchor": "2026-03-25T07:04:40.845Z"
+                },
+                "score": 0.3927752936348961,
+                "source_layer": "meso",
+                "rank": 3,
+                "score_breakdown": {
+                  "s_text": 0.5,
+                  "s_vec": 0.6899274569838731,
+                  "S": 0.6234528470395175,
+                  "g": {
+                    "utility_term": 0.8,
+                    "confidence_term": 0.75,
+                    "recency_term": 1,
+                    "g": 0.6000000000000001
+                  },
+                  "intent": {
+                    "intent": "resume_task",
+                    "kind_boost": 1,
+                    "memory_type_boost": 1.05,
+                    "recency_weight": 1.6,
+                    "boost": 1.05
+                  },
+                  "score_final": 0.3927752936348961
+                },
+                "selection_reason": "rank=3; layer=meso; score=0.3928; kind=fact; memory_type=knowledge; intent=resume_task; s_text=0.5000; s_vec=0.6899; intent_boost=1.0500",
+                "evidences": []
+              }
+            ],
+            "claims_count": 3,
+            "has_more": false,
+            "policy_version": "0.1",
+            "state": "Ready",
+            "request_id": "7ea6cffe-b1f4-454a-b43e-5a7b07262b92",
+            "trace_id": "432b214c-ab67-4a1c-941b-51baa69a160f"
+          }
+        },
+        "score": {
+          "slug_recall": {
+            "matched": [
+              "prevent-sql-injection-via-embedding-literal",
+              "optimize-paginated-query-performance",
+              "enforce-embedding-magnitude-check-completion"
+            ],
+            "missing": [],
+            "total": 3
+          },
+          "evidence_recall": {
+            "matched": [
+              "const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`",
+              "const embeddingLiteral = `[${embedding.join(',')}]`",
+              "VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)",
+              "const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1",
+              "await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)",
+              "const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)",
+              "if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {",
+              "validateEmbedding(queryEmbedding)",
+              "validateEmbedding(embedding)"
+            ],
+            "missing": [],
+            "total": 9
+          },
+          "generic_markers": [],
+          "invalid_reasons": [],
+          "verdict": "specific_recall"
+        }
+      },
+      "without_memory": {
+        "condition": "without_memory",
+        "phase_a": {
+          "prompt": "Analyze `apps/pce-memory/src/store/hybridSearch.ts` and identify exactly 3 concrete improvements.\nYou are given a grounded digest of the file focused on scoring, filtering, pagination, and vector persistence.\nReturn JSON only.\nSchema:\n- Top-level object with key \"improvements\".\n- \"improvements\" must be an array of exactly 3 objects.\n- Each object must contain: \"slug\" (string), \"title\" (string), \"why\" (string), \"evidence\" (string array).\nRules:\n- Make each slug specific and stable.\n- Keep each title under 12 words.\n- Cite only identifiers, constants, or function names that are present in the file.\n- Focus on actionable code improvements rather than style nits.\n- Do not emit placeholder text such as \"kebab-case-id\" or \"short title\".\n\nFile: apps/pce-memory/src/store/hybridSearch.ts\nDigest:\n```ts\n// Core constants and validation (lines 38-95)\nconst ALPHA = 0.65;\n\n/** 採用閾値（TLA+ Threshold = 15 / 100） */\nconst THRESHOLD = 0.15;\n\n/** テキスト検索上限（3× of k_final） */\nconst K_TEXT = 48;\n\n/** ベクトル検索上限（6× of k_final） */\nconst K_VEC = 96;\n\n/** criticスコアが存在しない場合のデフォルト値 */\nconst DEFAULT_CRITIC_SCORE = 0.5;\n\n/** 最小limit値 */\nconst MIN_LIMIT = 1;\n\n/** 埋め込み次元数の上限（一般的なモデルの最大値） */\nconst MAX_EMBEDDING_DIM = 4096;\n\n/** 埋め込み値の絶対値上限（正規化ベクトルは通常[-1, 1]範囲） */\nconst MAX_EMBEDDING_MAGNITUDE = 10.0;\n\n// ========== ユーティリティ関数 ==========\n\nfunction activeClaimFilter(alias: string): string {\n  return `COALESCE(${alias}.tombstone, FALSE) = FALSE\n    AND NOT EXISTS (\n      SELECT 1\n      FROM promotion_queue pq\n      WHERE pq.accepted_claim_id = ${alias}.id\n        AND pq.status = 'rolled_back'\n    )`;\n}\n\n/**\n * 埋め込みベクトルが有効か検証\n * - 空ベクトル禁止\n * - 次元数上限チェック（DoS防止）\n * - 各値の有限性チェック（NaN/Infinity禁止）\n * - 各値の絶対値上限チェック（異常値検出）\n *\n * @param embedding 検証対象のベクトル\n * @throws Error 不正な値が含まれる場合\n */\nfunction validateEmbedding(embedding: readonly number[]): void {\n  if (embedding.length === 0) {\n    throw new Error('Embedding vector must not be empty');\n  }\n  if (embedding.length > MAX_EMBEDDING_DIM) {\n    throw new Error(`Embedding dimension ${embedding.length} exceeds maximum ${MAX_EMBEDDING_DIM}`);\n  }\n  for (let i = 0; i < embedding.length; i++) {\n    const v = embedding[i];\n    if (typeof v !== 'number' || !Number.isFinite(v)) {\n      throw new Error(`Invalid embedding value at index ${i}: ${v}`);\n    }\n    if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {\n\n// Vector search excerpt (lines 570-614)\nexport async function vectorSearch(\n  queryEmbedding: readonly number[],\n  scopes: string[],\n  limit: number = K_VEC,\n  filters: ClaimSearchFilters = {}\n): Promise<SearchResult[]> {\n  // 空scopesの早期リターン\n  if (scopes.length === 0) {\n    return [];\n  }\n\n  // 埋め込みベクトルの検証\n  validateEmbedding(queryEmbedding);\n\n  const conn = await getConnection();\n  const normalizedLimit = normalizeLimit(limit);\n\n  // claim_vectorsが空の場合は空配列を返す\n  const countReader = await conn.runAndReadAll('SELECT COUNT(*) as cnt FROM claim_vectors');\n  const countRows = countReader.getRowObjects() as unknown as { cnt: number | bigint }[];\n  if (!countRows[0] || Number(countRows[0].cnt) === 0) {\n    return [];\n  }\n\n  // スコープのプレースホルダー構築\n  const scopePlaceholders = scopes.map((_, i) => `$${i + 1}`).join(',');\n  const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);\n\n  // DuckDB Node APIは配列パラメータを直接サポートしないため、\n  // 配列リテラル文字列として埋め込む（検証済みなので安全）\n  const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`;\n\n  // cos_simマクロでベクトル類似度計算\n  // TLA+ claimVecRelevant: cos_sim >= threshold で判定\n  // norm_cosで[-1,1]を[0,1]に正規化\n  const sql = `\n    SELECT\n      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,\n      c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,\n      norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score\n    FROM claims c\n    INNER JOIN claim_vectors cv ON cv.claim_id = c.id\n    WHERE c.scope IN (${scopePlaceholders})\n      AND ${activeClaimFilter('c')}\n      ${filterConditions.sql ? `AND ${filterConditions.sql}` : ''}\n\n// Hybrid search scoring and fallback excerpt (lines 940-1056)\nif (scopes.length === 0) {\n    return [];\n  }\n\n  const normalizedLimit = normalizeLimit(limit);\n  const alpha = resolveAlpha(config?.alpha);\n  const threshold = resolveThreshold(config?.threshold);\n  const kText = resolveCandidateLimit(config?.kText, K_TEXT);\n  const kVec = resolveCandidateLimit(config?.kVec, K_VEC);\n  const embeddingService = config?.embeddingService ?? globalEmbeddingService;\n  const includeBreakdown = config?.includeBreakdown ?? false;\n  const enableRerank = config?.enableRerank ?? true;\n  const filters: ClaimSearchFilters = {\n    ...(config?.boundaryClasses ? { boundaryClasses: config.boundaryClasses } : {}),\n    ...(config?.kindFilter ? { kindFilter: config.kindFilter } : {}),\n    ...(config?.memoryTypeFilter ? { memoryTypeFilter: config.memoryTypeFilter } : {}),\n  };\n  const hasQuery = Boolean(query && query.trim().length > 0);\n  const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;\n  const querylessUnlimited = !hasQuery && limit >= Number.MAX_SAFE_INTEGER / 2;\n\n  // Step 1: クエリ埋め込み生成\n  let queryEmbedding: readonly number[] | null = null;\n\n  if (hasQuery && embeddingService) {\n    const embedResult = await embeddingService.embed({\n      text: query!,\n      sensitivity: 'internal',\n    })();\n\n    if (E.isRight(embedResult)) {\n      queryEmbedding = embedResult.right.embedding;\n    }\n  }\n\n  // Step 2: 並列検索実行\n  if (queryEmbedding) {\n    const [textResults, vecResults] = await Promise.all([\n      textSearch(query!, scopes, kText, filters),\n      vectorSearch(queryEmbedding, scopes, kVec, filters),\n    ]);\n\n    // Step 3-5: マージ + 融合 + フィルタ + ソート\n    let merged: RankedSearchResult[];\n\n    if (enableRerank) {\n      const allClaimIds = [\n        ...textResults.map((r) => r.claim.id),\n        ...vecResults.map((r) => r.claim.id),\n      ];\n      const uniqueIds = [...new Set(allClaimIds)];\n\n      const [stats, claimMetrics] = await Promise.all([\n        getClaimStats(scopes, filters),\n        fetchClaimMetrics(uniqueIds),\n      ]);\n\n      merged = mergeResultsWithRerank(\n        textResults,\n        vecResults,\n        claimMetrics,\n        stats,\n        alpha,\n        threshold,\n        includeBreakdown,\n        config?.intent\n      );\n    } else {\n      merged = mergeResults(textResults, vecResults, alpha, threshold);\n    }\n\n    // Step 6: 上位k件を返却（スコア付き）\n    return merged.slice(0, normalizedLimit).map((r) => ({\n      claim: r.claim,\n      score: r.fusedScore,\n      source_layer: mapScopeToLayer(r.claim.scope),\n      ...(r.breakdown ? { score_breakdown: r.breakdown } : {}),\n    }));\n  }\n\n  const textResults = hasQuery\n    ? await textSearch(query!, scopes, kText, filters)\n    : await fallbackToTextOnlyResults(\n        scopes,\n        querylessUnlimited ? undefined : normalizedLimit,\n        filters\n      );\n\n  const shouldIntentRerank = enableRerank && Boolean(config?.intent);\n  if (shouldIntentRerank) {\n    const uniqueIds = [...new Set(textResults.map((result) => result.claim.id))];\n    const [stats, claimMetrics] = await Promise.all([\n      getClaimStats(scopes, filters),\n      fetchClaimMetrics(uniqueIds),\n    ]);\n\n    const merged = mergeResultsWithRerank(\n      textResults,\n      [],\n      claimMetrics,\n      stats,\n      0,\n      textOnlyThreshold,\n      includeBreakdown,\n      config?.intent\n    );\n\n    return merged.slice(0, normalizedLimit).map((r) => ({\n      claim: r.claim,\n      score: r.fusedScore,\n      source_layer: mapScopeToLayer(r.claim.scope),\n      ...(r.breakdown ? { score_breakdown: r.breakdown } : {}),\n    }));\n  }\n\n  return textResults\n    .filter((result) => result.score >= textOnlyThreshold)\n\n// Pagination excerpt (lines 1077-1116)\nexport async function hybridSearchPaginated(\n  scopes: string[],\n  limit: number,\n  query?: string,\n  config?: Partial<HybridSearchConfig>\n): Promise<PaginatedSearchResult> {\n  const cursor = config?.cursor;\n  const isQueryless = !query || query.trim().length === 0;\n\n  // カーソル指定時はランキング済み候補全体から位置を特定する必要がある。\n  // limit+1件だけでは2ページ目以降の has_more が誤るため、候補プール全体を取得する。\n  const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1;\n\n  const allResults =\n    cursor && isQueryless\n      ? await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)\n      : await hybridSearchWithScores(scopes, fetchLimit, query, config);\n\n  // カーソル以降のデータをフィルタ\n  let filteredResults = allResults;\n  if (cursor) {\n    const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor);\n    if (cursorIndex >= 0) {\n      // カーソルの次から取得\n      filteredResults = allResults.slice(cursorIndex + 1);\n    }\n  }\n\n  // has_more判定とlimit適用\n  const has_more = filteredResults.length > limit;\n  const results = filteredResults.slice(0, limit);\n\n  // 次カーソル（最後のclaim_id）\n  const next_cursor =\n    has_more && results.length > 0 ? results[results.length - 1]!.claim.id : undefined;\n\n  return {\n    results,\n    next_cursor,\n    has_more,\n\n// Vector persistence excerpt (lines 1189-1204)\nexport async function saveClaimVector(\n  claimId: string,\n  embedding: readonly number[],\n  modelVersion: string\n): Promise<void> {\n  // 埋め込みベクトルの検証（SQLインジェクション防止）\n  validateEmbedding(embedding);\n\n  const conn = await getConnection();\n  // DuckDB Node APIは配列パラメータを直接サポートしないため、\n  // 配列リテラル文字列として埋め込む（検証済みなので安全）\n  const embeddingLiteral = `[${embedding.join(',')}]`;\n  await conn.run(\n    `INSERT INTO claim_vectors (claim_id, embedding, model_version)\n     VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)\n     ON CONFLICT (claim_id)\n```",
+          "response": "{\n  \"improvements\": [\n    {\n      \"slug\": \"prevent-sql-injection-via-embedding-literal\",\n      \"title\": \"Replace embedding literal string interpolation with parameterized arrays\",\n      \"why\": \"The code constructs SQL by interpolating `embeddingLiteral` directly into the query string in `vectorSearch` and `saveClaimVector`. Although `validateEmbedding` is called, relying on string concatenation for array data in SQL is fragile and bypasses standard parameterization mechanisms, increasing the risk of injection if validation logic changes or is bypassed.\",\n      \"evidence\": [\n        \"const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`\",\n        \"const embeddingLiteral = `[${embedding.join(',')}]`\",\n        \"VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)\"\n      ]\n    },\n    {\n      \"slug\": \"optimize-paginated-query-performance\",\n      \"title\": \"Avoid fetching Number.MAX_SAFE_INTEGER results for cursor pagination\",\n      \"why\": \"In `hybridSearchPaginated`, when a cursor is present, the code fetches `Number.MAX_SAFE_INTEGER` results to find the cursor position. This causes massive memory usage and latency for large datasets. A more efficient approach would be to use a database-side cursor or seek-based pagination logic instead of loading the entire result set into memory.\",\n      \"evidence\": [\n        \"const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1\",\n        \"await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)\",\n        \"const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)\"\n      ]\n    },\n    {\n      \"slug\": \"enforce-embedding-magnitude-check-completion\",\n      \"title\": \"Complete the magnitude validation loop in validateEmbedding\",\n      \"why\": \"The `validateEmbedding` function checks `Math.abs(v) > MAX_EMBEDding_MAGNITUDE` but the provided digest cuts off before the `throw` statement or closing brace. If this check is incomplete or missing the error throw, invalid vectors with extreme values could pass validation, potentially causing numerical instability in `cos_sim` calculations.\",\n      \"evidence\": [\n        \"if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {\",\n        \"validateEmbedding(queryEmbedding)\",\n        \"validateEmbedding(embedding)\"\n      ]\n    }\n  ]\n}",
+          "parsed": {
+            "improvements": [
+              {
+                "slug": "prevent-sql-injection-via-embedding-literal",
+                "title": "Replace embedding literal string interpolation with parameterized arrays",
+                "why": "The code constructs SQL by interpolating `embeddingLiteral` directly into the query string in `vectorSearch` and `saveClaimVector`. Although `validateEmbedding` is called, relying on string concatenation for array data in SQL is fragile and bypasses standard parameterization mechanisms, increasing the risk of injection if validation logic changes or is bypassed.",
+                "evidence": [
+                  "const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`",
+                  "const embeddingLiteral = `[${embedding.join(',')}]`",
+                  "VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)"
+                ]
+              },
+              {
+                "slug": "optimize-paginated-query-performance",
+                "title": "Avoid fetching Number.MAX_SAFE_INTEGER results for cursor pagination",
+                "why": "In `hybridSearchPaginated`, when a cursor is present, the code fetches `Number.MAX_SAFE_INTEGER` results to find the cursor position. This causes massive memory usage and latency for large datasets. A more efficient approach would be to use a database-side cursor or seek-based pagination logic instead of loading the entire result set into memory.",
+                "evidence": [
+                  "const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1",
+                  "await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)",
+                  "const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)"
+                ]
+              },
+              {
+                "slug": "enforce-embedding-magnitude-check-completion",
+                "title": "Complete the magnitude validation loop in validateEmbedding",
+                "why": "The `validateEmbedding` function checks `Math.abs(v) > MAX_EMBEDding_MAGNITUDE` but the provided digest cuts off before the `throw` statement or closing brace. If this check is incomplete or missing the error throw, invalid vectors with extreme values could pass validation, potentially causing numerical instability in `cos_sim` calculations.",
+                "evidence": [
+                  "if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {",
+                  "validateEmbedding(queryEmbedding)",
+                  "validateEmbedding(embedding)"
+                ]
+              }
+            ]
+          },
+          "meta": {
+            "mode": "content",
+            "has_reasoning": false,
+            "finish_reason": "stop",
+            "invalid_reasons": []
+          }
+        },
+        "phase_b": {
+          "question": "What improvements were identified in the previous session for hybridSearch.ts?",
+          "response": "{\"status\":\"no_context\",\"improvements\":[]}",
+          "parsed": {
+            "status": "no_context",
+            "improvements": []
+          },
+          "meta": {
+            "mode": "content",
+            "has_reasoning": false,
+            "finish_reason": "stop",
+            "invalid_reasons": []
+          }
+        },
+        "score": {
+          "slug_recall": {
+            "matched": [],
+            "missing": [
+              "prevent-sql-injection-via-embedding-literal",
+              "optimize-paginated-query-performance",
+              "enforce-embedding-magnitude-check-completion"
+            ],
+            "total": 3
+          },
+          "evidence_recall": {
+            "matched": [],
+            "missing": [
+              "const embeddingLiteral = `[${[...queryEmbedding].join(',')}]`",
+              "const embeddingLiteral = `[${embedding.join(',')}]`",
+              "VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)",
+              "const fetchLimit = cursor ? Number.MAX_SAFE_INTEGER : limit + 1",
+              "await hybridSearchWithScores(scopes, Number.MAX_SAFE_INTEGER, undefined, config)",
+              "const cursorIndex = allResults.findIndex((r) => r.claim.id === cursor)",
+              "if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {",
+              "validateEmbedding(queryEmbedding)",
+              "validateEmbedding(embedding)"
+            ],
+            "total": 9
+          },
+          "generic_markers": [
+            "status:no_context"
+          ],
+          "invalid_reasons": [],
+          "verdict": "generic_or_no_context"
+        }
+      }
+    },
+    "design_decision_recall": {
+      "with_memory": {
+        "condition": "with_memory",
+        "seeded_decisions": [
+          {
+            "id": "retrieval-alpha-0-65-vector-bias",
+            "text": "decision_id=retrieval-alpha-0-65-vector-bias; The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results."
+          },
+          {
+            "id": "retrieval-threshold-0-15-noise-gate",
+            "text": "decision_id=retrieval-threshold-0-15-noise-gate; The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned."
+          },
+          {
+            "id": "retrieval-candidate-pools-48-96",
+            "text": "decision_id=retrieval-candidate-pools-48-96; The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking."
+          }
+        ],
+        "question": "What architectural decisions have been made about the retrieval pipeline?",
+        "response": "{\n  \"status\": \"ok\",\n  \"decisions\": [\n    {\n      \"id\": \"retrieval-alpha-0-65-vector-bias\",\n      \"summary\": \"The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results.\",\n      \"params\": [\n        \"ALPHA=0.65\"\n      ]\n    },\n    {\n      \"id\": \"retrieval-candidate-pools-48-96\",\n      \"summary\": \"The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking.\",\n      \"params\": [\n        \"K_TEXT=48\",\n        \"K_VEC=96\"\n      ]\n    },\n    {\n      \"id\": \"retrieval-threshold-0-15-noise-gate\",\n      \"summary\": \"The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned.\",\n      \"params\": [\n        \"THRESHOLD=0.15\"\n      ]\n    }\n  ]\n}",
+        "parsed": {
+          "status": "ok",
+          "decisions": [
+            {
+              "id": "retrieval-alpha-0-65-vector-bias",
+              "summary": "The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results.",
+              "params": [
+                "ALPHA=0.65"
+              ]
+            },
+            {
+              "id": "retrieval-candidate-pools-48-96",
+              "summary": "The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking.",
+              "params": [
+                "K_TEXT=48",
+                "K_VEC=96"
+              ]
+            },
+            {
+              "id": "retrieval-threshold-0-15-noise-gate",
+              "summary": "The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned.",
+              "params": [
+                "THRESHOLD=0.15"
+              ]
+            }
+          ]
+        },
+        "meta": {
+          "mode": "content",
+          "has_reasoning": false,
+          "finish_reason": "stop",
+          "invalid_reasons": []
+        },
+        "tool_transcript": "Simulated MCP tool result from pce_memory_activate.\nQuery: architectural decisions retrieval pipeline hybrid search\nActive context: ac_e67ebbe1\nClaims returned: 3\nRelevant memory claims:\n- decision_id=retrieval-alpha-0-65-vector-bias; The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results.\n- decision_id=retrieval-candidate-pools-48-96; The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking.\n- decision_id=retrieval-threshold-0-15-noise-gate; The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned.",
+        "memory_actions": {
+          "upserts": [
+            {
+              "id": "clm_c3986701",
+              "is_new": true,
+              "content_hash": "sha256:0c6f219f415bd51a37aa2b8d3d44d80fb76f8ed53d0698cfc816bf16821ab092",
+              "policy_version": "0.1",
+              "state": "HasClaims",
+              "request_id": "6f78def6-b9a4-4d85-ad2d-928b69c2eaa3",
+              "trace_id": "75c24630-ea9c-4328-bcd2-23358d9b9f07"
+            },
+            {
+              "id": "clm_ac0ca754",
+              "is_new": true,
+              "content_hash": "sha256:8f1ae3fa97e0dec577f1421ff195f0e92286a2e898939d897dccc14239d968be",
+              "policy_version": "0.1",
+              "state": "HasClaims",
+              "request_id": "ca08cdfc-f516-4d1f-bf50-1ea557cec21f",
+              "trace_id": "c63d2a83-f80b-44ea-8429-aee745bff826"
+            },
+            {
+              "id": "clm_f0e023d1",
+              "is_new": true,
+              "content_hash": "sha256:3505b049a9ca6a4603e309109da0e73c42ed615f0c4709d9df1821e0e58cea78",
+              "policy_version": "0.1",
+              "state": "HasClaims",
+              "request_id": "04fca524-6ea6-4489-88d8-ebc2f6a04708",
+              "trace_id": "578ca958-884c-4213-9fb5-0f60aac95f9a"
+            }
+          ],
+          "activate": {
+            "active_context_id": "ac_e67ebbe1",
+            "intent": "design_decision",
+            "claims": [
+              {
+                "claim": {
+                  "id": "clm_c3986701",
+                  "text": "decision_id=retrieval-alpha-0-65-vector-bias; The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results.",
+                  "kind": "fact",
+                  "scope": "project",
+                  "boundary_class": "internal",
+                  "memory_type": "knowledge",
+                  "content_hash": "sha256:0c6f219f415bd51a37aa2b8d3d44d80fb76f8ed53d0698cfc816bf16821ab092",
+                  "utility": 0,
+                  "confidence": 0.5,
+                  "created_at": "2026-03-25T07:05:32.909Z",
+                  "updated_at": "2026-03-25T07:05:32.909Z",
+                  "recency_anchor": "2026-03-25T07:05:32.909Z"
+                },
+                "score": 0.46611032636620525,
+                "source_layer": "meso",
+                "rank": 1,
+                "score_breakdown": {
+                  "s_text": 0.5,
+                  "s_vec": 0.7267314665944555,
+                  "S": 0.6473754532863961,
+                  "g": {
+                    "utility_term": 0.8,
+                    "confidence_term": 0.75,
+                    "recency_term": 1,
+                    "g": 0.6000000000000001
+                  },
+                  "intent": {
+                    "intent": "design_decision",
+                    "kind_boost": 1,
+                    "memory_type_boost": 1.2,
+                    "recency_weight": 0.65,
+                    "boost": 1.2
+                  },
+                  "score_final": 0.46611032636620525
+                },
+                "selection_reason": "rank=1; layer=meso; score=0.4661; kind=fact; memory_type=knowledge; intent=design_decision; s_text=0.5000; s_vec=0.7267; intent_boost=1.2000",
+                "evidences": []
+              },
+              {
+                "claim": {
+                  "id": "clm_f0e023d1",
+                  "text": "decision_id=retrieval-candidate-pools-48-96; The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking.",
+                  "kind": "fact",
+                  "scope": "project",
+                  "boundary_class": "internal",
+                  "memory_type": "knowledge",
+                  "content_hash": "sha256:3505b049a9ca6a4603e309109da0e73c42ed615f0c4709d9df1821e0e58cea78",
+                  "utility": 0,
+                  "confidence": 0.5,
+                  "created_at": "2026-03-25T07:05:32.931Z",
+                  "updated_at": "2026-03-25T07:05:32.931Z",
+                  "recency_anchor": "2026-03-25T07:05:32.931Z"
+                },
+                "score": 0.4597731919870124,
+                "source_layer": "meso",
+                "rank": 2,
+                "score_breakdown": {
+                  "s_text": 0.5,
+                  "s_vec": 0.7131905811688297,
+                  "S": 0.6385738777597394,
+                  "g": {
+                    "utility_term": 0.8,
+                    "confidence_term": 0.75,
+                    "recency_term": 1,
+                    "g": 0.6000000000000001
+                  },
+                  "intent": {
+                    "intent": "design_decision",
+                    "kind_boost": 1,
+                    "memory_type_boost": 1.2,
+                    "recency_weight": 0.65,
+                    "boost": 1.2
+                  },
+                  "score_final": 0.4597731919870124
+                },
+                "selection_reason": "rank=2; layer=meso; score=0.4598; kind=fact; memory_type=knowledge; intent=design_decision; s_text=0.5000; s_vec=0.7132; intent_boost=1.2000",
+                "evidences": []
+              },
+              {
+                "claim": {
+                  "id": "clm_ac0ca754",
+                  "text": "decision_id=retrieval-threshold-0-15-noise-gate; The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned.",
+                  "kind": "fact",
+                  "scope": "project",
+                  "boundary_class": "internal",
+                  "memory_type": "knowledge",
+                  "content_hash": "sha256:8f1ae3fa97e0dec577f1421ff195f0e92286a2e898939d897dccc14239d968be",
+                  "utility": 0,
+                  "confidence": 0.5,
+                  "created_at": "2026-03-25T07:05:32.922Z",
+                  "updated_at": "2026-03-25T07:05:32.922Z",
+                  "recency_anchor": "2026-03-25T07:05:32.922Z"
+                },
+                "score": 0.4421707868797817,
+                "source_layer": "meso",
+                "rank": 3,
+                "score_breakdown": {
+                  "s_text": 0.5,
+                  "s_vec": 0.6755786044439778,
+                  "S": 0.6141260928885856,
+                  "g": {
+                    "utility_term": 0.8,
+                    "confidence_term": 0.75,
+                    "recency_term": 1,
+                    "g": 0.6000000000000001
+                  },
+                  "intent": {
+                    "intent": "design_decision",
+                    "kind_boost": 1,
+                    "memory_type_boost": 1.2,
+                    "recency_weight": 0.65,
+                    "boost": 1.2
+                  },
+                  "score_final": 0.4421707868797817
+                },
+                "selection_reason": "rank=3; layer=meso; score=0.4422; kind=fact; memory_type=knowledge; intent=design_decision; s_text=0.5000; s_vec=0.6756; intent_boost=1.2000",
+                "evidences": []
+              }
+            ],
+            "claims_count": 3,
+            "has_more": false,
+            "policy_version": "0.1",
+            "state": "Ready",
+            "request_id": "83a06152-0452-4a0d-973d-1da35e259ae3",
+            "trace_id": "94151443-626f-4ff1-9029-32dfdf419fce"
+          }
+        },
+        "score": {
+          "decision_id_recall": {
+            "matched": [
+              "retrieval-alpha-0-65-vector-bias",
+              "retrieval-threshold-0-15-noise-gate",
+              "retrieval-candidate-pools-48-96"
+            ],
+            "missing": [],
+            "total": 3
+          },
+          "detail_recall": {
+            "matched": [
+              "0.65",
+              "0.15",
+              "48",
+              "96",
+              "alpha",
+              "threshold",
+              "k_text",
+              "k_vec"
+            ],
+            "missing": [],
+            "total": 8
+          },
+          "generic_markers": [],
+          "invalid_reasons": [],
+          "verdict": "specific_recall"
+        }
+      },
+      "without_memory": {
+        "condition": "without_memory",
+        "seeded_decisions": [
+          {
+            "id": "retrieval-alpha-0-65-vector-bias",
+            "text": "decision_id=retrieval-alpha-0-65-vector-bias; The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results."
+          },
+          {
+            "id": "retrieval-threshold-0-15-noise-gate",
+            "text": "decision_id=retrieval-threshold-0-15-noise-gate; The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned."
+          },
+          {
+            "id": "retrieval-candidate-pools-48-96",
+            "text": "decision_id=retrieval-candidate-pools-48-96; The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking."
+          }
+        ],
+        "question": "What architectural decisions have been made about the retrieval pipeline?",
+        "response": "{\"status\":\"no_context\",\"decisions\":[]}",
+        "parsed": {
+          "status": "no_context",
+          "decisions": []
+        },
+        "meta": {
+          "mode": "content",
+          "has_reasoning": false,
+          "finish_reason": "stop",
+          "invalid_reasons": []
+        },
+        "score": {
+          "decision_id_recall": {
+            "matched": [],
+            "missing": [
+              "retrieval-alpha-0-65-vector-bias",
+              "retrieval-threshold-0-15-noise-gate",
+              "retrieval-candidate-pools-48-96"
+            ],
+            "total": 3
+          },
+          "detail_recall": {
+            "matched": [],
+            "missing": [
+              "0.65",
+              "0.15",
+              "48",
+              "96",
+              "alpha",
+              "threshold",
+              "k_text",
+              "k_vec"
+            ],
+            "total": 8
+          },
+          "generic_markers": [
+            "status:no_context"
+          ],
+          "invalid_reasons": [],
+          "verdict": "generic_or_no_context"
+        }
+      }
+    }
+  }
+}
