@@ -11,6 +11,9 @@ milestones:
   - title: Wave 2 - Memory Architecture Validation
     due_on: 2026-04-17
     issues: [52, 53, 54, 55]
+  - title: Wave 2.5 - Pre-v2 Fixes
+    due_on: 2026-04-10
+    issues: [57, 58]
   - title: Wave 3 - v2 Architecture Decision
     due_on: 2026-04-30
     issues: [49, 56]
@@ -64,6 +67,18 @@ issue_settings:
     size: L
     start_date: 2026-04-11
     target_date: 2026-04-17
+  "57":
+    status: Ready
+    priority: P0
+    size: S
+    start_date: 2026-03-25
+    target_date: 2026-04-03
+  "58":
+    status: Ready
+    priority: P0
+    size: M
+    start_date: 2026-03-25
+    target_date: 2026-04-10
   "56":
     status: In progress
     priority: P0
