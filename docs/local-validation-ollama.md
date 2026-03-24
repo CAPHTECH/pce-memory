@@ -140,6 +140,10 @@ pnpm local:validation:smoke -- --agent claude
 
 - `memory-architecture-smoke.md`
 - `write-path-distill-check.md`
+- `resume_task.md`
+- `debug_incident.md`
+- `design_decision.md`
+- `policy_check.md`
 
 ## Canonical Smoke Task
 
@@ -156,6 +160,19 @@ It asks the local agent to:
 - cite repository files it used
 
 This is intentionally small enough to rerun multiple times in a day.
+
+## Validation Corpus And Scoring
+
+Issue #51 extends the local workflow with reusable task and scoring references:
+
+- `validation/tasks/resume_task.md`
+- `validation/tasks/debug_incident.md`
+- `validation/tasks/design_decision.md`
+- `validation/tasks/policy_check.md`
+- `validation/rubric.md`
+- `validation/output-format.md`
+
+Use the smoke task first, then select one canonical task from the corpus and score the resulting artifact with the shared rubric.
 
 ## Result Format
 
@@ -179,6 +196,8 @@ Suggested metadata fields:
 - `runtime_seconds`
 - `success`
 - `notes`
+
+For the complete `meta.json` schema and the optional scoring artifacts, see `validation/output-format.md`.
 
 The repository includes a checked-in sample artifact at:
 
