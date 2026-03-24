@@ -205,6 +205,34 @@ async function validateUpsertInput(
     };
   }
 
+  const policy = getPolicy();
+  if (!policy.boundary_classes[boundary_class]) {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        { ...err('VALIDATION_ERROR', 'unknown boundary_class', reqId), trace_id: traceId },
+        { isError: true }
+      ),
+    };
+  }
+
+  if (boundary_class === 'secret') {
+    return {
+      isValid: false,
+      errorResponse: createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            "boundary_class 'secret' is rejected by default for pce_memory_upsert; use pce_memory_observe for secret material",
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      ),
+    };
+  }
+
   // content_hash処理: 未指定時は自動生成、指定時は検証
   const computedHash = `sha256:${computeContentHash(text)}`;
   let resolvedHash: string;
@@ -231,17 +259,6 @@ async function validateUpsertInput(
   } else {
     // 未指定時: 自動生成
     resolvedHash = computedHash;
-  }
-
-  const policy = getPolicy();
-  if (!policy.boundary_classes[boundary_class]) {
-    return {
-      isValid: false,
-      errorResponse: createToolResult(
-        { ...err('VALIDATION_ERROR', 'unknown boundary_class', reqId), trace_id: traceId },
-        { isError: true }
-      ),
-    };
   }
 
   return { isValid: true, resolvedHash };
@@ -2200,7 +2217,7 @@ function generatePromptMessages(
    - \`public\`: Publicly shareable information
    - \`internal\`: Internal use only
    - \`pii\`: Contains personal information
-   - \`secret\`: Credentials (not recommended to store)
+   - \`secret\`: Credentials (rejected by default in upsert; use observe)
 
 3. **Provenance**:
    - \`at\`: Required. Recording timestamp
@@ -2666,14 +2683,19 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_upsert',
     description:
-      'Register a permanent knowledge claim (never auto-deleted). Use for verified decisions, resolved errors, architectural patterns. Requires provenance.at timestamp. Prefer over observe for long-term, validated knowledge.',
+      'Register a permanent knowledge claim (never auto-deleted). Use for verified decisions, resolved errors, architectural patterns. Requires provenance.at timestamp. Prefer over observe for long-term, validated knowledge. secret boundary_class is rejected by default; use observe for secret material.',
     inputSchema: {
       type: 'object',
       properties: {
         text: { type: 'string' },
         kind: { type: 'string', enum: ['fact', 'preference', 'task', 'policy_hint'] },
         scope: { type: 'string', enum: ['session', 'project', 'principle'] },
-        boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
+        boundary_class: {
+          type: 'string',
+          enum: ['public', 'internal', 'pii'],
+          description:
+            'Durable claims support public|internal|pii. secret is rejected by default; use pce_memory_observe for secret material.',
+        },
         content_hash: {
           type: 'string',
           pattern: '^sha256:[0-9a-f]{64}$',

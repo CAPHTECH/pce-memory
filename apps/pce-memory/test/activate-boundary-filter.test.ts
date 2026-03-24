@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
+import { getConnection, initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import { dispatchTool } from '../src/core/handlers';
 import { resetMemoryState } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
 import { resetRates, initRateState } from '../src/store/rate';
+import { upsertClaim } from '../src/store/claims';
 import { computeContentHash } from '@pce/embeddings';
 
 beforeEach(async () => {
@@ -37,8 +38,8 @@ describe('activate boundary filter', () => {
       boundary_class: 'pii',
       content_hash: `sha256:${computeContentHash(piiText)}`,
     });
-    const secretText = 'secret claim';
-    const secret = await dispatchTool('pce_memory_upsert', {
+    const secretText = 'preexisting secret claim';
+    const { claim: secret } = await upsertClaim({
       text: secretText,
       kind: 'fact',
       scope: 'session',
@@ -48,7 +49,7 @@ describe('activate boundary filter', () => {
 
     const internalId = internal.structuredContent?.id as string;
     const piiId = pii.structuredContent?.id as string;
-    const secretId = secret.structuredContent?.id as string;
+    const secretId = secret.id;
 
     const ac1 = await dispatchTool('pce_memory_activate', {
       scope: ['session'],
@@ -69,5 +70,50 @@ describe('activate boundary filter', () => {
     expect(claims2).toContain(internalId);
     expect(claims2).toContain(piiId);
     expect(claims2).not.toContain(secretId);
+  });
+
+  it('secret boundary_class の upsert を拒否する', async () => {
+    await dispatchTool('pce_memory_policy_apply', {});
+
+    const secretText = 'secret claim';
+    const result = await dispatchTool('pce_memory_upsert', {
+      text: secretText,
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'secret',
+      content_hash: `sha256:${computeContentHash(secretText)}`,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain("boundary_class 'secret' is rejected by default");
+    expect(result.structuredContent?.error?.message).toContain('pce_memory_observe');
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT COUNT(*)::INTEGER AS cnt FROM claims');
+    const rows = reader.getRowObjects() as { cnt: number }[];
+    expect(rows[0]?.cnt).toBe(0);
+  });
+
+  it('secret rejection が content_hash mismatch より優先される', async () => {
+    await dispatchTool('pce_memory_policy_apply', {});
+
+    const result = await dispatchTool('pce_memory_upsert', {
+      text: 'secret claim',
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'secret',
+      content_hash: `sha256:${'0'.repeat(64)}`,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
+    expect(result.structuredContent?.error?.message).toContain("boundary_class 'secret' is rejected by default");
+    expect(result.structuredContent?.error?.message).not.toContain('content_hash mismatch');
+
+    const conn = await getConnection();
+    const reader = await conn.runAndReadAll('SELECT COUNT(*)::INTEGER AS cnt FROM claims');
+    const rows = reader.getRowObjects() as { cnt: number }[];
+    expect(rows[0]?.cnt).toBe(0);
   });
 });
