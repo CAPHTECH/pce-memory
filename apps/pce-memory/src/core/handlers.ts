@@ -13,6 +13,7 @@ import {
   upsertClaimWithEmbedding,
   findClaimById,
   findClaimsByIds,
+  findClaimByContentHash,
 } from '../store/claims.js';
 import type { Claim, Provenance } from '../store/claims.js';
 import { hybridSearchPaginated, getEmbeddingService } from '../store/hybridSearch.js';
@@ -97,6 +98,7 @@ import {
   getLayerScopeSummary,
 } from '../state/layerScopeState.js';
 import { safeJsonStringify } from '../utils/serialization.js';
+import { getConnection } from '../db/connection.js';
 
 // ========== Type Definitions ==========
 
@@ -158,6 +160,11 @@ function getAllowedBoundaryClasses(policy: BoundaryPolicy, requestedAllow: strin
 
 type DurableScope = 'project' | 'principle';
 type DurableBoundaryClass = 'public' | 'internal' | 'pii' | 'secret';
+
+const DEFAULT_PROMOTION_MAX_SOURCES = 64;
+const DEFAULT_PROMOTION_MAX_BYTES = 65_536;
+const DEFAULT_PROVENANCE_FUTURE_SKEW_MS = 300_000;
+const promotionLocks = new Map<string, Promise<void>>();
 
 const BOUNDARY_SEVERITY: Record<DurableBoundaryClass, number> = {
   public: 0,
@@ -255,6 +262,45 @@ function mapDurableScopeToTargetLayer(scope: DurableScope): 'meso' | 'macro' {
   return scope === 'principle' ? 'macro' : 'meso';
 }
 
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    deduped.push(value);
+  }
+  return deduped;
+}
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const rawValue = Number(process.env[name] ?? String(fallback));
+  return Number.isFinite(rawValue) && rawValue > 0 ? Math.floor(rawValue) : fallback;
+}
+
+function readNonNegativeIntEnv(name: string, fallback: number): number {
+  const rawValue = Number(process.env[name] ?? String(fallback));
+  return Number.isFinite(rawValue) && rawValue >= 0 ? Math.floor(rawValue) : fallback;
+}
+
+async function acquirePromotionLock(key: string): Promise<() => void> {
+  const previous = promotionLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const next = previous.then(() => current);
+  promotionLocks.set(key, next);
+  await previous;
+
+  return () => {
+    release();
+    if (promotionLocks.get(key) === next) {
+      promotionLocks.delete(key);
+    }
+  };
+}
+
 function parseJsonObject<T>(value: string | null | undefined, fallback: T): T {
   if (!value) {
     return fallback;
@@ -276,7 +322,56 @@ function validateRequiredProvenance(
   if (typeof candidate.at !== 'string' || candidate.at.length === 0) {
     return { ok: false, message: 'provenance.at is required' };
   }
-  return { ok: true, value: candidate };
+  const atMs = Date.parse(candidate.at);
+  if (Number.isNaN(atMs)) {
+    return { ok: false, message: 'provenance.at must be a valid ISO 8601 timestamp' };
+  }
+  const allowedFutureSkewMs = readNonNegativeIntEnv(
+    'PCE_PROVENANCE_FUTURE_SKEW_MS',
+    DEFAULT_PROVENANCE_FUTURE_SKEW_MS
+  );
+  if (atMs > Date.now() + allowedFutureSkewMs) {
+    return { ok: false, message: 'provenance.at cannot be in the future' };
+  }
+  return { ok: true, value: { ...candidate, at: new Date(atMs).toISOString() } };
+}
+
+function resolveObservationSourceText(input: { content?: string | null; content_digest: string }): string {
+  if (typeof input.content === 'string' && input.content.trim().length > 0) {
+    return input.content;
+  }
+  return input.content_digest;
+}
+
+function resolveClaimSourceText(input: { text: string; content_hash: string }): string {
+  if (typeof input.text === 'string' && input.text.trim().length > 0) {
+    return input.text;
+  }
+  return input.content_hash;
+}
+
+function getPromotionCandidateConflictMessage(
+  candidate: {
+    distilled_text: string;
+    proposed_kind: string;
+    proposed_scope: string;
+    proposed_boundary_class: string;
+    proposed_memory_type?: MemoryType | null;
+  },
+  claim: Claim
+): string | null {
+  const candidateMemoryType = candidate.proposed_memory_type ?? null;
+  const claimMemoryType = claim.memory_type ?? null;
+  const hasMismatch =
+    claim.text !== candidate.distilled_text ||
+    claim.kind !== candidate.proposed_kind ||
+    claim.scope !== candidate.proposed_scope ||
+    claim.boundary_class !== candidate.proposed_boundary_class ||
+    claimMemoryType !== candidateMemoryType;
+
+  return hasMismatch
+    ? 'candidate_hash collides with an existing claim that has different text or metadata'
+    : null;
 }
 
 // ========== Upsert Helper Functions ==========
@@ -1116,21 +1211,21 @@ export async function handleDistill(args: Record<string, unknown>) {
       );
     }
 
-    const observationIds =
+    const rawObservationIds =
       source_observation_ids === undefined
         ? []
         : Array.isArray(source_observation_ids) &&
             source_observation_ids.every((value) => typeof value === 'string')
           ? (source_observation_ids as string[])
           : null;
-    const claimIds =
+    const rawClaimIds =
       source_claim_ids === undefined
         ? []
         : Array.isArray(source_claim_ids) && source_claim_ids.every((value) => typeof value === 'string')
           ? (source_claim_ids as string[])
           : null;
 
-    if (observationIds === null || claimIds === null) {
+    if (rawObservationIds === null || rawClaimIds === null) {
       return createToolResult(
         {
           ...err(
@@ -1143,6 +1238,9 @@ export async function handleDistill(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+
+    const observationIds = dedupeStrings(rawObservationIds);
+    const claimIds = dedupeStrings(rawClaimIds);
 
     if (active_context_id !== undefined && typeof active_context_id !== 'string') {
       return createToolResult(
@@ -1252,7 +1350,7 @@ export async function handleDistill(args: Record<string, unknown>) {
     for (const observationId of observationIds) {
       const observation = observationsById.get(observationId);
       if (!observation) continue;
-      sourceTexts.push(observation.content ?? observation.content_digest);
+      sourceTexts.push(resolveObservationSourceText(observation));
       sourceIds.add(observation.id);
       sourceLayers.add('micro');
       sourceBoundaries.push(
@@ -1261,7 +1359,7 @@ export async function handleDistill(args: Record<string, unknown>) {
     }
 
     for (const claim of allClaims.values()) {
-      sourceTexts.push(claim.text);
+      sourceTexts.push(resolveClaimSourceText(claim));
       sourceIds.add(claim.id);
       sourceLayers.add(mapScopeToLayer(claim.scope));
       sourceBoundaries.push(
@@ -1277,6 +1375,17 @@ export async function handleDistill(args: Record<string, unknown>) {
     if (sourceTexts.length === 0) {
       return createToolResult(
         { ...err('VALIDATION_ERROR', 'no source text available to distill', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    const maxSources = readPositiveIntEnv('PCE_PROMOTION_MAX_SOURCES', DEFAULT_PROMOTION_MAX_SOURCES);
+    if (sourceTexts.length > maxSources) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', `too many sources to distill (max ${maxSources})`, reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -1314,6 +1423,20 @@ export async function handleDistill(args: Record<string, unknown>) {
     const targetLayer = mapDurableScopeToTargetLayer(resolvedScope);
     const proposedBoundaryClass = getMostRestrictiveBoundary(sourceBoundaries);
     const distilledText = sourceTexts.join('\n\n---\n\n');
+    const maxPromotionBytes = readPositiveIntEnv('PCE_PROMOTION_MAX_BYTES', DEFAULT_PROMOTION_MAX_BYTES);
+    if (Buffer.byteLength(distilledText, 'utf8') > maxPromotionBytes) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            `distilled_text too large (max ${maxPromotionBytes} bytes)`,
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
     const candidateHash = `sha256:${computeContentHash(distilledText)}`;
     const policy = getPolicy();
     const boundaryCheck = boundaryValidate(
@@ -1428,6 +1551,8 @@ export async function handlePromote(args: Record<string, unknown>) {
     );
   }
   const scopeId = scopeResult.right;
+  let transactionOpen = false;
+  let releasePromotionLock: (() => void) | null = null;
 
   try {
     if (!canDoUpsert()) {
@@ -1480,6 +1605,8 @@ export async function handlePromote(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+
+    releasePromotionLock = await acquirePromotionLock(candidate_id);
 
     const candidate = await findPromotionQueueRowById(candidate_id);
     if (!candidate) {
@@ -1584,6 +1711,21 @@ export async function handlePromote(args: Record<string, unknown>) {
       ? { ...validatedProvenance.value, note: mergedPromotionNote }
       : validatedProvenance.value;
 
+    const existingClaim = await findClaimByContentHash(candidate.candidate_hash);
+    if (existingClaim) {
+      const conflictMessage = getPromotionCandidateConflictMessage(candidate, existingClaim);
+      if (conflictMessage) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', conflictMessage, reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
+    const conn = await getConnection();
+    await conn.run('BEGIN TRANSACTION');
+    transactionOpen = true;
+
     const embeddingService = getEmbeddingService();
     const { claim, isNew } = embeddingService
       ? await upsertClaimWithEmbedding(
@@ -1607,6 +1749,11 @@ export async function handlePromote(args: Record<string, unknown>) {
           content_hash: candidate.candidate_hash,
           provenance: promotionProvenance,
         });
+
+    const promotedClaimConflict = getPromotionCandidateConflictMessage(candidate, claim);
+    if (promotedClaimConflict) {
+      throw new Error(promotedClaimConflict);
+    }
 
     if (isNew) {
       const evidenceSources = new Set(sourceObservationIds);
@@ -1644,7 +1791,7 @@ export async function handlePromote(args: Record<string, unknown>) {
       }
     }
 
-    await acceptPromotionQueueRow(candidate.id, {
+    const accepted = await acceptPromotionQueueRow(candidate.id, {
       accepted_claim_id: claim.id,
       reviewers: reviewers ? JSON.stringify(reviewers as string[]) : null,
       resolved_at: validatedProvenance.value.at,
@@ -1657,8 +1804,17 @@ export async function handlePromote(args: Record<string, unknown>) {
         },
       }),
     });
-
-    transitionToHasClaims(isNew);
+    if (!accepted) {
+      await conn.run('ROLLBACK');
+      transactionOpen = false;
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'candidate was resolved concurrently', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
 
     await appendLog({
       id: `log_${reqId}`,
@@ -1668,6 +1824,11 @@ export async function handlePromote(args: Record<string, unknown>) {
       trace: traceId,
       policy_version: getPolicyVersion(),
     });
+
+    await conn.run('COMMIT');
+    transactionOpen = false;
+
+    transitionToHasClaims(isNew);
 
     return createToolResult({
       claim_id: claim.id,
@@ -1681,20 +1842,35 @@ export async function handlePromote(args: Record<string, unknown>) {
       trace_id: traceId,
     });
   } catch (e: unknown) {
-    await appendLog({
-      id: `log_${reqId}`,
-      op: 'promote',
-      ok: false,
-      req: reqId,
-      trace: traceId,
-      policy_version: getPolicyVersion(),
-    });
+    if (transactionOpen) {
+      try {
+        const conn = await getConnection();
+        await conn.run('ROLLBACK');
+      } catch {
+        // best-effort rollback
+      }
+    }
+    try {
+      await appendLog({
+        id: `log_${reqId}`,
+        op: 'promote',
+        ok: false,
+        req: reqId,
+        trace: traceId,
+        policy_version: getPolicyVersion(),
+      });
+    } catch {
+      // best-effort failure audit
+    }
     const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
       { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
       { isError: true }
     );
   } finally {
+    if (releasePromotionLock) {
+      releasePromotionLock();
+    }
     exitRequestScope(scopeId);
   }
 }

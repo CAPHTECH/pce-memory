@@ -30,6 +30,10 @@ function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
   return result.structuredContent!;
 }
 
+function isoOffset(msOffset: number): string {
+  return new Date(Date.now() + msOffset).toISOString();
+}
+
 async function seedSessionClaim(text: string, kind: 'fact' | 'task' = 'fact') {
   const result = await upsertClaim({
     text,
@@ -183,7 +187,7 @@ describe('promotion pipeline', () => {
     const promote = expectSuccess(
       await dispatchTool('pce_memory_promote', {
         candidate_id: distill.candidate_id,
-        provenance: { at: '2026-03-24T12:00:00.000Z', actor: 'claude', note: 'reviewed' },
+        provenance: { at: isoOffset(-60_000), actor: 'claude', note: 'reviewed' },
         reviewers: ['alice', 'bob'],
         review_note: 'approved for project memory',
       })
@@ -289,13 +293,13 @@ describe('promotion pipeline', () => {
     expectSuccess(
       await dispatchTool('pce_memory_promote', {
         candidate_id: distill.candidate_id,
-        provenance: { at: '2026-03-24T12:45:00.000Z', actor: 'claude' },
+        provenance: { at: isoOffset(-50_000), actor: 'claude' },
       })
     );
 
     const secondPromote = await dispatchTool('pce_memory_promote', {
       candidate_id: distill.candidate_id,
-      provenance: { at: '2026-03-24T12:46:00.000Z', actor: 'claude' },
+      provenance: { at: isoOffset(-49_000), actor: 'claude' },
     });
 
     expect(secondPromote.isError).toBe(true);
@@ -321,7 +325,7 @@ describe('promotion pipeline', () => {
     const promote = expectSuccess(
       await dispatchTool('pce_memory_promote', {
         candidate_id: distill.candidate_id,
-        provenance: { at: '2026-03-24T12:30:00.000Z', actor: 'claude' },
+        provenance: { at: isoOffset(-45_000), actor: 'claude' },
       })
     );
 
@@ -329,7 +333,7 @@ describe('promotion pipeline', () => {
       await dispatchTool('pce_memory_rollback', {
         claim_id: promote.claim_id,
         reason: 'superseded by a new retry design',
-        provenance: { at: '2026-03-24T13:00:00.000Z', actor: 'claude', note: 'invalidated' },
+        provenance: { at: isoOffset(-30_000), actor: 'claude', note: 'invalidated' },
       })
     );
 
