@@ -9,6 +9,8 @@ import { upsertClaim } from '../../src/store/claims';
 import { setEmbeddingService } from '../../src/store/hybridSearch';
 import { initRateState, resetRates } from '../../src/store/rate';
 
+export { dispatchTool };
+
 export function createMockEmbeddingService(embedding: readonly number[]): EmbeddingService {
   return {
     embed: () => () =>
@@ -100,7 +102,9 @@ export async function upsertClaimViaTool(input: {
   });
 }
 
-export async function insertClaimDirect(input: ClaimInput): Promise<Awaited<ReturnType<typeof upsertClaim>>['claim']> {
+export async function insertClaimDirect(
+  input: ClaimInput
+): Promise<Awaited<ReturnType<typeof upsertClaim>>['claim']> {
   const result = await upsertClaim({
     ...input,
     content_hash: input.content_hash ?? `sha256:${computeContentHash(input.text)}`,
@@ -108,4 +112,3 @@ export async function insertClaimDirect(input: ClaimInput): Promise<Awaited<Retu
   transitionToHasClaims(result.isNew);
   return result.claim;
 }
-
