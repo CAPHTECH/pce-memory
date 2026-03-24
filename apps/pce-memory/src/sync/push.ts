@@ -23,7 +23,7 @@ import {
   type Manifest,
 } from './schemas.js';
 import { initSyncDirectory, writeJsonFile, contentHashToFileName } from './fileSystem.js';
-import { isBoundarySyncable } from './merge.js';
+import { isBoundarySyncable, isScopeSyncable } from './merge.js';
 import { resolveDefaultTargetDir } from './resolveDefaultTargetDir.js';
 import { getPolicyVersion } from '../state/memoryState.js';
 
@@ -109,6 +109,14 @@ function getEffectiveBoundaryFilter(filter?: BoundaryClass[]): BoundaryClass[] {
   return base.filter((bc) => !SYNC_BLOCKED_BOUNDARY.includes(bc));
 }
 
+function shouldSkipClaimExport(claim: Claim): boolean {
+  return (
+    !isScopeSyncable(claim.scope as Scope) ||
+    Boolean(claim.tombstone) ||
+    Boolean(claim.has_rollback_record)
+  );
+}
+
 /**
  * Sync Push実行
  *
@@ -151,9 +159,16 @@ export async function executePush(
       scopes: scopeFilter,
       boundaryClasses: boundaryFilter,
       ...(options.since !== undefined && { since: options.since }),
+      includeInactive: true,
+      includeRollbackMetadata: true,
     });
 
     for (const claim of claims) {
+      // micro(session) claims and rolled-back/tombstoned claims are always local-only.
+      if (shouldSkipClaimExport(claim)) {
+        continue;
+      }
+
       // 境界クラスが同期可能か確認
       if (!isBoundarySyncable(claim.boundary_class as BoundaryClass, boundaryFilter)) {
         continue;
@@ -178,6 +193,8 @@ export async function executePush(
         }
       }
     }
+
+    // promotion_queue はレビュー待ち・監査用のローカル状態なので Git sync には含めない。
 
     // 3. Entityをエクスポート（Claimに関連するもののみ）
     // Note: sinceはClaimフィルタにのみ使用。参照されるEntity/Relationは常にエクスポート（参照整合性確保）

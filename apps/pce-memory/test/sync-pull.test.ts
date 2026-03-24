@@ -126,6 +126,65 @@ describe('executePull', () => {
     }
   });
 
+  it('session スコープのClaimは明示指定してもインポートしない', async () => {
+    const text = 'session scope import';
+    const hash = computeContentHash(text);
+
+    await fs.mkdir(path.join(syncDir, 'claims', 'session'), { recursive: true });
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'session', `${hash}.json`),
+      JSON.stringify({
+        text,
+        kind: 'fact',
+        scope: 'session',
+        boundary_class: 'internal',
+        memory_type: 'working_state',
+        content_hash: `sha256:${hash}`,
+      } satisfies ClaimExport)
+    );
+
+    const result = await executePull({
+      basePath: tempDir,
+      scopeFilter: ['session', 'project'],
+    });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.imported.claims.new).toBe(0);
+      expect(result.right.imported.claims.skippedDuplicate).toBe(0);
+      expect(await findClaimByContentHash(`sha256:${hash}`)).toBeUndefined();
+    }
+  });
+
+  it('tombstone の付いたClaimは穏当にスキップする', async () => {
+    const text = 'tombstoned import';
+    const hash = computeContentHash(text);
+
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify({
+        text,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'knowledge',
+        content_hash: `sha256:${hash}`,
+        tombstone: true,
+        tombstone_at: '2026-03-24T00:00:00.000Z',
+      } satisfies ClaimExport)
+    );
+
+    const result = await executePull({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.imported.claims.new).toBe(0);
+      expect(result.right.imported.claims.skippedDuplicate).toBe(1);
+      expect(result.right.validationErrors).toHaveLength(0);
+      expect(await findClaimByContentHash(`sha256:${hash}`)).toBeUndefined();
+    }
+  });
+
   it('content_hashが不一致の場合はバリデーションエラー', async () => {
     const text = 'テスト用Claim';
     const wrongHash = '0000000000000000000000000000000000000000000000000000000000000000';
@@ -186,6 +245,41 @@ describe('executePull', () => {
     if (E.isRight(result)) {
       expect(result.right.imported.claims.new).toBe(0);
       expect(result.right.imported.claims.skippedDuplicate).toBe(1);
+    }
+  });
+
+  it('重複Claimでも欠けている memory_type は backfill する', async () => {
+    const text = 'duplicate with memory type backfill';
+    const hash = computeContentHash(text);
+
+    await upsertClaim({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${hash}`,
+    });
+
+    await fs.writeFile(
+      path.join(syncDir, 'claims', 'project', `${hash}.json`),
+      JSON.stringify({
+        text,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'procedure',
+        content_hash: `sha256:${hash}`,
+      } satisfies ClaimExport)
+    );
+
+    const result = await executePull({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.imported.claims.new).toBe(0);
+      expect(result.right.imported.claims.skippedDuplicate).toBe(1);
+      const saved = await findClaimByContentHash(`sha256:${hash}`);
+      expect(saved?.memory_type).toBe('procedure');
     }
   });
 
@@ -382,6 +476,28 @@ describe('executePull', () => {
     }
   });
 
+  it('promotion_queue ディレクトリは無視する', async () => {
+    await fs.mkdir(path.join(syncDir, 'promotion_queue'), { recursive: true });
+    await fs.writeFile(
+      path.join(syncDir, 'promotion_queue', 'pq_local_only.json'),
+      JSON.stringify({
+        id: 'pq_local_only',
+        source_layer: 'micro',
+        target_layer: 'meso',
+      })
+    );
+
+    const result = await executePull({ basePath: tempDir });
+
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result)) {
+      expect(result.right.imported.claims.new).toBe(0);
+      expect(result.right.imported.entities.new).toBe(0);
+      expect(result.right.imported.relations.new).toBe(0);
+      expect(result.right.validationErrors).toHaveLength(0);
+    }
+  });
+
   it('無効なJSONスキーマはバリデーションエラー', async () => {
     // kindが無効
     const invalidClaim = {
@@ -465,6 +581,40 @@ describe('Push-Pull往復テスト', () => {
       // 既存のClaimなので重複としてスキップされる
       expect(pullResult.right.imported.claims.new).toBe(0);
       expect(pullResult.right.imported.claims.skippedDuplicate).toBe(1);
+    }
+  });
+
+  it('memory_type が push/pull round-trip で保持される', async () => {
+    const text = 'roundtrip memory type claim';
+    const hash = `sha256:${computeContentHash(text)}`;
+
+    await upsertClaim({
+      text,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      memory_type: 'procedure',
+      content_hash: hash,
+    });
+
+    const pushResult = await executePush({ basePath: tempDir });
+    expect(E.isRight(pushResult)).toBe(true);
+
+    await resetDbAsync();
+    resetMemoryState();
+    process.env.PCE_DB = ':memory:';
+    process.env.PCE_RATE_CAP = '100';
+    await initDb();
+    await initSchema();
+    await initRateState();
+    await resetRates();
+
+    const pullResult = await executePull({ basePath: tempDir });
+    expect(E.isRight(pullResult)).toBe(true);
+    if (E.isRight(pullResult)) {
+      expect(pullResult.right.imported.claims.new).toBe(1);
+      const saved = await findClaimByContentHash(hash);
+      expect(saved?.memory_type).toBe('procedure');
     }
   });
 });
