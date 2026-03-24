@@ -5,6 +5,7 @@ import { resetMemoryState } from '../src/state/memoryState';
 import { resetLayerScopeState } from '../src/state/layerScopeState';
 import { resetRates, initRateState } from '../src/store/rate';
 import { upsertClaim } from '../src/store/claims';
+import { updateCritic } from '../src/store/critic';
 import { computeContentHash } from '@pce/embeddings';
 
 beforeEach(async () => {
@@ -70,6 +71,94 @@ describe('activate boundary filter', () => {
     expect(claims2).toContain(internalId);
     expect(claims2).toContain(piiId);
     expect(claims2).not.toContain(secretId);
+  });
+
+  it('top_k と pagination metadata が boundary filter 後の集合を反映する', async () => {
+    await dispatchTool('pce_memory_policy_apply', {});
+
+    const internalOneText = 'internal first allowed claim';
+    const internalOne = await dispatchTool('pce_memory_upsert', {
+      text: internalOneText,
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(internalOneText)}`,
+    });
+    const internalTwoText = 'internal second allowed claim';
+    const internalTwo = await dispatchTool('pce_memory_upsert', {
+      text: internalTwoText,
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(internalTwoText)}`,
+    });
+    const internalThreeText = 'internal third allowed claim';
+    const internalThree = await dispatchTool('pce_memory_upsert', {
+      text: internalThreeText,
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(internalThreeText)}`,
+    });
+    const piiText = 'pii disallowed top score claim';
+    const pii = await dispatchTool('pce_memory_upsert', {
+      text: piiText,
+      kind: 'fact',
+      scope: 'session',
+      boundary_class: 'pii',
+      content_hash: `sha256:${computeContentHash(piiText)}`,
+    });
+
+    const internalOneId = internalOne.structuredContent?.id as string;
+    const internalTwoId = internalTwo.structuredContent?.id as string;
+    const internalThreeId = internalThree.structuredContent?.id as string;
+    const piiId = pii.structuredContent?.id as string;
+
+    await updateCritic(internalOneId, 0.7, 0, 1);
+    await updateCritic(internalTwoId, 0.6, 0, 1);
+    await updateCritic(internalThreeId, 0.5, 0, 1);
+    await updateCritic(piiId, 0.95, 0, 1);
+
+    const page1 = await dispatchTool('pce_memory_activate', {
+      scope: ['session'],
+      allow: ['answer:task'],
+      top_k: 1,
+      include_meta: false,
+    });
+    const claims1 = page1.structuredContent?.claims as any[];
+    expect(claims1).toHaveLength(1);
+    expect(claims1[0]?.claim?.id).toBe(internalOneId);
+    expect(claims1[0]?.claim?.id).not.toBe(piiId);
+    expect(page1.structuredContent?.next_cursor).toBe(internalOneId);
+    expect(page1.structuredContent?.has_more).toBe(true);
+
+    const page2 = await dispatchTool('pce_memory_activate', {
+      scope: ['session'],
+      allow: ['answer:task'],
+      top_k: 1,
+      cursor: page1.structuredContent?.next_cursor,
+      include_meta: false,
+    });
+    const claims2 = page2.structuredContent?.claims as any[];
+    expect(claims2).toHaveLength(1);
+    expect(claims2[0]?.claim?.id).toBe(internalTwoId);
+    expect(claims2[0]?.claim?.id).not.toBe(piiId);
+    expect(page2.structuredContent?.next_cursor).toBe(internalTwoId);
+    expect(page2.structuredContent?.has_more).toBe(true);
+
+    const page3 = await dispatchTool('pce_memory_activate', {
+      scope: ['session'],
+      allow: ['answer:task'],
+      top_k: 1,
+      cursor: page2.structuredContent?.next_cursor,
+      include_meta: false,
+    });
+    const claims3 = page3.structuredContent?.claims as any[];
+    expect(claims3).toHaveLength(1);
+    expect(claims3[0]?.claim?.id).toBe(internalThreeId);
+    expect(claims3[0]?.claim?.id).not.toBe(piiId);
+    expect(page3.structuredContent?.next_cursor).toBeUndefined();
+    expect(page3.structuredContent?.has_more).toBe(false);
   });
 
   it('secret boundary_class の upsert を拒否する', async () => {
