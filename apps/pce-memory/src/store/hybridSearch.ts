@@ -1035,7 +1035,8 @@ async function fallbackToTextOnly(
     scopes.length + 1
   );
 
-  const limitClause = limit !== undefined ? `LIMIT $${scopes.length + boundaryParams.length + 1}` : '';
+  const limitClause =
+    limit !== undefined ? `LIMIT $${scopes.length + boundaryParams.length + 1}` : '';
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
@@ -1048,7 +1049,8 @@ async function fallbackToTextOnly(
     ${limitClause}
   `;
 
-  const params = limit !== undefined ? [...scopes, ...boundaryParams, limit] : [...scopes, ...boundaryParams];
+  const params =
+    limit !== undefined ? [...scopes, ...boundaryParams, limit] : [...scopes, ...boundaryParams];
   const reader = await conn.runAndReadAll(sql, params);
   const rawRows = reader.getRowObjects() as unknown as Claim[];
   return normalizeRowsTimestamps(rawRows);

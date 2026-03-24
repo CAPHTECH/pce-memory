@@ -175,7 +175,9 @@ describe('activate boundary filter', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
-    expect(result.structuredContent?.error?.message).toContain("boundary_class 'secret' is rejected by default");
+    expect(result.structuredContent?.error?.message).toContain(
+      "boundary_class 'secret' is rejected by default"
+    );
     expect(result.structuredContent?.error?.message).toContain('pce_memory_observe');
 
     const conn = await getConnection();
@@ -197,7 +199,9 @@ describe('activate boundary filter', () => {
 
     expect(result.isError).toBe(true);
     expect(result.structuredContent?.error?.code).toBe('VALIDATION_ERROR');
-    expect(result.structuredContent?.error?.message).toContain("boundary_class 'secret' is rejected by default");
+    expect(result.structuredContent?.error?.message).toContain(
+      "boundary_class 'secret' is rejected by default"
+    );
     expect(result.structuredContent?.error?.message).not.toContain('content_hash mismatch');
 
     const conn = await getConnection();
