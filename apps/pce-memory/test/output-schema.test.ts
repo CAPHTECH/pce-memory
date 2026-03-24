@@ -47,6 +47,19 @@ describe('Output Schema - 基本テスト', () => {
       }
     }
   });
+
+  it('pce_memory_upsert inputSchema は secret boundary_class を通常入力として案内しない', () => {
+    const upsertTool = TOOL_DEFINITIONS.find((tool) => tool.name === 'pce_memory_upsert');
+    expect(upsertTool).toBeDefined();
+
+    const boundaryClassSchema = upsertTool?.inputSchema?.properties?.boundary_class as
+      | { enum?: string[]; description?: string }
+      | undefined;
+
+    expect(boundaryClassSchema?.enum).toEqual(['public', 'internal', 'pii']);
+    expect(boundaryClassSchema?.description).toContain('secret is rejected by default');
+    expect(boundaryClassSchema?.description).toContain('pce_memory_observe');
+  });
 });
 
 describe('Output Schema - 後方互換性テスト', () => {

@@ -315,7 +315,7 @@
     "text": { "type": "string" },
     "kind": { "enum": ["fact", "preference", "task", "policy_hint"] },
     "scope": { "enum": ["session", "project", "principle"] },
-    "boundary_class": { "enum": ["public", "internal", "pii", "secret"] },
+    "boundary_class": { "enum": ["public", "internal", "pii"] },
     "entities": { "type": "array", "items": { "$ref": "#/definitions/entity" } },
     "relations": { "type": "array", "items": { "$ref": "#/definitions/relation" } },
     "provenance": { "$ref": "#/definitions/provenance" },
@@ -324,6 +324,8 @@
   "required": ["text", "provenance"]
 }
 ```
+
+- **Note**: `secret` durable claims are rejected by default in `pce_memory_upsert`. Use `pce_memory_observe` for secret material so it can be handled in `digest_only` mode.
 
 - **Response Schema**
 
