@@ -111,7 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`pce.memory.observe` tool** (Issue #30) - Record raw observations with optional claim extraction
   - `source_type`: chat / tool / file / http / system
-  - `extract.mode`: `noop` (record only) or `single_claim_v0` (promote to claim)
+  - `extract.mode`: `noop` (record only) plus an early temporary legacy claim-extraction mode
   - Automatic boundary detection: PII (email/phone) → redaction, secret (API keys) → reject storage
   - GC support: `scrub` (NULL content) or `delete` (remove row) after TTL expiration
   - Evidence linking: observation → claim traceability

@@ -30,7 +30,7 @@ export interface ObserveTestCase {
     };
     ttl_days?: number;
     extract?: {
-      mode: 'noop' | 'single_claim_v0';
+      mode: 'noop';
     };
   };
   expected: {
@@ -70,18 +70,16 @@ export const OBSERVE_TEST_CASES: ObserveTestCase[] = [
   },
   {
     id: 'obs-002-basic-extract',
-    description: '基本的なobserve（extract: single_claim_v0）',
+    description: '基本的なobserve（raw capture only）',
     input: {
       source_type: 'chat',
       content: '認証にはJWTを使用することに決定',
-      extract: { mode: 'single_claim_v0' },
     },
     expected: {
       observation_id_present: true,
-      claim_ids_count: 1,
+      claim_ids_count: 0,
       content_stored: true,
       effective_boundary_class: 'internal',
-      claim_retrievable: true,
     },
   },
 
@@ -179,14 +177,14 @@ export const OBSERVE_TEST_CASES: ObserveTestCase[] = [
     input: {
       source_type: 'chat',
       content: 'sk-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      extract: { mode: 'single_claim_v0' },
+      extract: { mode: 'noop' },
     },
     expected: {
       observation_id_present: true,
       effective_boundary_class: 'secret',
       content_stored: false,
       claim_ids_count: 0,
-      warnings_contains: ['OBS_CONTENT_NOT_STORED_SECRET', 'EXTRACT_SKIPPED_SECRET'],
+      warnings_contains: ['OBS_CONTENT_NOT_STORED_SECRET'],
     },
   },
   {
@@ -325,29 +323,26 @@ export const OBSERVE_TEST_CASES: ObserveTestCase[] = [
         actor: 'developer',
         note: 'テスト用データ',
       },
-      extract: { mode: 'single_claim_v0' },
     },
     expected: {
       observation_id_present: true,
-      claim_ids_count: 1,
+      claim_ids_count: 0,
       content_stored: true,
     },
   },
 
-  // === extract → activate 統合テスト ===
+  // === raw capture contract ===
   {
     id: 'obs-070-extract-activate-flow',
-    description: 'observe(extract) → activate フロー',
+    description: 'observe は raw capture のみを行う',
     input: {
       source_type: 'chat',
       content: 'DuckDBをストレージとして採用',
-      extract: { mode: 'single_claim_v0' },
+      extract: { mode: 'noop' },
     },
     expected: {
       observation_id_present: true,
-      claim_ids_count: 1,
-      claim_retrievable: true,
-      claim_has_evidence: true,
+      claim_ids_count: 0,
     },
   },
 ];

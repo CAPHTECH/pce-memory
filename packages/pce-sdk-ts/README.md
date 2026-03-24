@@ -37,13 +37,13 @@ MCPクライアント（例: `@modelcontextprotocol/sdk`）からは、以下の
   "actor": "user",
   "tags": ["preference"],
   "ttl_days": 30,
-  "extract": { "mode": "single_claim_v0" }
+  "extract": { "mode": "noop" }
 }
 ```
 
 Notes:
 
-- `effective_boundary_class` / `warnings` が返る場合があります（例: secret検知時は保存・抽出がスキップされる）。
+- `effective_boundary_class` / `warnings` が返る場合があります（例: secret検知時は `content` を保存しません）。
 
 ### `pce_memory_activate`
 

@@ -14,8 +14,8 @@
 
 ```
 1. activate   → タスク開始前に関連知識を想起
-2. 作業実行   → 想起した知識を考慮して実装
-3. upsert     → 重要な決定事項を記録
+2. observe    → 会話ログ・作業メモ・機密を含む生データを一時記録
+3. upsert     → project/principle の durable な決定事項だけを記録
 4. feedback   → 知識の有用性をフィードバック
 ```
 
@@ -42,6 +42,25 @@
 
 ---
 
+## いつ observe するか
+
+以下の情報は `pce_memory_observe` で記録してください：
+
+- **session スコープの作業文脈** - 「このファイルを編集中」「デバッグ中の仮説」
+- **生ログや一時メモ** - チャット断片、ツール出力、HTTPレスポンス、ファイル読み取り結果
+- **secret/PII を含む可能性がある内容** - fail-safe に一時保存し、durable claim 化しない
+
+```json
+// 例: セッション作業メモを一時記録
+{
+  "source_type": "chat",
+  "content": "Issue #65 の observe 互換経路を削除中",
+  "extract": { "mode": "noop" }
+}
+```
+
+---
+
 ## いつ upsert するか
 
 以下の情報を `pce_memory_upsert` で記録してください：
@@ -60,8 +79,8 @@
 
 ### kind: task（タスク）
 
-- 進行中の作業（「認証機能を実装中」）
-- TODO項目（「エラーハンドリングを追加する必要がある」）
+- プロジェクト横断で再利用したい作業状態（「認証機能の移行は段階リリース前提」）
+- durable に残すべき TODO/運用メモ（「エラーハンドリング追加は次リリースの前提条件」）
 
 ### kind: policy_hint（ポリシーヒント）
 
@@ -90,7 +109,7 @@
 
 | scope       | 用途             | 例                                              |
 | ----------- | ---------------- | ----------------------------------------------- |
-| `session`   | 今回の会話限定   | 「このファイルを編集中」「デバッグ中の仮説」    |
+| `session`   | 今回の会話限定   | `upsert` ではなく `observe` を使う             |
 | `project`   | プロジェクト固有 | 「JWTで認証」「Vitestでテスト」「REST API設計」 |
 | `principle` | 普遍的原則       | 「TDDで開発」「SOLID原則を遵守」                |
 
@@ -103,7 +122,7 @@
 | `public`   | 公開可能     | OSSライブラリの使い方、一般的な技術情報    |
 | `internal` | 社内限定     | 内部API仕様、アーキテクチャ決定            |
 | `pii`      | 個人情報含む | ユーザー名、メールアドレスを含む文脈       |
-| `secret`   | 機密情報     | APIキー、認証情報（※記録しないことを推奨） |
+| `secret`   | 機密情報     | APIキー、認証情報（`upsert` せず `observe` を使用） |
 
 ---
 
@@ -144,7 +163,10 @@ Agent:
 3. upsert({
      text: "認証トークンは15分で期限切れ、リフレッシュトークンは7日",
      kind: "fact",
-     scope: "project"
+     scope: "project",
+     boundary_class: "internal",
+     provenance: { "at": "2025-11-27T15:00:00Z", "actor": "claude" },
+     content_hash: "sha256:..."
    })
    → 新しい決定を記録
 
@@ -163,10 +185,20 @@ Agent:
 
 2. 原因を特定して修正
 
-3. upsert({
+3. observe({
+     source_type: "chat",
+     content: "JWTのtimezone不一致でログイン失敗。UTC統一で再現を止めた",
+     extract: { "mode": "noop" }
+   })
+   → セッション文脈を一時記録
+
+4. upsert({
      text: "JWTのtimezone不一致でログイン失敗する問題があった。UTCに統一",
      kind: "fact",
-     scope: "project"
+     scope: "project",
+     boundary_class: "internal",
+     provenance: { "at": "2025-11-27T15:30:00Z", "actor": "claude" },
+     content_hash: "sha256:..."
    })
    → 解決策を記録（将来の参考に）
 ```
@@ -187,7 +219,7 @@ Agent:
 
 ## 注意事項
 
-- **secret は記録しない**: APIキー、パスワード等は upsert しないでください
+- **secret は upsert しない**: APIキー、パスワード等は durable claim にせず、必要なら observe で最小限に扱ってください
 - **content_hash は必須**: 重複防止のため、テキストのSHA256ハッシュを含めてください
 - **provenance を明記**: いつ、誰が、なぜその知識を記録したか追跡可能にしてください
 - **過度な記録は避ける**: 全ての会話を記録するのではなく、重要な決定のみを厳選してください

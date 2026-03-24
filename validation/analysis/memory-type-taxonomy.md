@@ -1,5 +1,7 @@
 # Memory Type Taxonomy Validation
 
+> Historical note: promotion and lifecycle observations below describe the pre-v2 transition period unless explicitly noted otherwise.
+
 ## Current Repository Signals
 
 - The user-facing workflow currently presents four claim kinds: `fact`, `preference`, `task`, and `policy_hint` in `AGENTS.md:43-63`.
@@ -63,7 +65,7 @@ Retrieval today is effectively "scope + boundary + text/vector similarity + crit
 
 | Question                                               | Current behavior                                                                                                                                                                                 | Assessment                |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| Do different kinds have different promotion rules?     | Not really. The only built-in auto-promotion path, `observe.extract.mode=single_claim_v0`, always creates `kind='fact'` and `scope='session'` in `apps/pce-memory/src/core/handlers.ts:797-807`. | Weak mapping.             |
+| Do different kinds have different promotion rules?     | Historically no. The old observe extraction shortcut always created `kind='fact'` and `scope='session'`, which was a weak mapping. | Weak mapping.             |
 | Do different kinds have different update rules?        | No. Feedback updates `utility`, `confidence`, and sometimes `recency_anchor` uniformly across all claims in `apps/pce-memory/src/store/feedback.ts:10-61`.                                       | Weak mapping.             |
 | Is task completion or task staleness modeled?          | Not in code. The review doc explicitly calls out the need for `task` completion handling in `docs/pce-memory-usefulness-review.ja.md:114-117`.                                                   | Missing.                  |
 | Are session/project/principle TTLs enforced on claims? | The policy defines scope TTL defaults in `packages/pce-policy-schemas/src/defaults.ts:7-10`, but claim rows have no per-claim expiry field in `apps/pce-memory/src/db/schema.sql:2-18`.          | Partial and inconsistent. |
@@ -141,7 +143,7 @@ Adopt a two-axis model:
    - Today `apps/pce-memory/src/domain/types.ts:1-22` does not define claim kind at all, so the taxonomy is duplicated across docs, handlers, sync schemas, and rerank code.
 
 2. Make promotion explicit by type.
-   - `observe.extract.mode=single_claim_v0` should stop always promoting to `fact/session` and should instead emit a typed promotion candidate or queue entry.
+   - Observe should stay raw-only, and promotion should emit a typed candidate or queue entry instead of forcing `fact/session`.
 
 3. Give `working_state` real lifecycle metadata.
    - Add at minimum `status`, `last_confirmed_at`, and a tombstone or completion path.
@@ -165,7 +167,7 @@ To make the recommendations actionable, the smallest repository-aligned change s
 
 1. Add `ClaimKind` and `MemoryType` definitions to `apps/pce-memory/src/domain/types.ts`, then import them from `apps/pce-memory/src/core/handlers.ts` and `apps/pce-memory/src/sync/schemas.ts` instead of repeating string literals.
 2. Extend the durable claim shape with an optional `memory_type` field in `apps/pce-memory/src/db/schema.sql`, `apps/pce-memory/src/store/claims.ts`, `apps/pce-memory/src/core/handlers.ts`, and `apps/pce-memory/src/sync/schemas.ts`.
-3. Change `pce_memory_observe` so `single_claim_v0` either emits a typed promotion candidate or accepts a caller-supplied target type instead of always forcing `fact/session`.
+3. Keep `pce_memory_observe` raw-only and route durable promotion through a typed promotion candidate instead of forcing `fact/session`.
 4. Extend `pce_memory_activate` and the hybrid search path to accept optional `kind` and `memory_type` filters, plus deterministic prepend rules for `norm`.
 5. Add at least one task-lifecycle path for `working_state`: open, complete, and stale or tombstoned. The existing sync tombstone shape is a reasonable starting point.
 6. Update docs and validation prompts last, after runtime types and MCP schemas stop drifting.
