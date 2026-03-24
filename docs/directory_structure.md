@@ -19,7 +19,9 @@ pce/
 ├─ tools/
 │  └─ create-pce-memory/         # npx スキャフォルダ（@caphtech/create-pce-memory）
 ├─ policy/                       # 既定ポリシー（base.yaml）
+├─ scripts/                      # 開発補助・ローカル検証スクリプト
 ├─ docs/                         # 仕様・クイックスタート・運用ガイド
+├─ validation/                   # 検証タスクとローカル実行結果
 ├─ .github/workflows/            # CI（差分ビルド/テスト）
 ├─ package.json                  # ルート scripts（ワークスペース管理のみ）
 ├─ pnpm-workspace.yaml           # ワークスペース定義（apps/packages/tools）
@@ -161,6 +163,8 @@ tools/create-pce-memory/
 - `pnpm dev` … 既定で `apps/pce-memory` の **stdio 起動**
 - `pnpm dev:http` … HTTP/WS 起動（任意）
 - `pnpm -r build / test / lint` … ワークスペース一括
+- `pnpm local:codex / local:claude` … Ollama を使ったローカル検証セッション起動
+- `pnpm local:validation:smoke` … ローカル検証用の canonical smoke task を実行
 
 ---
 
@@ -185,6 +189,7 @@ tools/create-pce-memory/
 ## 9. 参考ドキュメント
 
 - Quickstart: `docs/mcp_quickstart.md`
+- Local validation: `docs/local-validation-ollama.md`
 - MCP Tools Spec: `docs/mcp-tools.md`
 - Boundary/Policy: `docs/boundary-policy.md`
 - Vision/Model: `docs/pce-memory-vision.ja.md`, `docs/pce-model.ja.md`, `docs/pce.md`

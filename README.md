@@ -35,7 +35,8 @@ pce-memory/
 │   ├── mcp-tools.md
 │   ├── boundary-policy.md
 │   └── activation-ranking.md
-└── tools/                   # Development tools (TBD)
+├── scripts/                 # Development and local validation helpers
+└── validation/              # Local validation tasks and result artifacts
 ```
 
 ## Quick Start
@@ -89,6 +90,23 @@ pnpm format:check
 # Clean build artifacts
 pnpm clean
 ```
+
+### Local Architecture Validation with Ollama
+
+The repository includes a documented local validation workflow for architecture experiments using Ollama and `qwen3.5:122b-a10b`.
+
+```bash
+# Interactive Codex against Ollama
+pnpm local:codex
+
+# Interactive Claude Code through Ollama launch integration
+pnpm local:claude
+
+# Canonical smoke task
+pnpm local:validation:smoke
+```
+
+See [docs/local-validation-ollama.md](docs/local-validation-ollama.md) for machine assumptions, launch recipes, known limitations, and result capture conventions.
 
 ## MCP Tools
 
@@ -191,6 +209,7 @@ MIT License - see [LICENSE](LICENSE) for details
 - [Vision & Mission](docs/pce-memory-vision.md)
 - [Usefulness Review (JA)](docs/pce-memory-usefulness-review.ja.md)
 - [Core Types](docs/core-types.md)
+- [Local Validation with Ollama](docs/local-validation-ollama.md)
 - [MCP Tools](docs/mcp-tools.md)
 - [Boundary Policy](docs/boundary-policy.md)
 - [Activation Ranking](docs/activation-ranking.md)

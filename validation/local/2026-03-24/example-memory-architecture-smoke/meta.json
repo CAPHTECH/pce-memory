@@ -1,0 +1,16 @@
+{
+  "agent": "codex",
+  "model": "qwen3.5:122b-a10b",
+  "ollama_version": "0.17.7",
+  "task_id": "memory-architecture-smoke",
+  "run_id": "example-memory-architecture-smoke",
+  "run_date": "2026-03-24",
+  "started_at": "2026-03-24T06:00:00Z",
+  "runtime_seconds": 142,
+  "success": true,
+  "status": "success",
+  "summary_path": "summary.md",
+  "prompt_path": "prompt.md",
+  "log_path": "run.log",
+  "notes": "Checked-in sample artifact that demonstrates the expected output format. This is not a benchmark result."
+}
