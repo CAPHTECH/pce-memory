@@ -142,29 +142,36 @@ export interface AcceptPromotionQueueInput {
 export async function acceptPromotionQueueRow(
   id: string,
   input: AcceptPromotionQueueInput
-): Promise<void> {
+): Promise<boolean> {
   const conn = await getConnection();
   if (input.provenance !== undefined) {
-    await conn.run(
+    const reader = await conn.runAndReadAll(
       `UPDATE promotion_queue
        SET status = 'accepted',
            accepted_claim_id = $1,
            resolved_at = $2,
            reviewers = $3,
            provenance = $4
-       WHERE id = $5`,
+       WHERE id = $5
+         AND status = 'pending'
+       RETURNING id`,
       [input.accepted_claim_id, input.resolved_at, input.reviewers ?? null, input.provenance, id]
     );
-    return;
+    const rows = reader.getRowObjects() as Array<{ id: string }>;
+    return rows.length > 0;
   }
 
-  await conn.run(
+  const reader = await conn.runAndReadAll(
     `UPDATE promotion_queue
      SET status = 'accepted',
          accepted_claim_id = $1,
          resolved_at = $2,
          reviewers = $3
-     WHERE id = $4`,
+     WHERE id = $4
+       AND status = 'pending'
+     RETURNING id`,
     [input.accepted_claim_id, input.resolved_at, input.reviewers ?? null, id]
   );
+  const rows = reader.getRowObjects() as Array<{ id: string }>;
+  return rows.length > 0;
 }

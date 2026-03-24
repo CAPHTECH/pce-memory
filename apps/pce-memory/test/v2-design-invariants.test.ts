@@ -28,6 +28,10 @@ function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
   return result.structuredContent!;
 }
 
+function isoOffset(msOffset: number): string {
+  return new Date(Date.now() + msOffset).toISOString();
+}
+
 describe('v2 design invariants', () => {
   it('raw observe cannot create durable claims', async () => {
     await applyPolicy();
@@ -144,7 +148,7 @@ describe('v2 design invariants', () => {
     const promote = expectSuccess(
       await dispatchTool('pce_memory_promote', {
         candidate_id: distill.candidate_id,
-        provenance: { at: '2026-03-24T12:00:00.000Z', actor: 'claude' },
+        provenance: { at: isoOffset(-60_000), actor: 'claude' },
       })
     );
 
@@ -164,7 +168,7 @@ describe('v2 design invariants', () => {
       await dispatchTool('pce_memory_rollback', {
         claim_id: promote.claim_id,
         reason: 'superseded by a safer policy',
-        provenance: { at: '2026-03-24T13:00:00.000Z', actor: 'claude', note: 'invalidated' },
+        provenance: { at: isoOffset(-30_000), actor: 'claude', note: 'invalidated' },
       })
     );
 
