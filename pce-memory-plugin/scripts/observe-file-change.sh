@@ -1,5 +1,5 @@
 #!/bin/bash
-# PostToolUse (Write|Edit) hook: Auto-observe significant file changes
+# PostToolUse (Write|Edit) hook: Auto-observe significant file changes (v2)
 
 INPUT=$(cat)
 
@@ -18,7 +18,7 @@ if [ "$SHOULD_OBSERVE" = true ]; then
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "Architecturally significant file changed. If this change involves a design decision, record it with pce_memory_upsert. API contracts, schema changes, config changes, and auth changes should be recorded. Update entities/relations as needed."
+    "additionalContext": "Architecturally significant file changed. If this change involves a design decision worth preserving: (1) Use pce_memory_observe to capture the raw change context. (2) If the decision is durable and confirmed, use pce_memory_upsert with kind=fact, scope=project, memory_type=knowledge, and provenance. For speculative or in-progress changes, observe only — do not upsert until the decision is confirmed. Update entities/relations as needed."
   }
 }
 EOF
