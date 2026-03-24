@@ -28,6 +28,8 @@ beforeEach(async () => {
 });
 
 describe('handleUpsert content_hash validation', () => {
+  const durableProvenance = { at: '2025-01-01T00:00:00.000Z' };
+
   it('auto-generates content_hash when not provided', async () => {
     const text = 'Test claim without explicit hash';
     const expectedHash = `sha256:${computeContentHash(text)}`;
@@ -37,6 +39,7 @@ describe('handleUpsert content_hash validation', () => {
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
+      provenance: durableProvenance,
       // content_hash is intentionally omitted
     });
 
@@ -53,6 +56,7 @@ describe('handleUpsert content_hash validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: expectedHash,
+      provenance: durableProvenance,
     });
 
     expect(duplicateResult.isError).toBeUndefined();
@@ -71,6 +75,7 @@ describe('handleUpsert content_hash validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: correctHash,
+      provenance: durableProvenance,
     });
 
     expect(result.isError).toBeUndefined();
@@ -89,6 +94,7 @@ describe('handleUpsert content_hash validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: wrongHash,
+      provenance: durableProvenance,
     });
 
     expect(result.isError).toBe(true);
@@ -109,6 +115,7 @@ describe('handleUpsert content_hash validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: dummyHash,
+      provenance: durableProvenance,
     });
 
     expect(result.isError).toBe(true);
@@ -129,6 +136,7 @@ describe('handleUpsert content_hash validation', () => {
       scope: 'project',
       boundary_class: 'internal',
       content_hash: wrongHash,
+      provenance: durableProvenance,
     });
 
     expect(result.isError).toBe(true);
@@ -149,6 +157,7 @@ describe('handleUpsert content_hash validation', () => {
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
+      provenance: durableProvenance,
     });
 
     expect(result.isError).toBeUndefined();
@@ -162,6 +171,7 @@ describe('handleUpsert content_hash validation', () => {
       kind: 'fact',
       scope: 'project',
       boundary_class: 'internal',
+      provenance: durableProvenance,
     });
 
     expect(result.isError).toBe(true);

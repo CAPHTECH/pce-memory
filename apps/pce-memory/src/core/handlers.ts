@@ -408,6 +408,26 @@ export async function handleUpsert(args: Record<string, unknown>) {
       );
     }
 
+    if (
+      (scope === 'project' || scope === 'principle') &&
+      (typeof provenance !== 'object' ||
+        provenance === null ||
+        typeof provenance.at !== 'string' ||
+        provenance.at.length === 0)
+    ) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'provenance.at is required for non-session scope claims',
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
     // Claim登録（EmbeddingServiceがあれば埋め込みも生成）
     const claimInput = {
       text: text!,
@@ -2687,7 +2707,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_upsert',
     description:
-      'Register a permanent knowledge claim (never auto-deleted). Use for verified decisions, resolved errors, architectural patterns. Requires provenance.at timestamp. Prefer over observe for long-term, validated knowledge. secret boundary_class is rejected by default; use observe for secret material.',
+      'Register a permanent knowledge claim (never auto-deleted). Use for verified decisions, resolved errors, architectural patterns. For project and principle scopes, provenance.at timestamp is required; session claims may omit provenance. Prefer over observe for long-term, validated knowledge. secret boundary_class is rejected by default; use observe for secret material.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2708,8 +2728,14 @@ export const TOOL_DEFINITIONS = [
         },
         provenance: {
           type: 'object',
+          description:
+            'Optional for session scope. project and principle claims must include provenance.at.',
           properties: {
-            at: { type: 'string', format: 'date-time' },
+            at: {
+              type: 'string',
+              format: 'date-time',
+              description: 'ISO8601 timestamp. Required for project and principle scopes.',
+            },
             actor: { type: 'string' },
             git: {
               type: 'object',
@@ -2724,7 +2750,6 @@ export const TOOL_DEFINITIONS = [
             note: { type: 'string' },
             signed: { type: 'boolean' },
           },
-          required: ['at'],
         },
         entities: {
           type: 'array',
@@ -2757,6 +2782,24 @@ export const TOOL_DEFINITIONS = [
         },
       },
       required: ['text', 'kind', 'scope', 'boundary_class'],
+      allOf: [
+        {
+          if: {
+            properties: {
+              scope: { enum: ['project', 'principle'] },
+            },
+            required: ['scope'],
+          },
+          then: {
+            required: ['provenance'],
+            properties: {
+              provenance: {
+                required: ['at'],
+              },
+            },
+          },
+        },
+      ],
     },
     outputSchema: {
       type: 'object',
