@@ -74,6 +74,13 @@ export interface UpsertResult {
   isNew: boolean;
 }
 
+export class ContentHashCollisionError extends Error {
+  constructor() {
+    super('content_hash collision: existing claim text differs for identical content_hash');
+    this.name = 'ContentHashCollisionError';
+  }
+}
+
 /**
  * Claimを登録（idempotent upsert）
  * 既存のcontent_hashがある場合は既存レコードを返す（isNew: false）
@@ -159,6 +166,9 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
     const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
     const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
     if (existing.length > 0 && existing[0]) {
+      if (existing[0].text !== c.text) {
+        throw new ContentHashCollisionError();
+      }
       return { claim: existing[0], isNew: false };
     }
 
@@ -187,6 +197,9 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
     const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
     const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
     if (existing.length > 0 && existing[0]) {
+      if (existing[0].text !== c.text) {
+        throw new ContentHashCollisionError();
+      }
       return { claim: existing[0], isNew: false };
     }
     throw e;
