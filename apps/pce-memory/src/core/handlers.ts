@@ -40,7 +40,6 @@ import {
 } from '../store/llmEntityExtractor.js';
 import { getEvidenceForClaims, insertEvidence } from '../store/evidence.js';
 import type { Evidence } from '../store/evidence.js';
-import { autoLinkClaimEntities } from '../store/entityExtractor.js';
 import {
   gcExpiredObservations,
   findObservationsByIds,
@@ -821,18 +820,6 @@ interface GraphMemoryResult {
   relationFailed: number;
 }
 
-function addGraphMemoryResults(
-  left: GraphMemoryResult,
-  right: GraphMemoryResult
-): GraphMemoryResult {
-  return {
-    entityCount: left.entityCount + right.entityCount,
-    entityFailed: left.entityFailed + right.entityFailed,
-    relationCount: left.relationCount + right.relationCount,
-    relationFailed: left.relationFailed + right.relationFailed,
-  };
-}
-
 async function processGraphMemory(
   claimId: string,
   isNew: boolean,
@@ -1103,12 +1090,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
       : await upsertClaim(claimInput);
 
     // Graph Memory処理（ヘルパー関数に委譲）
-    const manualGraphResult = await processGraphMemory(claim.id, isNew, entities, relations);
-    const shouldRunAutoExtraction = isNew && (!Array.isArray(entities) || entities.length === 0);
-    const autoGraphResult = shouldRunAutoExtraction
-      ? await autoLinkClaimEntities(claim.id, claim.text)
-      : { entityCount: 0, entityFailed: 0, relationCount: 0, relationFailed: 0 };
-    const graphResult = addGraphMemoryResults(manualGraphResult, autoGraphResult);
+    const graphResult = await processGraphMemory(claim.id, isNew, entities, relations);
 
     // スコープへのリソース登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
@@ -2211,8 +2193,6 @@ export async function handlePromote(args: Record<string, unknown>) {
     if (promotedClaimConflict) {
       throw new Error(promotedClaimConflict);
     }
-
-    await autoLinkClaimEntities(claim.id, claim.text);
 
     if (isNew) {
       const evidenceSources = new Set(sourceObservationIds);
