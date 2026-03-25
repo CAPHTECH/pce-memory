@@ -253,6 +253,60 @@ describe('E2E activate intent', () => {
     );
   });
 
+  it('POLICY_CHECK suppresses a semantically similar task decoy from the top-3', async () => {
+    const query = 'policy-fixture-alpha guardrail';
+    const normIds = [
+      await createClaim({
+        text: `${query} authentication policy mfa required before admin access`,
+        kind: 'policy_hint',
+        memory_type: 'norm',
+        scope: 'principle',
+        critic: 0.66,
+      }),
+      await createClaim({
+        text: `${query} authentication policy mfa enforced during token rotation`,
+        kind: 'policy_hint',
+        memory_type: 'norm',
+        scope: 'project',
+        critic: 0.64,
+      }),
+      await createClaim({
+        text: `${query} authentication policy mfa exception requires security review`,
+        kind: 'policy_hint',
+        memory_type: 'norm',
+        scope: 'project',
+        critic: 0.62,
+      }),
+    ];
+    const taskId = await createClaim({
+      text: `${query} authentication policy mfa rollout task for backlog grooming`,
+      kind: 'task',
+      memory_type: 'working_state',
+      scope: 'project',
+      critic: 0.94,
+    });
+
+    const base = await activate({ q: query, scope: ['project', 'principle'], top_k: 4 });
+    expect(claimIds(base).slice(0, 3)).toContain(taskId);
+
+    const policyCheck = await activate({
+      q: query,
+      scope: ['project', 'principle'],
+      intent: 'policy_check',
+      top_k: 4,
+    });
+
+    expect(policyCheck.intent).toBe('policy_check');
+    expect(claimIds(policyCheck).slice(0, 3)).toEqual(normIds);
+    expect(claimIds(policyCheck).slice(0, 3)).not.toContain(taskId);
+
+    const taskIndex = claimIds(policyCheck).indexOf(taskId);
+    expect(taskIndex === -1 || taskIndex > 2).toBe(true);
+    expect(policyCheck.claims.slice(0, 3).every((item) => item.claim.memory_type === 'norm')).toBe(
+      true
+    );
+  });
+
   it('DESIGN_DECISION ranks knowledge above evidence', async () => {
     const query = 'design decision fixture';
     const evidenceId = await createClaim({
