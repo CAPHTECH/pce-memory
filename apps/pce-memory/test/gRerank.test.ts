@@ -23,6 +23,7 @@ import {
   calculateUsageTermBreakdown,
   MAX_RETRIEVAL_BOOST,
   MIN_USAGE_DECAY,
+  MIN_RETRIEVAL_COUNT_FOR_BOOST,
 } from '../src/store/rerank.js';
 
 describe('sigmoid function', () => {
@@ -341,9 +342,9 @@ describe('calculateScoreBreakdown function', () => {
 describe('calculateUsageTermBreakdown function', () => {
   const now = new Date('2026-03-25T00:00:00.000Z').getTime();
 
-  it('uses last_retrieved_at when available', () => {
+  it('uses last_retrieved_at when available and count exceeds threshold', () => {
     const breakdown = calculateUsageTermBreakdown({
-      retrievalCount: 3,
+      retrievalCount: 15,
       lastRetrievedAt: '2026-03-25T00:00:00.000Z',
       createdAt: '2026-03-01T00:00:00.000Z',
       nowMs: now,
@@ -351,7 +352,8 @@ describe('calculateUsageTermBreakdown function', () => {
 
     expect(breakdown.usage_anchor_source).toBe('last_retrieved_at');
     expect(breakdown.usage_decay).toBeCloseTo(1.0, 10);
-    expect(breakdown.retrieval_boost).toBeCloseTo(1.1, 10);
+    // log2(16) * 0.1 = 4.0 * 0.1 = 0.4 → 1.4
+    expect(breakdown.retrieval_boost).toBeCloseTo(1.4, 10);
   });
 
   it('falls back to created_at for never-retrieved claims', () => {
@@ -367,6 +369,27 @@ describe('calculateUsageTermBreakdown function', () => {
     expect(breakdown.usage_decay).toBeGreaterThanOrEqual(MIN_USAGE_DECAY);
     expect(breakdown.usage_decay).toBe(1.0);
     expect(breakdown.retrieval_boost).toBe(1.0);
+  });
+
+  it('does not boost below minimum retrieval count threshold', () => {
+    const belowThreshold = calculateUsageTermBreakdown({
+      retrievalCount: MIN_RETRIEVAL_COUNT_FOR_BOOST - 1,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(belowThreshold.retrieval_boost).toBe(1.0);
+    expect(belowThreshold.retrieval_count).toBe(MIN_RETRIEVAL_COUNT_FOR_BOOST - 1);
+
+    const atThreshold = calculateUsageTermBreakdown({
+      retrievalCount: MIN_RETRIEVAL_COUNT_FOR_BOOST,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(atThreshold.retrieval_boost).toBeGreaterThan(1.0);
   });
 
   it('caps retrieval boost', () => {

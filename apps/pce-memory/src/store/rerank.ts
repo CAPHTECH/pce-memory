@@ -131,8 +131,9 @@ const POLICY_CHECK_ACTIVE_TASK_PENALTY = 0.1;
 export const USAGE_HALF_LIFE_DAYS = 30;
 export const USAGE_DECAY_FACTOR = 0.5;
 export const MIN_USAGE_DECAY = 0.5;
-export const RETRIEVAL_BOOST_WEIGHT = 0.05;
-export const MAX_RETRIEVAL_BOOST = 1.3;
+export const RETRIEVAL_BOOST_WEIGHT = 0.1;
+export const MAX_RETRIEVAL_BOOST = 2.0;
+export const MIN_RETRIEVAL_COUNT_FOR_BOOST = 10;
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
 const INTENT_PROFILES: Record<ActivateIntent, IntentProfile> = {
@@ -256,6 +257,7 @@ export function calculateUsageTermBreakdown(input: {
   minDecay?: number;
   boostWeight?: number;
   maxBoost?: number;
+  minCountForBoost?: number;
 }): UsageTermBreakdown {
   const nowMs =
     typeof input.nowMs === 'number' && Number.isFinite(input.nowMs) ? input.nowMs : Date.now();
@@ -281,6 +283,12 @@ export function calculateUsageTermBreakdown(input: {
     typeof input.maxBoost === 'number' && Number.isFinite(input.maxBoost)
       ? input.maxBoost
       : MAX_RETRIEVAL_BOOST;
+  const minCountForBoost =
+    typeof input.minCountForBoost === 'number' &&
+    Number.isFinite(input.minCountForBoost) &&
+    input.minCountForBoost >= 0
+      ? Math.floor(input.minCountForBoost)
+      : MIN_RETRIEVAL_COUNT_FOR_BOOST;
   const retrievalCount =
     Number.isFinite(input.retrievalCount) && input.retrievalCount > 0
       ? Math.floor(input.retrievalCount)
@@ -296,8 +304,12 @@ export function calculateUsageTermBreakdown(input: {
     lastRetrievedAtMs !== undefined
       ? clamp(1.0 - (days_since_anchor / usageHalfLifeDays) * decayFactor, minDecay, 1.0)
       : 1.0;
+  // Only apply boost when retrieval count exceeds the minimum threshold.
+  // This prevents a feedback loop where a single accidental retrieval
+  // permanently boosts a claim above more relevant results.
+  const effectiveCount = retrievalCount >= minCountForBoost ? retrievalCount : 0;
   const retrieval_boost = clamp(
-    1.0 + Math.log2(retrievalCount + 1) * boostWeight,
+    1.0 + Math.log2(effectiveCount + 1) * boostWeight,
     1.0,
     maxBoost
   );

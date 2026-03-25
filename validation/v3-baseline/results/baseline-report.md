@@ -1,6 +1,6 @@
 # V3 Baseline Benchmark
 
-Generated at: 2026-03-25T06:17:21.169Z
+Generated at: 2026-03-25T07:29:22.570Z
 
 This benchmark uses internal handler imports from `apps/pce-memory/src/`, an isolated `:memory:` DuckDB store per dimension, and a deterministic bag-of-words embedding service for repeatable local execution.
 
@@ -8,16 +8,16 @@ This benchmark uses internal handler imports from `apps/pce-memory/src/`, an iso
 
 | Dimension | Score | Metric |
 | --- | ---: | --- |
-| B1 Freshness | 90% | latest top-1 is newest version |
-| B2 Usage Learning | 0.062 | Spearman(freq, final rank) |
+| B1 Freshness | 100% | latest top-1 is newest version |
+| B2 Usage Learning | 0.985 | Spearman(freq, final rank) |
 | B3 Maintenance | 0% | detected hint categories |
 | B4 Connectivity | 60% | related claim recall@5 |
 | B5 Combined | 87.5% | mean(freshness,relevance) |
 
 ## Notes
 
-- B1 latest top-1 rate: 90%. Pairwise latest-vs-stale win rate: 100%.
-- B2 final correlation: 0.062.
+- B1 latest top-1 rate: 100%. Pairwise latest-vs-stale win rate: 100%.
+- B2 final correlation: 0.985.
 - B3 detected categories: none.
 - B4 related claim recall@5: 60%.
 - B5 freshness pair accuracy: 100%. Relevance precision@8: 75%.
