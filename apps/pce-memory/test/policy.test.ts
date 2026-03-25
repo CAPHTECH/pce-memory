@@ -85,9 +85,7 @@ describe('loadLatestPolicy', () => {
       expect(result.right.config_json.retrieval?.hybrid?.alpha).toBe(
         defaultPolicy.retrieval?.hybrid?.alpha
       );
-      expect(result.right.config_json.extraction?.llm_enabled).toBe(
-        defaultPolicy.extraction?.llm_enabled
-      );
+      expect(result.right.config_json).not.toHaveProperty('extraction');
     }
   });
 });

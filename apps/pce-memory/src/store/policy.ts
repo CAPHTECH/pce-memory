@@ -46,7 +46,6 @@ function normalizePolicyDocument(
       version: config.version ?? version,
       boundary: config.boundary,
       ...(config.retrieval ? { retrieval: config.retrieval } : {}),
-      ...(config.extraction ? { extraction: config.extraction } : {}),
     };
   }
 
@@ -54,7 +53,6 @@ function normalizePolicyDocument(
     version,
     boundary: config as BoundaryPolicy,
     ...(defaultPolicy.retrieval ? { retrieval: defaultPolicy.retrieval } : {}),
-    ...(defaultPolicy.extraction ? { extraction: defaultPolicy.extraction } : {}),
   };
 }
 

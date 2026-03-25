@@ -75,6 +75,13 @@
 - すでに distill 済みとみなせる durable knowledge
 - `project` または `principle` に置くべき確定事項
 - provenance を付けて追跡可能にしたい事実・好み・手順・ポリシー
+- 技術・ファイル・概念の関係が明確な場合は、`entities` / `relations` も同じ `upsert` に含めてください
+
+補足:
+
+- `entities` の典型例: technologies, files, modules, concepts
+- `relations` の典型例: `USES`, `IMPLEMENTS`, `DEPENDS_ON`
+- MCPサーバー側で自動抽出される前提にしないでください。必要な graph 情報はクライアントが明示します
 
 ### kind: fact（事実）
 
@@ -111,7 +118,29 @@
     "actor": "claude",
     "note": "ADR-0002で決定"
   },
-  "content_hash": "sha256:..."
+  "content_hash": "sha256:...",
+  "entities": [
+    {
+      "id": "ent_fp_ts",
+      "type": "Artifact",
+      "name": "fp-ts",
+      "canonical_key": "fp-ts"
+    },
+    {
+      "id": "ent_either",
+      "type": "Concept",
+      "name": "Either",
+      "canonical_key": "either"
+    }
+  ],
+  "relations": [
+    {
+      "id": "rel_fp_ts_implements_either",
+      "src_id": "ent_fp_ts",
+      "dst_id": "ent_either",
+      "type": "IMPLEMENTS"
+    }
+  ]
 }
 ```
 

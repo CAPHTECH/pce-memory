@@ -175,6 +175,49 @@ Use `pce_memory_upsert` only for already-distilled durable knowledge when the fu
 - Reviewed principle/policy knowledge (`scope: principle`)
 - Optional graph updates through `pce_memory_upsert_entity` / `pce_memory_upsert_relation`
 
+### Graph Guidance
+
+- If the durable knowledge already identifies concrete technologies, files, services, or concepts, prefer putting `entities` and `relations` directly on `pce_memory_upsert`.
+- Do not rely on the MCP server to extract graph data automatically. The client should supply it when the structure is obvious.
+
+### Example
+
+```json
+{
+  "text": "The retrieval pipeline uses apps/pce-memory/src/store/hybridSearch.ts to expand queries with graph neighbors before reranking.",
+  "kind": "fact",
+  "scope": "project",
+  "boundary_class": "internal",
+  "memory_type": "knowledge",
+  "provenance": {
+    "at": "2026-03-25T00:00:00Z",
+    "actor": "claude"
+  },
+  "entities": [
+    {
+      "id": "ent_hybrid_search",
+      "type": "Artifact",
+      "name": "apps/pce-memory/src/store/hybridSearch.ts",
+      "canonical_key": "apps/pce-memory/src/store/hybridsearch.ts"
+    },
+    {
+      "id": "ent_query_expansion",
+      "type": "Concept",
+      "name": "query expansion",
+      "canonical_key": "query-expansion"
+    }
+  ],
+  "relations": [
+    {
+      "id": "rel_hybrid_search_uses_query_expansion",
+      "src_id": "ent_hybrid_search",
+      "dst_id": "ent_query_expansion",
+      "type": "USES"
+    }
+  ]
+}
+```
+
 ### Rejections and Guardrails
 
 - `scope: session` is rejected. Use `pce_memory_observe` for session-scoped working context.

@@ -27,17 +27,11 @@ import {
 import {
   upsertEntity,
   linkClaimEntity,
-  findEntityByCanonicalKey,
   queryEntities,
 } from '../store/entities.js';
 import type { EntityInput, EntityQueryFilters } from '../store/entities.js';
 import { upsertRelation, queryRelations } from '../store/relations.js';
 import type { RelationInput, RelationQueryFilters } from '../store/relations.js';
-import {
-  extractEntitiesWithLLM,
-  type EntityCandidate,
-  type RelationCandidate,
-} from '../store/llmEntityExtractor.js';
 import { getEvidenceForClaims, insertEvidence } from '../store/evidence.js';
 import type { Evidence } from '../store/evidence.js';
 import {
@@ -90,7 +84,6 @@ import * as E from 'fp-ts/Either';
 
 import {
   applyPolicyOp,
-  getExtractionPolicy,
   getPolicy,
   getRetrievalPolicy,
   getPolicyVersion,
@@ -548,11 +541,6 @@ function parseJsonObject<T>(value: string | null | undefined, fallback: T): T {
   }
 }
 
-function parseJsonArray<T>(value: string | null | undefined): T[] {
-  const parsed = parseJsonObject<unknown>(value, []);
-  return Array.isArray(parsed) ? (parsed as T[]) : [];
-}
-
 function validateRequiredProvenance(
   provenance: unknown
 ): { ok: true; value: Provenance } | { ok: false; message: string } {
@@ -855,67 +843,6 @@ async function processGraphMemory(
   }
 
   return { entityCount, entityFailed, relationCount, relationFailed };
-}
-
-function buildGeneratedEntityId(type: EntityInput['type'], canonicalKey: string): string {
-  return `ent_${computeContentHash(`entity:${type}:${canonicalKey}`).slice(0, 16)}`;
-}
-
-function buildGeneratedRelationId(type: string, srcId: string, dstId: string): string {
-  return `rel_${computeContentHash(`relation:${type}:${srcId}:${dstId}`).slice(0, 16)}`;
-}
-
-async function buildGraphInputsFromCandidates(
-  entityCandidates: EntityCandidate[],
-  relationCandidates: RelationCandidate[],
-  claimId: string
-): Promise<{ entities: EntityInput[]; relations: RelationInput[] }> {
-  const entitiesById = new Map<string, EntityInput>();
-  const entityIdsByKey = new Map<string, string>();
-
-  for (const candidate of entityCandidates) {
-    const existingEntity = await findEntityByCanonicalKey(candidate.canonical_key);
-    const entityId =
-      existingEntity?.id ?? buildGeneratedEntityId(candidate.type, candidate.canonical_key);
-    entityIdsByKey.set(candidate.canonical_key, entityId);
-
-    const existingInput = entitiesById.get(entityId);
-    const mergedAttrs =
-      existingInput?.attrs || candidate.attrs
-        ? { ...(existingInput?.attrs ?? {}), ...(candidate.attrs ?? {}) }
-        : undefined;
-    entitiesById.set(entityId, {
-      id: entityId,
-      type: candidate.type,
-      name: candidate.name,
-      canonical_key: candidate.canonical_key,
-      ...(mergedAttrs ? { attrs: mergedAttrs } : {}),
-    });
-  }
-
-  const relationsById = new Map<string, RelationInput>();
-  for (const candidate of relationCandidates) {
-    const srcId = entityIdsByKey.get(candidate.src);
-    const dstId = entityIdsByKey.get(candidate.dst);
-    if (!srcId || !dstId || srcId === dstId) {
-      continue;
-    }
-
-    const relationId = buildGeneratedRelationId(candidate.type, srcId, dstId);
-    relationsById.set(relationId, {
-      id: relationId,
-      src_id: srcId,
-      dst_id: dstId,
-      type: candidate.type,
-      evidence_claim_id: claimId,
-      ...(candidate.props ? { props: candidate.props } : {}),
-    });
-  }
-
-  return {
-    entities: [...entitiesById.values()],
-    relations: [...relationsById.values()],
-  };
 }
 
 // ========== Handler Implementations ==========
@@ -1845,22 +1772,6 @@ export async function handleDistill(args: Record<string, unknown>) {
       },
       policy
     );
-    const extractionPolicy = getExtractionPolicy();
-    let proposedEntities: EntityCandidate[] = [];
-    let proposedRelations: RelationCandidate[] = [];
-    if (extractionPolicy.llm_enabled === true) {
-      const extractionResult = await extractEntitiesWithLLM(distilledText, {
-        ...(typeof extractionPolicy.ollama_endpoint === 'string' &&
-        extractionPolicy.ollama_endpoint.length > 0
-          ? { ollamaEndpoint: extractionPolicy.ollama_endpoint }
-          : {}),
-        ...(typeof extractionPolicy.model === 'string' && extractionPolicy.model.length > 0
-          ? { model: extractionPolicy.model }
-          : {}),
-      });
-      proposedEntities = extractionResult.entities;
-      proposedRelations = extractionResult.relations;
-    }
 
     const createdAt = new Date().toISOString();
     const candidateId = `pq_${crypto.randomUUID().slice(0, 8)}`;
@@ -1888,8 +1799,6 @@ export async function handleDistill(args: Record<string, unknown>) {
       proposed_scope: resolvedScope,
       proposed_boundary_class: proposedBoundaryClass,
       proposed_memory_type: resolvedMemoryType ?? null,
-      proposed_entities: JSON.stringify(proposedEntities),
-      proposed_relations: JSON.stringify(proposedRelations),
       provenance: JSON.stringify({
         distilled_at: createdAt,
         note,
@@ -2143,8 +2052,6 @@ export async function handlePromote(args: Record<string, unknown>) {
     const promotionProvenance: Provenance = mergedPromotionNote
       ? { ...validatedProvenance.value, note: mergedPromotionNote }
       : validatedProvenance.value;
-    const queuedEntityCandidates = parseJsonArray<EntityCandidate>(candidate.proposed_entities);
-    const queuedRelationCandidates = parseJsonArray<RelationCandidate>(candidate.proposed_relations);
 
     const existingClaim = await findClaimByContentHash(candidate.candidate_hash);
     if (existingClaim) {
@@ -2230,18 +2137,6 @@ export async function handlePromote(args: Record<string, unknown>) {
       }
     }
 
-    const graphInputs = await buildGraphInputsFromCandidates(
-      queuedEntityCandidates,
-      queuedRelationCandidates,
-      claim.id
-    );
-    const graphResult = await processGraphMemory(
-      claim.id,
-      isNew,
-      graphInputs.entities,
-      graphInputs.relations
-    );
-
     const accepted = await acceptPromotionQueueRow(candidate.id, {
       accepted_claim_id: claim.id,
       reviewers: reviewers ? JSON.stringify(reviewers as string[]) : null,
@@ -2287,20 +2182,6 @@ export async function handlePromote(args: Record<string, unknown>) {
       is_new: isNew,
       promoted_from: candidate.id,
       rollback_token: claim.id,
-      ...(graphResult.entityCount > 0 ||
-      graphResult.entityFailed > 0 ||
-      graphResult.relationCount > 0 ||
-      graphResult.relationFailed > 0
-        ? {
-            graph: {
-              entities: { success: graphResult.entityCount, failed: graphResult.entityFailed },
-              relations: {
-                success: graphResult.relationCount,
-                failed: graphResult.relationFailed,
-              },
-            },
-          }
-        : {}),
       policy_version: getPolicyVersion(),
       state: getStateType(),
       request_id: reqId,

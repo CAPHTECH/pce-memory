@@ -47,6 +47,32 @@ describe('v2 schema primitives', () => {
         claims JSON
       )
     `);
+    await conn.run(`
+      CREATE TABLE IF NOT EXISTS promotion_queue (
+        id TEXT PRIMARY KEY,
+        source_layer TEXT NOT NULL,
+        target_layer TEXT NOT NULL,
+        source_ids TEXT NOT NULL,
+        distilled_text TEXT NOT NULL,
+        candidate_hash TEXT NOT NULL,
+        proposed_kind TEXT NOT NULL,
+        proposed_scope TEXT NOT NULL,
+        proposed_boundary_class TEXT NOT NULL,
+        proposed_memory_type TEXT,
+        proposed_entities TEXT NOT NULL DEFAULT '[]',
+        proposed_relations TEXT NOT NULL DEFAULT '[]',
+        provenance TEXT NOT NULL,
+        evidence_ids TEXT NOT NULL,
+        policy_version_checked TEXT,
+        boundary_check_result TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewers TEXT,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT,
+        accepted_claim_id TEXT,
+        rejected_reason TEXT
+      )
+    `);
 
     await initSchema();
 
@@ -86,8 +112,8 @@ describe('v2 schema primitives', () => {
         (row) => row.column_name
       )
     );
-    expect(promotionColumns.has('proposed_entities')).toBe(true);
-    expect(promotionColumns.has('proposed_relations')).toBe(true);
+    expect(promotionColumns.has('proposed_entities')).toBe(false);
+    expect(promotionColumns.has('proposed_relations')).toBe(false);
 
     const tableReader = await conn.runAndReadAll(`
       SELECT table_name
@@ -143,17 +169,6 @@ describe('v2 schema primitives', () => {
 
     expect(counts[0]?.promotion_queue_count).toBe(1);
     expect(counts[0]?.active_context_items_count).toBe(1);
-
-    const proposalReader = await conn.runAndReadAll(
-      'SELECT proposed_entities, proposed_relations FROM promotion_queue WHERE id = $1',
-      ['pq_test']
-    );
-    const proposalRows = proposalReader.getRowObjects() as Array<{
-      proposed_entities: string;
-      proposed_relations: string;
-    }>;
-    expect(proposalRows[0]?.proposed_entities).toBe('[]');
-    expect(proposalRows[0]?.proposed_relations).toBe('[]');
   });
 
   it('accepts memory_type on upsert and returns it from activate', async () => {
