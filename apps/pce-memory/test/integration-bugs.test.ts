@@ -312,16 +312,16 @@ describe('APPROACH 1: Full Lifecycle Stress', () => {
     for (let i = 0; i < 10; i++) {
       // observe
       const obs = await observeRaw(`lifecycle stress iteration ${i} unique content marker`);
-      expect(obs.observation_id).toBeTruthy();
+      expect(obs.observation_id).toMatch(/^obs_/);
 
       // distill
       const distill = await distillFromObservations([obs.observation_id]);
-      expect(distill.candidate_id).toBeTruthy();
+      expect(distill.candidate_id).toMatch(/^pq_/);
       expect(distill.status).toBe('pending');
 
       // promote
       const promote = await promoteCandidate(distill.candidate_id);
-      expect(promote.claim_id).toBeTruthy();
+      expect(promote.claim_id).toMatch(/^clm_/);
       expect(promote.is_new).toBe(true);
       claimIds.push(promote.claim_id);
 

@@ -223,8 +223,8 @@ describe('pce_memory_observe', () => {
       extract: { mode: 'noop' },
     });
 
-    expect(result.isError).toBeFalsy();
-    expect(result.structuredContent?.observation_id).toBeDefined();
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent?.observation_id).toMatch(/^obs_/);
   });
 
   // === 追加テスト: 状態・入力検証 ===
@@ -396,7 +396,7 @@ describe('pce_memory_observe', () => {
       extract: { mode: 'noop' },
     });
 
-    expect(result.isError).toBeFalsy();
+    expect(result.isError).toBeUndefined();
     const data = result.structuredContent!;
 
     const conn = await getConnection();
