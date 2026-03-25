@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-03-24T22:39:03.363Z",
+  "generated_at": "2026-03-25T05:11:56.572Z",
   "experiment_1": {
     "name": "Search Precision",
     "inserted_claims": 100,
-    "average_precision_at_3": 0.9333,
-    "average_ndcg_at_3": 0.9838,
+    "average_precision_at_3": 1,
+    "average_ndcg_at_3": 0.9944,
     "query_results": [
       {
         "name": "policy_check_norm_over_task",
@@ -14,26 +14,25 @@
         "kind_filter": null,
         "memory_type_filter": null,
         "expected_top3": [
-          "clm_a19d12fe",
-          "clm_a61f9d44",
-          "clm_001bcb2e"
+          "clm_28bdf644",
+          "clm_f5f612a4",
+          "clm_e5427968"
         ],
         "actual_top3": [
-          "clm_a19d12fe",
-          "clm_a61f9d44",
-          "clm_35131bdc"
+          "clm_28bdf644",
+          "clm_f5f612a4",
+          "clm_e5427968"
         ],
-        "precision_at_3": 0.6667,
-        "ndcg_at_3": 0.9468,
+        "precision_at_3": 1,
+        "ndcg_at_3": 1,
         "returned_kinds": [
           "policy_hint",
           "fact",
-          "task"
+          "preference"
         ],
         "returned_memory_types": [
           "norm",
-          "knowledge",
-          "working_state"
+          "knowledge"
         ],
         "assertion_details": {
           "normAboveTask": true,
@@ -41,39 +40,39 @@
         },
         "claims": [
           {
-            "id": "clm_a19d12fe",
+            "id": "clm_28bdf644",
             "text": "policy-fixture-alpha guardrail authentication policy mfa required before admin access",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.9608
+            "score": 0.7458
           },
           {
-            "id": "clm_a61f9d44",
+            "id": "clm_f5f612a4",
             "text": "policy-fixture-alpha guardrail authentication policy mfa enforced during token rotation",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.9525
+            "score": 0.7394
           },
           {
-            "id": "clm_35131bdc",
+            "id": "clm_e5427968",
+            "text": "policy-fixture-alpha guardrail authentication policy mfa implementation note for gateway",
+            "kind": "fact",
+            "memory_type": "knowledge",
+            "score": 0.4832
+          },
+          {
+            "id": "clm_6a9f96a4",
             "text": "procedure-fixture-delta database migration rollback requires approval board",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.5614
+            "score": 0.4358
           },
           {
-            "id": "clm_0712e55e",
+            "id": "clm_5428b08a",
             "text": "filler 43 travel itinerary passport gate astronomy nebula lens reference note",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.5584
-          },
-          {
-            "id": "clm_9fb6a804",
-            "text": "auth-fixture-epsilon authentication token refresh requires recent login",
-            "kind": "policy_hint",
-            "memory_type": "norm",
-            "score": 0.5363
+            "score": 0.4316
           }
         ]
       },
@@ -85,14 +84,14 @@
         "kind_filter": null,
         "memory_type_filter": null,
         "expected_top3": [
-          "clm_08518ac6",
-          "clm_a850edd3",
-          "clm_91637cd3"
+          "clm_fa5aa48a",
+          "clm_2855a1ff",
+          "clm_ad233977"
         ],
         "actual_top3": [
-          "clm_08518ac6",
-          "clm_a850edd3",
-          "clm_91637cd3"
+          "clm_fa5aa48a",
+          "clm_2855a1ff",
+          "clm_ad233977"
         ],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
@@ -112,39 +111,39 @@
         },
         "claims": [
           {
-            "id": "clm_08518ac6",
+            "id": "clm_fa5aa48a",
             "text": "resume-fixture-beta authentication rollout handoff next deployment step",
             "kind": "task",
             "memory_type": "working_state",
-            "score": 0.755
+            "score": 0.7588
           },
           {
-            "id": "clm_a850edd3",
+            "id": "clm_2855a1ff",
             "text": "resume-fixture-beta authentication rollout handoff current blocker and owner",
             "kind": "task",
             "memory_type": "working_state",
-            "score": 0.7511
+            "score": 0.7548
           },
           {
-            "id": "clm_91637cd3",
+            "id": "clm_ad233977",
             "text": "resume-fixture-beta authentication rollout handoff architecture note",
             "kind": "fact",
             "memory_type": "knowledge",
-            "score": 0.4794
+            "score": 0.4818
           },
           {
-            "id": "clm_ce20e65c",
+            "id": "clm_a5ed1cc3",
             "text": "resume-fixture-beta authentication rollout handoff requires approval checklist",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.4781
+            "score": 0.4805
           },
           {
-            "id": "clm_65b30aa5",
+            "id": "clm_ee99f88c",
             "text": "kind-fixture-gamma authentication compliance exception hotfix task",
             "kind": "task",
             "memory_type": "working_state",
-            "score": 0.4222
+            "score": 0.4243
           }
         ]
       },
@@ -158,14 +157,14 @@
         ],
         "memory_type_filter": null,
         "expected_top3": [
-          "clm_d60de07b",
-          "clm_29651842",
-          "clm_40826365"
+          "clm_ad797646",
+          "clm_7fa7d6dd",
+          "clm_13a65c17"
         ],
         "actual_top3": [
-          "clm_d60de07b",
-          "clm_40826365",
-          "clm_29651842"
+          "clm_ad797646",
+          "clm_13a65c17",
+          "clm_7fa7d6dd"
         ],
         "precision_at_3": 1,
         "ndcg_at_3": 0.9721,
@@ -175,7 +174,6 @@
         "returned_memory_types": [
           "norm",
           "knowledge",
-          "working_state",
           "procedure"
         ],
         "assertion_details": {
@@ -184,39 +182,39 @@
         },
         "claims": [
           {
-            "id": "clm_d60de07b",
+            "id": "clm_ad797646",
             "text": "kind-fixture-gamma authentication compliance exception expires after seven days",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.4543
+            "score": 0.4558
           },
           {
-            "id": "clm_40826365",
+            "id": "clm_13a65c17",
             "text": "kind-fixture-gamma authentication compliance exception requires security signoff",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.4339
+            "score": 0.4354
           },
           {
-            "id": "clm_29651842",
+            "id": "clm_7fa7d6dd",
             "text": "kind-fixture-gamma authentication compliance exception reference template",
             "kind": "policy_hint",
             "memory_type": "knowledge",
-            "score": 0.4334
+            "score": 0.4349
           },
           {
-            "id": "clm_e2f4e685",
-            "text": "filler 31 travel itinerary passport gate astronomy nebula lens reference note",
-            "kind": "policy_hint",
-            "memory_type": "working_state",
-            "score": 0.2803
-          },
-          {
-            "id": "clm_0712e55e",
+            "id": "clm_5428b08a",
             "text": "filler 43 travel itinerary passport gate astronomy nebula lens reference note",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.2664
+            "score": 0.2767
+          },
+          {
+            "id": "clm_5ea57c62",
+            "text": "filler 7 travel itinerary passport gate astronomy nebula lens reference note",
+            "kind": "policy_hint",
+            "memory_type": "procedure",
+            "score": 0.2613
           }
         ]
       },
@@ -230,14 +228,14 @@
           "procedure"
         ],
         "expected_top3": [
-          "clm_c1eb5e13",
-          "clm_67766ae0",
-          "clm_c953c964"
+          "clm_12766da6",
+          "clm_38c80891",
+          "clm_c972acfb"
         ],
         "actual_top3": [
-          "clm_c1eb5e13",
-          "clm_67766ae0",
-          "clm_c953c964"
+          "clm_12766da6",
+          "clm_38c80891",
+          "clm_c972acfb"
         ],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
@@ -256,35 +254,35 @@
         },
         "claims": [
           {
-            "id": "clm_c1eb5e13",
+            "id": "clm_12766da6",
             "text": "procedure-fixture-delta database migration rollback validation checklist",
             "kind": "fact",
             "memory_type": "procedure",
             "score": 0.4264
           },
           {
-            "id": "clm_67766ae0",
+            "id": "clm_38c80891",
             "text": "procedure-fixture-delta database migration rollback communication plan",
             "kind": "fact",
             "memory_type": "procedure",
             "score": 0.4226
           },
           {
-            "id": "clm_c953c964",
+            "id": "clm_c972acfb",
             "text": "procedure-fixture-delta database migration rollback step by step runbook",
             "kind": "fact",
             "memory_type": "procedure",
             "score": 0.4076
           },
           {
-            "id": "clm_f8c40d72",
+            "id": "clm_c7ce401a",
             "text": "filler 22 weather pressure front radar billing invoice ledger reference note",
             "kind": "preference",
             "memory_type": "procedure",
             "score": 0.223
           },
           {
-            "id": "clm_06d4ad69",
+            "id": "clm_5ea57c62",
             "text": "filler 7 travel itinerary passport gate astronomy nebula lens reference note",
             "kind": "policy_hint",
             "memory_type": "procedure",
@@ -300,14 +298,14 @@
         "kind_filter": null,
         "memory_type_filter": null,
         "expected_top3": [
-          "clm_9fb6a804",
-          "clm_2fa19bd0",
-          "clm_97e2ba44"
+          "clm_336fe164",
+          "clm_c29293da",
+          "clm_20d98186"
         ],
         "actual_top3": [
-          "clm_9fb6a804",
-          "clm_2fa19bd0",
-          "clm_97e2ba44"
+          "clm_336fe164",
+          "clm_c29293da",
+          "clm_20d98186"
         ],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
@@ -327,39 +325,39 @@
         },
         "claims": [
           {
-            "id": "clm_9fb6a804",
+            "id": "clm_336fe164",
             "text": "auth-fixture-epsilon authentication token refresh requires recent login",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.4931
+            "score": 0.4956
           },
           {
-            "id": "clm_2fa19bd0",
+            "id": "clm_c29293da",
             "text": "auth-fixture-epsilon authentication token refresh rotates refresh secrets",
             "kind": "fact",
             "memory_type": "knowledge",
-            "score": 0.4916
+            "score": 0.494
           },
           {
-            "id": "clm_97e2ba44",
+            "id": "clm_20d98186",
             "text": "auth-fixture-epsilon authentication token refresh invalidates stolen sessions",
             "kind": "fact",
             "memory_type": "knowledge",
-            "score": 0.4901
+            "score": 0.4925
           },
           {
-            "id": "clm_ce20e65c",
+            "id": "clm_a5ed1cc3",
             "text": "resume-fixture-beta authentication rollout handoff requires approval checklist",
             "kind": "policy_hint",
             "memory_type": "norm",
-            "score": 0.4434
+            "score": 0.4456
           },
           {
-            "id": "clm_65b30aa5",
+            "id": "clm_ee99f88c",
             "text": "kind-fixture-gamma authentication compliance exception hotfix task",
             "kind": "task",
             "memory_type": "working_state",
-            "score": 0.4358
+            "score": 0.438
           }
         ]
       }
@@ -380,27 +378,27 @@
         "signal_to_noise_ratio": "all_signal",
         "top_ids": [
           {
-            "id": "clm_6a4c4512",
+            "id": "clm_9d3bea57",
             "kind": "fact",
             "score": 0.5324
           },
           {
-            "id": "clm_21403181",
+            "id": "clm_a48dc027",
             "kind": "fact",
             "score": 0.5303
           },
           {
-            "id": "clm_3c671d36",
+            "id": "clm_e15bf6b6",
             "kind": "fact",
             "score": 0.5282
           },
           {
-            "id": "clm_1d8f4505",
+            "id": "clm_c50dc9f8",
             "kind": "fact",
             "score": 0.5261
           },
           {
-            "id": "clm_b8291a51",
+            "id": "clm_1e198924",
             "kind": "fact",
             "score": 0.524
           }
@@ -415,52 +413,52 @@
         "signal_to_noise_ratio": "all_signal",
         "top_ids": [
           {
-            "id": "clm_6a4c4512",
+            "id": "clm_9d3bea57",
             "kind": "fact",
             "score": 0.5324
           },
           {
-            "id": "clm_21403181",
+            "id": "clm_a48dc027",
             "kind": "fact",
             "score": 0.5303
           },
           {
-            "id": "clm_3c671d36",
+            "id": "clm_e15bf6b6",
             "kind": "fact",
             "score": 0.5282
           },
           {
-            "id": "clm_1d8f4505",
+            "id": "clm_c50dc9f8",
             "kind": "fact",
             "score": 0.5261
           },
           {
-            "id": "clm_b8291a51",
+            "id": "clm_1e198924",
             "kind": "fact",
             "score": 0.524
           },
           {
-            "id": "clm_75635305",
+            "id": "clm_04a4b047",
             "kind": "fact",
             "score": 0.5219
           },
           {
-            "id": "clm_0486a586",
+            "id": "clm_6b78e66d",
             "kind": "fact",
             "score": 0.5198
           },
           {
-            "id": "clm_3813610e",
+            "id": "clm_9d8238a5",
             "kind": "fact",
             "score": 0.5177
           },
           {
-            "id": "clm_58f097cb",
+            "id": "clm_3833a71c",
             "kind": "fact",
             "score": 0.5156
           },
           {
-            "id": "clm_9083b36e",
+            "id": "clm_7c92a943",
             "kind": "fact",
             "score": 0.4989
           }
@@ -468,59 +466,59 @@
       },
       {
         "top_k": 20,
-        "returned": 20,
+        "returned": 16,
         "durable_claims_in_top_k": 10,
-        "observations_in_top_k": 10,
-        "durable_share": 0.5,
-        "signal_to_noise_ratio": 1,
+        "observations_in_top_k": 6,
+        "durable_share": 0.625,
+        "signal_to_noise_ratio": 1.6667,
         "top_ids": [
           {
-            "id": "clm_6a4c4512",
+            "id": "clm_9d3bea57",
             "kind": "fact",
             "score": 0.5324
           },
           {
-            "id": "clm_21403181",
+            "id": "clm_a48dc027",
             "kind": "fact",
             "score": 0.5303
           },
           {
-            "id": "clm_3c671d36",
+            "id": "clm_e15bf6b6",
             "kind": "fact",
             "score": 0.5282
           },
           {
-            "id": "clm_1d8f4505",
+            "id": "clm_c50dc9f8",
             "kind": "fact",
             "score": 0.5261
           },
           {
-            "id": "clm_b8291a51",
+            "id": "clm_1e198924",
             "kind": "fact",
             "score": 0.524
           },
           {
-            "id": "clm_75635305",
+            "id": "clm_04a4b047",
             "kind": "fact",
             "score": 0.5219
           },
           {
-            "id": "clm_0486a586",
+            "id": "clm_6b78e66d",
             "kind": "fact",
             "score": 0.5198
           },
           {
-            "id": "clm_3813610e",
+            "id": "clm_9d8238a5",
             "kind": "fact",
             "score": 0.5177
           },
           {
-            "id": "clm_58f097cb",
+            "id": "clm_3833a71c",
             "kind": "fact",
             "score": 0.5156
           },
           {
-            "id": "clm_9083b36e",
+            "id": "clm_7c92a943",
             "kind": "fact",
             "score": 0.4989
           }
@@ -611,8 +609,7 @@
       "task_1d",
       "fact_30d",
       "task_1w",
-      "fact_90d",
-      "task_30d"
+      "fact_90d"
     ],
     "assertions": {
       "fact_recent_to_old_monotonic": true,
@@ -633,9 +630,9 @@
     "comparison": {
       "raw_observe_only": {
         "path": "raw_observe_only",
-        "observation_id": "obs_a160b12f",
-        "score": 1,
-        "top_match_id": "obs_a160b12f",
+        "observation_id": "obs_e8e2bfb6",
+        "score": 0.8,
+        "top_match_id": "obs_e8e2bfb6",
         "metadata": {
           "effective_boundary_class": "internal",
           "has_promotion_candidate": false,
@@ -646,16 +643,16 @@
       },
       "observe_distill_promote": {
         "path": "observe_distill_promote",
-        "observation_id": "obs_2eca08b4",
-        "candidate_id": "pq_84f86fb0",
-        "claim_id": "clm_c08324bb",
-        "score": 0.5255,
-        "top_match_id": "clm_c08324bb",
+        "observation_id": "obs_b33d173c",
+        "candidate_id": "pq_84a361ad",
+        "claim_id": "clm_05c15140",
+        "score": 0.6373,
+        "top_match_id": "clm_05c15140",
         "metadata": {
           "boundary_check_allowed": true,
           "has_promotion_candidate": true,
           "promotion_status": "accepted",
-          "accepted_claim_id": "clm_c08324bb",
+          "accepted_claim_id": "clm_05c15140",
           "evidence_count": 1,
           "evidence_source_types": [
             "observation"
@@ -665,9 +662,9 @@
       },
       "direct_upsert": {
         "path": "direct_upsert",
-        "claim_id": "clm_2c0a915b",
-        "score": 0.5255,
-        "top_match_id": "clm_2c0a915b",
+        "claim_id": "clm_aad457e6",
+        "score": 0.5518,
+        "top_match_id": "clm_aad457e6",
         "metadata": {
           "has_promotion_candidate": false,
           "has_boundary_validation_result": false,
@@ -709,27 +706,27 @@
       "session_1": {
         "findings": [
           {
-            "id": "s1-f31e6996",
-            "title": "Pagination Logic Requires Full Result Set Fetch",
-            "summary": "The hybridSearchPaginated function fetches the entire candidate pool using Number.MAX_SAFE_INTEGER when a cursor is present to correctly calculate has_more, potentially causing performance issues on large datasets.",
+            "id": "s1-6faefd0f",
+            "title": "MMR Re-ranking Logic Flaw",
+            "summary": "The `rerankWithMmr` function incorrectly includes the `tail` (results beyond `maxCandidates`) in the final output, bypassing the diversity filtering intended for the entire result set.",
             "anchors": [
-              "hybridSearchPaginated",
-              "fetchLimit",
-              "Number.MAX_SAFE_INTEGER",
-              "cursor"
+              "rerankWithMmr",
+              "head",
+              "tail",
+              "maxCandidates"
             ],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           },
           {
-            "id": "s1-5adb304b",
-            "title": "Vector Search Fails on Empty Vector Table",
-            "summary": "The vectorSearch function performs a pre-flight COUNT query on claim_vectors and returns an empty array immediately if the table is empty, bypassing any text-based fallback logic for that specific execution path.",
+            "id": "s1-a433d231",
+            "title": "Pagination Cursor Implementation Gap",
+            "summary": "Although the `PaginatedSearchResult` interface defines a `next_cursor` field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor.",
             "anchors": [
-              "vectorSearch",
-              "claim_vectors",
-              "COUNT(*)",
-              "validateEmbedding"
+              "PaginatedSearchResult",
+              "next_cursor",
+              "mergeResults",
+              "vectorSearch"
             ],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
@@ -738,72 +735,92 @@
       },
       "session_2": {
         "activate": {
-          "active_context_id": "ac_e4ab9850",
+          "active_context_id": "ac_dbdc8643",
           "claims": [
             {
               "claim": {
-                "id": "clm_c08a0f74",
-                "text": "retrieval correctness finding s1-5adb304b | apps/pce-memory/src/store/hybridSearch.ts session_1 | Vector Search Fails on Empty Vector Table | The vectorSearch function performs a pre-flight COUNT query on claim_vectors and returns an empty array immediately if the table is empty, bypassing any text-based fallback logic for that specific execution path. | anchors: vectorSearch, claim_vectors, COUNT(*), validateEmbedding",
+                "id": "clm_249a694e",
+                "text": "retrieval correctness finding s1-6faefd0f | apps/pce-memory/src/store/hybridSearch.ts session_1 | MMR Re-ranking Logic Flaw | The `rerankWithMmr` function incorrectly includes the `tail` (results beyond `maxCandidates`) in the final output, bypassing the diversity filtering intended for the entire result set. | anchors: rerankWithMmr, head, tail, maxCandidates",
                 "kind": "fact",
                 "scope": "project",
                 "boundary_class": "internal",
                 "memory_type": "knowledge",
-                "content_hash": "sha256:06726bf9f7bc2636ec6aaf92cdeb12b5b393855e0ebb3128e3ff8847f6734b2e",
+                "status": "active",
+                "content_hash": "sha256:942296f17443feec98bcb58a8dcf1301f2c2341c1ba8bcc00ce9871397d3da22",
                 "utility": 0,
                 "confidence": 0.5,
-                "created_at": "2026-03-25T07:39:31.594Z",
-                "updated_at": "2026-03-25T07:39:31.594Z",
-                "recency_anchor": "2026-03-25T07:39:31.594Z"
+                "created_at": "2026-03-25T14:12:53.598Z",
+                "updated_at": "2026-03-25T14:12:53.598Z",
+                "recency_anchor": "2026-03-25T14:12:53.598Z"
               },
-              "score": 0.5013253206899789,
+              "score": 0.5038561532357091,
               "source_layer": "meso",
               "rank": 1,
               "score_breakdown": {
                 "s_text": 0.9,
-                "s_vec": 0.8008341556153302,
-                "S": 0.8355422011499647,
+                "s_vec": 0.7458025720041733,
+                "S": 0.7997716718027127,
                 "g": {
                   "utility_term": 0.8,
                   "confidence_term": 0.75,
                   "recency_term": 1,
                   "g": 0.6000000000000001
                 },
-                "score_final": 0.5013253206899789
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.5038561532357091
               },
-              "selection_reason": "rank=1; layer=meso; score=0.5013; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.8008",
+              "selection_reason": "rank=1; layer=meso; score=0.5039; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7458",
               "evidences": []
             },
             {
               "claim": {
-                "id": "clm_fca8749b",
-                "text": "retrieval correctness finding s1-f31e6996 | apps/pce-memory/src/store/hybridSearch.ts session_1 | Pagination Logic Requires Full Result Set Fetch | The hybridSearchPaginated function fetches the entire candidate pool using Number.MAX_SAFE_INTEGER when a cursor is present to correctly calculate has_more, potentially causing performance issues on large datasets. | anchors: hybridSearchPaginated, fetchLimit, Number.MAX_SAFE_INTEGER, cursor",
+                "id": "clm_2e8835db",
+                "text": "retrieval correctness finding s1-a433d231 | apps/pce-memory/src/store/hybridSearch.ts session_1 | Pagination Cursor Implementation Gap | Although the `PaginatedSearchResult` interface defines a `next_cursor` field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor. | anchors: PaginatedSearchResult, next_cursor, mergeResults, vectorSearch",
                 "kind": "fact",
                 "scope": "project",
                 "boundary_class": "internal",
                 "memory_type": "knowledge",
-                "content_hash": "sha256:e0474165cd3ec27e1cf2e147f1f026f575998d2397158e92f49e6c9f21ad3399",
+                "status": "active",
+                "content_hash": "sha256:194e9a2d2abdef6cd41f0ed2ac11777c12269f7250ea9b5a5b750d4d254fdf9b",
                 "utility": 0,
                 "confidence": 0.5,
-                "created_at": "2026-03-25T07:39:31.584Z",
-                "updated_at": "2026-03-25T07:39:31.584Z",
-                "recency_anchor": "2026-03-25T07:39:31.584Z"
+                "created_at": "2026-03-25T14:12:53.604Z",
+                "updated_at": "2026-03-25T14:12:53.604Z",
+                "recency_anchor": "2026-03-25T14:12:53.604Z"
               },
-              "score": 0.4929657759906651,
+              "score": 0.5013965518117578,
               "source_layer": "meso",
               "rank": 2,
               "score_breakdown": {
                 "s_text": 0.9,
-                "s_vec": 0.7793994256170897,
-                "S": 0.8216096266511084,
+                "s_vec": 0.7397962193205316,
+                "S": 0.7958675425583456,
                 "g": {
                   "utility_term": 0.8,
                   "confidence_term": 0.75,
                   "recency_term": 1,
                   "g": 0.6000000000000001
                 },
-                "score_final": 0.4929657759906651
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.5013965518117578
               },
-              "selection_reason": "rank=2; layer=meso; score=0.4930; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7794",
+              "selection_reason": "rank=2; layer=meso; score=0.5014; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7398",
               "evidences": []
             }
           ],
@@ -811,32 +828,32 @@
           "has_more": false,
           "policy_version": "0.1",
           "state": "Ready",
-          "request_id": "a7fb57a7-f554-4839-9c4c-01916628d0f4",
-          "trace_id": "e71a8635-d8cb-4af1-a567-79ba25fe0740"
+          "request_id": "835c0761-d655-4455-af2d-8d9bc64db17f",
+          "trace_id": "2af46b68-1432-4a6d-98b8-b0702f263f57"
         },
         "findings": [
           {
-            "id": "s2-6813eee4",
-            "title": "Provenance Lineage Fragmentation in Promotion Queue",
-            "summary": "The promotion_queue table stores provenance as a TEXT column instead of JSON, unlike the claims table which uses a JSON column. This schema inconsistency risks data integrity during lineage tracking and complicates querying source evidence relationships defined in mcp-tools.md.",
+            "id": "s2-b023ceb4",
+            "title": "Missing Foreign Key Constraints on Evidence and Context Items",
+            "summary": "The schema defines `claim_id` in the `evidence` and `active_context_items` tables but lacks explicit FOREIGN KEY constraints. This absence prevents the database from enforcing referential integrity, risking orphaned records if a claim is deleted or tombstoned, which directly compromises retrieval lineage and correctness.",
             "anchors": [
-              "promotion_queue",
-              "provenance",
-              "claims",
-              "evidence"
+              "evidence",
+              "claim_id",
+              "active_context_items",
+              "active_context_id"
             ],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           },
           {
-            "id": "s2-41f3bbba",
-            "title": "Observation Content Scrubbing Impacts Auditability",
-            "summary": "The observations table allows the content column to be scrubbed (NULLed) after TTL expiration. While intended for storage optimization, this design choice permanently destroys the raw data required for retrospective observability and debugging of historical retrieval correctness issues.",
+            "id": "s2-5406087f",
+            "title": "Inconsistent Timestamp Data Types for Temporal Queries",
+            "summary": "The schema mixes `TIMESTAMP` and `TEXT` data types for temporal fields (e.g., `created_at` is `TIMESTAMP` in `claims` but `expires_at` is `TEXT` in `active_contexts`, and `created_at` is `TEXT` in `promotion_queue`). This inconsistency hinders accurate temporal sorting, TTL-based expiration logic, and recency calculations required for the `recency_anchor` column.",
             "anchors": [
-              "observations",
-              "content",
-              "expires_at",
-              "content_digest"
+              "claims",
+              "created_at",
+              "active_contexts",
+              "expires_at"
             ],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
@@ -845,138 +862,178 @@
       },
       "session_3": {
         "activate": {
-          "active_context_id": "ac_30c85ef1",
+          "active_context_id": "ac_610bb088",
           "claims": [
             {
               "claim": {
-                "id": "clm_c08a0f74",
-                "text": "retrieval correctness finding s1-5adb304b | apps/pce-memory/src/store/hybridSearch.ts session_1 | Vector Search Fails on Empty Vector Table | The vectorSearch function performs a pre-flight COUNT query on claim_vectors and returns an empty array immediately if the table is empty, bypassing any text-based fallback logic for that specific execution path. | anchors: vectorSearch, claim_vectors, COUNT(*), validateEmbedding",
+                "id": "clm_2e8835db",
+                "text": "retrieval correctness finding s1-a433d231 | apps/pce-memory/src/store/hybridSearch.ts session_1 | Pagination Cursor Implementation Gap | Although the `PaginatedSearchResult` interface defines a `next_cursor` field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor. | anchors: PaginatedSearchResult, next_cursor, mergeResults, vectorSearch",
                 "kind": "fact",
                 "scope": "project",
                 "boundary_class": "internal",
                 "memory_type": "knowledge",
-                "content_hash": "sha256:06726bf9f7bc2636ec6aaf92cdeb12b5b393855e0ebb3128e3ff8847f6734b2e",
+                "status": "active",
+                "content_hash": "sha256:194e9a2d2abdef6cd41f0ed2ac11777c12269f7250ea9b5a5b750d4d254fdf9b",
                 "utility": 0,
                 "confidence": 0.5,
-                "created_at": "2026-03-25T07:39:31.594Z",
-                "updated_at": "2026-03-25T07:39:31.594Z",
-                "recency_anchor": "2026-03-25T07:39:31.594Z"
+                "created_at": "2026-03-25T14:12:53.604Z",
+                "updated_at": "2026-03-25T14:12:53.604Z",
+                "recency_anchor": "2026-03-25T14:12:53.604Z"
               },
-              "score": 0.48875921163733677,
+              "score": 0.48931349605919844,
               "source_layer": "meso",
               "rank": 1,
               "score_breakdown": {
                 "s_text": 0.9,
-                "s_vec": 0.7686133631726582,
-                "S": 0.8145986860622279,
+                "s_vec": 0.7102893676659299,
+                "S": 0.7766880889828545,
                 "g": {
                   "utility_term": 0.8,
                   "confidence_term": 0.75,
                   "recency_term": 1,
                   "g": 0.6000000000000001
                 },
-                "score_final": 0.48875921163733677
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.48931349605919844
               },
-              "selection_reason": "rank=1; layer=meso; score=0.4888; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7686",
+              "selection_reason": "rank=1; layer=meso; score=0.4893; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7103",
               "evidences": []
             },
             {
               "claim": {
-                "id": "clm_ce4c05e5",
-                "text": "retrieval correctness finding s2-41f3bbba | apps/pce-memory/src/db/schema.sql session_2 | Observation Content Scrubbing Impacts Auditability | The observations table allows the content column to be scrubbed (NULLed) after TTL expiration. While intended for storage optimization, this design choice permanently destroys the raw data required for retrospective observability and debugging of historical retrieval correctness issues. | anchors: observations, content, expires_at, content_digest",
+                "id": "clm_249a694e",
+                "text": "retrieval correctness finding s1-6faefd0f | apps/pce-memory/src/store/hybridSearch.ts session_1 | MMR Re-ranking Logic Flaw | The `rerankWithMmr` function incorrectly includes the `tail` (results beyond `maxCandidates`) in the final output, bypassing the diversity filtering intended for the entire result set. | anchors: rerankWithMmr, head, tail, maxCandidates",
                 "kind": "fact",
                 "scope": "project",
                 "boundary_class": "internal",
                 "memory_type": "knowledge",
-                "content_hash": "sha256:a9685256b914b0bd7cf49d63a40ead6ed537c9a6ecc30b373b57df5ffa60f9e0",
+                "status": "active",
+                "content_hash": "sha256:942296f17443feec98bcb58a8dcf1301f2c2341c1ba8bcc00ce9871397d3da22",
                 "utility": 0,
                 "confidence": 0.5,
-                "created_at": "2026-03-25T07:39:45.480Z",
-                "updated_at": "2026-03-25T07:39:45.480Z",
-                "recency_anchor": "2026-03-25T07:39:45.480Z"
+                "created_at": "2026-03-25T14:12:53.598Z",
+                "updated_at": "2026-03-25T14:12:53.598Z",
+                "recency_anchor": "2026-03-25T14:12:53.598Z"
               },
-              "score": 0.4746731693999333,
+              "score": 0.4848011818437054,
               "source_layer": "meso",
               "rank": 2,
               "score_breakdown": {
                 "s_text": 0.9,
-                "s_vec": 0.732495306153675,
-                "S": 0.7911219489998887,
+                "s_vec": 0.6992702853326138,
+                "S": 0.7695256854661989,
                 "g": {
                   "utility_term": 0.8,
                   "confidence_term": 0.75,
                   "recency_term": 1,
                   "g": 0.6000000000000001
                 },
-                "score_final": 0.4746731693999333
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.4848011818437054
               },
-              "selection_reason": "rank=2; layer=meso; score=0.4747; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7325",
+              "selection_reason": "rank=2; layer=meso; score=0.4848; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.6993",
               "evidences": []
             },
             {
               "claim": {
-                "id": "clm_fca8749b",
-                "text": "retrieval correctness finding s1-f31e6996 | apps/pce-memory/src/store/hybridSearch.ts session_1 | Pagination Logic Requires Full Result Set Fetch | The hybridSearchPaginated function fetches the entire candidate pool using Number.MAX_SAFE_INTEGER when a cursor is present to correctly calculate has_more, potentially causing performance issues on large datasets. | anchors: hybridSearchPaginated, fetchLimit, Number.MAX_SAFE_INTEGER, cursor",
+                "id": "clm_bda0e952",
+                "text": "retrieval correctness finding s2-5406087f | apps/pce-memory/src/db/schema.sql session_2 | Inconsistent Timestamp Data Types for Temporal Queries | The schema mixes `TIMESTAMP` and `TEXT` data types for temporal fields (e.g., `created_at` is `TIMESTAMP` in `claims` but `expires_at` is `TEXT` in `active_contexts`, and `created_at` is `TEXT` in `promotion_queue`). This inconsistency hinders accurate temporal sorting, TTL-based expiration logic, and recency calculations required for the `recency_anchor` column. | anchors: claims, created_at, active_contexts, expires_at",
                 "kind": "fact",
                 "scope": "project",
                 "boundary_class": "internal",
                 "memory_type": "knowledge",
-                "content_hash": "sha256:e0474165cd3ec27e1cf2e147f1f026f575998d2397158e92f49e6c9f21ad3399",
+                "status": "active",
+                "content_hash": "sha256:3277745c7ce1c257a6697836a084759ec3163a06636d788a019d141a109d5b04",
                 "utility": 0,
                 "confidence": 0.5,
-                "created_at": "2026-03-25T07:39:31.584Z",
-                "updated_at": "2026-03-25T07:39:31.584Z",
-                "recency_anchor": "2026-03-25T07:39:31.584Z"
+                "created_at": "2026-03-25T14:13:09.983Z",
+                "updated_at": "2026-03-25T14:13:09.983Z",
+                "recency_anchor": "2026-03-25T14:13:09.983Z"
               },
-              "score": 0.47063887937615445,
+              "score": 0.47527047458641214,
               "source_layer": "meso",
               "rank": 3,
               "score_breakdown": {
                 "s_text": 0.9,
-                "s_vec": 0.7221509727593701,
-                "S": 0.7843981322935907,
+                "s_vec": 0.6759962749362932,
+                "S": 0.7543975787085906,
                 "g": {
                   "utility_term": 0.8,
                   "confidence_term": 0.75,
                   "recency_term": 1,
                   "g": 0.6000000000000001
                 },
-                "score_final": 0.47063887937615445
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.47527047458641214
               },
-              "selection_reason": "rank=3; layer=meso; score=0.4706; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7222",
+              "selection_reason": "rank=3; layer=meso; score=0.4753; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.6760",
               "evidences": []
             },
             {
               "claim": {
-                "id": "clm_16f6bd70",
-                "text": "retrieval correctness finding s2-6813eee4 | apps/pce-memory/src/db/schema.sql session_2 | Provenance Lineage Fragmentation in Promotion Queue | The promotion_queue table stores provenance as a TEXT column instead of JSON, unlike the claims table which uses a JSON column. This schema inconsistency risks data integrity during lineage tracking and complicates querying source evidence relationships defined in mcp-tools.md. | anchors: promotion_queue, provenance, claims, evidence",
+                "id": "clm_235af254",
+                "text": "retrieval correctness finding s2-b023ceb4 | apps/pce-memory/src/db/schema.sql session_2 | Missing Foreign Key Constraints on Evidence and Context Items | The schema defines `claim_id` in the `evidence` and `active_context_items` tables but lacks explicit FOREIGN KEY constraints. This absence prevents the database from enforcing referential integrity, risking orphaned records if a claim is deleted or tombstoned, which directly compromises retrieval lineage and correctness. | anchors: evidence, claim_id, active_context_items, active_context_id",
                 "kind": "fact",
                 "scope": "project",
                 "boundary_class": "internal",
                 "memory_type": "knowledge",
-                "content_hash": "sha256:0f0263a74f085691e0ededf52885b89a738837837417b0fafcc803cce51ec180",
+                "status": "active",
+                "content_hash": "sha256:e7a1ae724387759b7c6befeec2ca2430b2c5bf65f10fc17b797e63226cf6b6a0",
                 "utility": 0,
                 "confidence": 0.5,
-                "created_at": "2026-03-25T07:39:45.469Z",
-                "updated_at": "2026-03-25T07:39:45.469Z",
-                "recency_anchor": "2026-03-25T07:39:45.469Z"
+                "created_at": "2026-03-25T14:13:09.976Z",
+                "updated_at": "2026-03-25T14:13:09.976Z",
+                "recency_anchor": "2026-03-25T14:13:09.976Z"
               },
-              "score": 0.43919850541454913,
+              "score": 0.47215735052854096,
               "source_layer": "meso",
               "rank": 4,
               "score_breakdown": {
                 "s_text": 0.9,
-                "s_vec": 0.6415346292680745,
-                "S": 0.7319975090242484,
+                "s_vec": 0.6683940183847151,
+                "S": 0.7494561119500649,
                 "g": {
                   "utility_term": 0.8,
                   "confidence_term": 0.75,
                   "recency_term": 1,
                   "g": 0.6000000000000001
                 },
-                "score_final": 0.43919850541454913
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.47215735052854096
               },
-              "selection_reason": "rank=4; layer=meso; score=0.4392; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.6415",
+              "selection_reason": "rank=4; layer=meso; score=0.4722; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.6684",
               "evidences": []
             }
           ],
@@ -984,54 +1041,43 @@
           "has_more": false,
           "policy_version": "0.1",
           "state": "Ready",
-          "request_id": "37275cd7-0cdb-4928-bea5-a0192cd8d957",
-          "trace_id": "7610f52f-00ba-41e0-af79-b649f0b40aa2"
+          "request_id": "552c51c0-b7d7-4301-bd41-713ed05fdd43",
+          "trace_id": "04c7885a-97a2-4d4a-b5f3-30e174ed4cef"
         },
         "decision": {
           "status": "ok",
-          "title": "Unified Retrieval Correctness Strategy: Enforcing Fallbacks and Schema Consistency",
-          "summary": "To improve retrieval correctness, the system must address two critical failure modes: the vector search function bypassing text-based fallbacks when the vector table is empty, and the schema inconsistency in the promotion_queue table where provenance is stored as TEXT instead of JSON, risking lineage integrity. Additionally, the permanent scrubbing of observation content destroys the raw data necessary for auditing these retrieval failures.",
+          "title": "Enforce Referential Integrity to Prevent Orphaned Retrieval Records",
+          "summary": "To improve retrieval correctness, the database schema must be updated to add explicit FOREIGN KEY constraints on `claim_id` in the `evidence` and `active_context_items` tables. This addresses the critical risk of orphaned records compromising retrieval lineage, which currently exists alongside logic flaws in the hybrid search pagination and MMR re-ranking functions.",
           "references": [
-            "clm_c08a0f74",
-            "clm_fca8749b",
-            "clm_16f6bd70",
-            "clm_ce4c05e5"
+            "clm_235af254",
+            "clm_2e8835db",
+            "clm_249a694e"
           ],
           "evidence": [
-            "vectorSearch, claim_vectors, COUNT(*), validateEmbedding",
-            "hybridSearchPaginated, fetchLimit, Number.MAX_SAFE_INTEGER, cursor",
-            "promotion_queue, provenance, claims, evidence",
-            "observations, content, expires_at, content_digest"
+            "claim_id in the evidence and active_context_items tables but lacks explicit FOREIGN KEY constraints",
+            "PaginatedSearchResult interface defines a next_cursor field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor",
+            "rerankWithMmr function incorrectly includes the tail (results beyond maxCandidates) in the final output"
           ]
         },
         "score": {
           "matched_session1_ids": [
-            "clm_fca8749b",
-            "clm_c08a0f74"
+            "clm_249a694e",
+            "clm_2e8835db"
           ],
           "matched_session2_ids": [
-            "clm_16f6bd70",
-            "clm_ce4c05e5"
+            "clm_235af254"
           ],
           "matched_session1_anchors": [
-            "hybridSearchPaginated",
-            "fetchLimit",
-            "Number.MAX_SAFE_INTEGER",
-            "cursor",
-            "vectorSearch",
-            "claim_vectors",
-            "COUNT(*)",
-            "validateEmbedding"
+            "rerankWithMmr",
+            "tail",
+            "maxCandidates",
+            "PaginatedSearchResult",
+            "next_cursor"
           ],
           "matched_session2_anchors": [
-            "promotion_queue",
-            "provenance",
-            "claims",
             "evidence",
-            "observations",
-            "content",
-            "expires_at",
-            "content_digest"
+            "claim_id",
+            "active_context_items"
           ],
           "references_both_sessions": true,
           "evidence_both_sessions": true
@@ -1043,27 +1089,27 @@
       "session_1": {
         "findings": [
           {
-            "id": "s1-f31e6996",
-            "title": "Pagination Logic Requires Full Result Set Fetch",
-            "summary": "The hybridSearchPaginated function fetches the entire candidate pool using Number.MAX_SAFE_INTEGER when a cursor is present to correctly calculate has_more, potentially causing performance issues on large datasets.",
+            "id": "s1-6faefd0f",
+            "title": "MMR Re-ranking Logic Flaw",
+            "summary": "The `rerankWithMmr` function incorrectly includes the `tail` (results beyond `maxCandidates`) in the final output, bypassing the diversity filtering intended for the entire result set.",
             "anchors": [
-              "hybridSearchPaginated",
-              "fetchLimit",
-              "Number.MAX_SAFE_INTEGER",
-              "cursor"
+              "rerankWithMmr",
+              "head",
+              "tail",
+              "maxCandidates"
             ],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           },
           {
-            "id": "s1-5adb304b",
-            "title": "Vector Search Fails on Empty Vector Table",
-            "summary": "The vectorSearch function performs a pre-flight COUNT query on claim_vectors and returns an empty array immediately if the table is empty, bypassing any text-based fallback logic for that specific execution path.",
+            "id": "s1-a433d231",
+            "title": "Pagination Cursor Implementation Gap",
+            "summary": "Although the `PaginatedSearchResult` interface defines a `next_cursor` field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor.",
             "anchors": [
-              "vectorSearch",
-              "claim_vectors",
-              "COUNT(*)",
-              "validateEmbedding"
+              "PaginatedSearchResult",
+              "next_cursor",
+              "mergeResults",
+              "vectorSearch"
             ],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
@@ -1074,26 +1120,27 @@
         "activate": null,
         "findings": [
           {
-            "id": "s2-907c7e46",
-            "title": "Ranking Index Misalignment with Recency Logic",
-            "summary": "The idx_claims_ranking index includes updated_at and created_at but excludes recency_anchor, which is the designated column for recency calculations in positive feedback loops. This misalignment may cause the database optimizer to ignore the index during g() ranking queries that rely on recency_anchor, leading to full table scans and incorrect retrieval order.",
+            "id": "s2-be2863e5",
+            "title": "Ranking Index Composition and Recency Anchor Dependency",
+            "summary": "The idx_claims_ranking index optimizes retrieval for the g() ranking function by including utility, confidence, and updated_at. However, the recency calculation logic relies on the recency_anchor column, which is only updated on positive feedback. This creates a potential lineage gap where claims with stale recency anchors may be incorrectly prioritized or deprioritized if the ranking query does not explicitly join or filter based on the recency_anchor logic defined in the schema comments.",
             "anchors": [
               "claims",
               "idx_claims_ranking",
               "recency_anchor",
-              "updated_at"
+              "utility"
             ],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           },
           {
-            "id": "s2-d71913dd",
-            "title": "Provenance Data Type Inconsistency Affecting Lineage Tracing",
-            "summary": "The claims table defines the provenance column as JSON, while the promotion_queue table defines its provenance column as TEXT. This schema inconsistency complicates lineage tracing and validation logic, as queries joining these tables or aggregating provenance data must handle type casting, potentially obscuring structural validation errors or breaking downstream observability pipelines.",
+            "id": "s2-733501f6",
+            "title": "Provenance Data Type Inconsistency Across Tables",
+            "summary": "The schema defines provenance as a JSON type in the claims table but as a TEXT type in the promotion_queue table. This inconsistency affects retrieval correctness and observability when tracing the lineage of a claim from the promotion queue to the final claims table, as JSON parsing logic must be applied differently depending on the source table, potentially leading to data corruption or query failures if the application layer assumes a uniform type.",
             "anchors": [
               "claims",
+              "provenance",
               "promotion_queue",
-              "provenance"
+              "evidence"
             ],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
