@@ -191,8 +191,13 @@ export async function upsertClaimLink(input: {
         [input.source_claim_id, input.target_claim_id, input.link_type]
       );
       const rows = reader.getRowObjects() as unknown as ClaimLinkRow[];
+      if (!rows[0]) {
+        throw new Error(
+          `claim_link not found after constraint conflict: ${input.source_claim_id} -> ${input.target_claim_id} (${input.link_type})`
+        );
+      }
       return {
-        link: normalizeClaimLinkRow(rows[0]!),
+        link: normalizeClaimLinkRow(rows[0]),
         isNew: false,
       };
     });
