@@ -106,6 +106,19 @@ export async function findEntityByCanonicalKey(canonicalKey: string): Promise<En
 }
 
 /**
+ * 名前でEntityを検索（大文字小文字を無視）
+ */
+export async function findEntityByName(name: string): Promise<Entity | undefined> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE LOWER(name) = LOWER($1) ORDER BY created_at DESC LIMIT 1',
+    [name]
+  );
+  const rows = reader.getRowObjects() as unknown as Entity[];
+  return rows[0];
+}
+
+/**
  * IDでEntityを取得
  */
 export async function findEntityById(id: string): Promise<Entity | undefined> {
