@@ -51,6 +51,11 @@ const K_VEC = 96;
 const DEFAULT_MMR_LAMBDA = 0.72;
 const DEFAULT_MMR_MAX_CANDIDATES = 48;
 
+/** Query expansion関連デフォルト値 */
+const DEFAULT_QUERY_EXPANSION_MAX_SEED_ENTITIES = 3;
+const DEFAULT_QUERY_EXPANSION_MAX_RELATED_ENTITIES = 8;
+const DEFAULT_QUERY_EXPANSION_MAX_TERMS = 6;
+
 /** criticスコアが存在しない場合のデフォルト値 */
 const DEFAULT_CRITIC_SCORE = 0.5;
 
@@ -309,6 +314,13 @@ export interface MmrConfig {
   maxCandidates?: number;
 }
 
+export interface QueryExpansionConfig {
+  enabled?: boolean;
+  maxSeedEntities?: number;
+  maxRelatedEntities?: number;
+  maxExpansionTerms?: number;
+}
+
 /**
  * g()再ランキング用メトリクス
  */
@@ -384,6 +396,8 @@ export interface HybridSearchConfig {
   intent?: ActivateIntent;
   /** 実験的なMMR多様化設定 */
   mmr?: MmrConfig;
+  /** 実験的なエンティティグラフ拡張設定 */
+  queryExpansion?: QueryExpansionConfig;
 }
 
 /**
@@ -460,12 +474,192 @@ function resolveMmrConfig(mmr: MmrConfig | undefined): Required<MmrConfig> | und
   };
 }
 
+function resolveQueryExpansionConfig(
+  queryExpansion: QueryExpansionConfig | undefined
+): Required<QueryExpansionConfig> | undefined {
+  if (!queryExpansion?.enabled) {
+    return undefined;
+  }
+
+  return {
+    enabled: true,
+    maxSeedEntities:
+      typeof queryExpansion.maxSeedEntities === 'number' &&
+      Number.isFinite(queryExpansion.maxSeedEntities) &&
+      queryExpansion.maxSeedEntities > 0
+        ? normalizeLimit(queryExpansion.maxSeedEntities)
+        : DEFAULT_QUERY_EXPANSION_MAX_SEED_ENTITIES,
+    maxRelatedEntities:
+      typeof queryExpansion.maxRelatedEntities === 'number' &&
+      Number.isFinite(queryExpansion.maxRelatedEntities) &&
+      queryExpansion.maxRelatedEntities > 0
+        ? normalizeLimit(queryExpansion.maxRelatedEntities)
+        : DEFAULT_QUERY_EXPANSION_MAX_RELATED_ENTITIES,
+    maxExpansionTerms:
+      typeof queryExpansion.maxExpansionTerms === 'number' &&
+      Number.isFinite(queryExpansion.maxExpansionTerms) &&
+      queryExpansion.maxExpansionTerms > 0
+        ? normalizeLimit(queryExpansion.maxExpansionTerms)
+        : DEFAULT_QUERY_EXPANSION_MAX_TERMS,
+  };
+}
+
 function buildSimilarityTokenSet(text: string): Set<string> {
   const tokens = text
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length >= 2);
   return new Set(tokens);
+}
+
+function normalizeExpansionCandidate(value: string | null | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.replace(/[-_]+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+async function expandQueryWithEntityGraph(
+  query: string,
+  config: Required<QueryExpansionConfig>
+): Promise<string> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length === 0) {
+    return query;
+  }
+
+  const queryTokens = [...buildSimilarityTokenSet(query)].slice(0, 8);
+  if (queryTokens.length === 0) {
+    return query;
+  }
+
+  const conn = await getConnection();
+  const params: Array<string | number> = [];
+  const scoreClauses: string[] = [];
+  const whereClauses: string[] = [];
+
+  const pushScoredMatch = (expression: string, value: string, weight: number): void => {
+    const paramIndex = params.push(value);
+    scoreClauses.push(`CASE WHEN ${expression.replaceAll('?', `$${paramIndex}`)} THEN ${weight} ELSE 0 END`);
+    whereClauses.push(expression.replaceAll('?', `$${paramIndex}`));
+  };
+
+  pushScoredMatch('LOWER(e.name) = ?', normalizedQuery, 8);
+  pushScoredMatch("LOWER(COALESCE(e.canonical_key, '')) = ?", normalizedQuery, 10);
+  const escapedFullQuery = `%${escapeLikePattern(normalizedQuery)}%`;
+  pushScoredMatch("LOWER(e.name) LIKE ? ESCAPE '\\'", escapedFullQuery, 4);
+  pushScoredMatch("LOWER(COALESCE(e.canonical_key, '')) LIKE ? ESCAPE '\\'", escapedFullQuery, 5);
+
+  for (const token of queryTokens) {
+    const escapedToken = `%${escapeLikePattern(token)}%`;
+    pushScoredMatch("LOWER(e.name) LIKE ? ESCAPE '\\'", escapedToken, 2);
+    pushScoredMatch("LOWER(COALESCE(e.canonical_key, '')) LIKE ? ESCAPE '\\'", escapedToken, 3);
+  }
+
+  if (whereClauses.length === 0) {
+    return query;
+  }
+
+  const seedLimitParam = params.push(config.maxSeedEntities);
+  const seedReader = await conn.runAndReadAll(
+    `SELECT
+       e.id,
+       e.name,
+       e.canonical_key,
+       (${scoreClauses.join(' + ')}) AS match_score
+     FROM entities e
+     WHERE ${whereClauses.join(' OR ')}
+     ORDER BY match_score DESC, e.created_at DESC
+     LIMIT $${seedLimitParam}::INTEGER`,
+    params
+  );
+  const seedRows = seedReader.getRowObjects() as unknown as Array<{
+    id: string;
+    name: string;
+    canonical_key: string | null;
+    match_score: number | bigint;
+  }>;
+
+  const seedIds = seedRows
+    .filter((row) => Number(row.match_score) > 0)
+    .map((row) => row.id)
+    .slice(0, config.maxSeedEntities);
+  if (seedIds.length === 0) {
+    return query;
+  }
+
+  const seedPlaceholders = seedIds.map((_, index) => `$${index + 1}`).join(',');
+  const relatedLimitParam = seedIds.length + 1;
+  const relationReader = await conn.runAndReadAll(
+    `SELECT DISTINCT e.id, e.name, e.canonical_key
+     FROM relations r
+     INNER JOIN entities e
+       ON (
+         (r.src_id IN (${seedPlaceholders}) AND e.id = r.dst_id)
+         OR
+         (r.dst_id IN (${seedPlaceholders}) AND e.id = r.src_id)
+       )
+     WHERE e.id NOT IN (${seedPlaceholders})
+     ORDER BY e.created_at DESC
+     LIMIT $${relatedLimitParam}::INTEGER`,
+    [...seedIds, config.maxRelatedEntities]
+  );
+  const relationRows = relationReader.getRowObjects() as unknown as Array<{
+    id: string;
+    name: string;
+    canonical_key: string | null;
+  }>;
+
+  const coClaimReader = await conn.runAndReadAll(
+    `SELECT DISTINCT e.id, e.name, e.canonical_key
+     FROM claim_entities seed
+     INNER JOIN claim_entities sibling ON sibling.claim_id = seed.claim_id
+     INNER JOIN entities e ON e.id = sibling.entity_id
+     WHERE seed.entity_id IN (${seedPlaceholders})
+       AND sibling.entity_id NOT IN (${seedPlaceholders})
+     ORDER BY e.created_at DESC
+     LIMIT $${relatedLimitParam}::INTEGER`,
+    [...seedIds, config.maxRelatedEntities]
+  );
+  const coClaimRows = coClaimReader.getRowObjects() as unknown as Array<{
+    id: string;
+    name: string;
+    canonical_key: string | null;
+  }>;
+
+  const originalTerms = buildSimilarityTokenSet(query);
+  const expansionTerms: string[] = [];
+  const seenTerms = new Set<string>();
+
+  for (const row of [...relationRows, ...coClaimRows]) {
+    for (const candidate of [
+      normalizeExpansionCandidate(row.name),
+      normalizeExpansionCandidate(row.canonical_key),
+    ]) {
+      if (!candidate) {
+        continue;
+      }
+
+      const candidateTokens = buildSimilarityTokenSet(candidate);
+      const introducesNewTerm = [...candidateTokens].some((token) => !originalTerms.has(token));
+      const candidateKey = candidate.toLowerCase();
+
+      if (!introducesNewTerm || seenTerms.has(candidateKey)) {
+        continue;
+      }
+
+      seenTerms.add(candidateKey);
+      expansionTerms.push(candidate);
+
+      if (expansionTerms.length >= config.maxExpansionTerms) {
+        return `${query} ${expansionTerms.join(' ')}`.trim();
+      }
+    }
+  }
+
+  return expansionTerms.length > 0 ? `${query} ${expansionTerms.join(' ')}`.trim() : query;
 }
 
 function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
@@ -1219,6 +1413,7 @@ export async function hybridSearchWithScores(
   const kText = resolveCandidateLimit(config?.kText, K_TEXT);
   const kVec = resolveCandidateLimit(config?.kVec, K_VEC);
   const mmrConfig = resolveMmrConfig(config?.mmr);
+  const queryExpansionConfig = resolveQueryExpansionConfig(config?.queryExpansion);
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
   const includeBreakdown = config?.includeBreakdown ?? false;
   const enableRerank = config?.enableRerank ?? true;
@@ -1230,7 +1425,10 @@ export async function hybridSearchWithScores(
       ? { excludedWorkingStateStatuses: config.excludedWorkingStateStatuses }
       : {}),
   };
-  const hasQuery = Boolean(query && query.trim().length > 0);
+  const rawQuery = query?.trim() ?? '';
+  const hasQuery = rawQuery.length > 0;
+  const effectiveQuery =
+    hasQuery && queryExpansionConfig ? await expandQueryWithEntityGraph(rawQuery, queryExpansionConfig) : rawQuery;
   const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;
   const querylessUnlimited = !hasQuery && limit >= Number.MAX_SAFE_INTEGER / 2;
 
@@ -1239,7 +1437,7 @@ export async function hybridSearchWithScores(
 
   if (hasQuery && embeddingService) {
     const embedResult = await embeddingService.embed({
-      text: query!,
+      text: effectiveQuery,
       sensitivity: 'internal',
     })();
 
@@ -1251,7 +1449,7 @@ export async function hybridSearchWithScores(
   // Step 2: 並列検索実行
   if (queryEmbedding) {
     const [textResults, vecResults] = await Promise.all([
-      textSearch(query!, scopes, kText, filters),
+      textSearch(effectiveQuery, scopes, kText, filters),
       vectorSearch(queryEmbedding, scopes, kVec, filters),
     ]);
 
@@ -1302,7 +1500,7 @@ export async function hybridSearchWithScores(
   }
 
   const textResults = hasQuery
-    ? await textSearch(query!, scopes, kText, filters)
+    ? await textSearch(effectiveQuery, scopes, kText, filters)
     : await fallbackToTextOnlyResults(
         scopes,
         querylessUnlimited ? undefined : normalizedLimit,

@@ -51,6 +51,7 @@ export function createLookupEmbeddingService(
 export async function resetPrecisionBenchmarkDb(): Promise<string> {
   setEmbeddingService(null as unknown as EmbeddingService);
   await resetDbAsync();
+  await new Promise((resolve) => setTimeout(resolve, 25));
 
   const dbPath = join(tmpdir(), `pce-precision-${randomUUID()}.duckdb`);
   process.env.PCE_DB = dbPath;
@@ -64,13 +65,23 @@ export async function cleanupPrecisionBenchmarkDb(dbPath: string): Promise<void>
   await resetDbAsync();
 
   if (existsSync(dbPath)) {
-    unlinkSync(dbPath);
+    try {
+      unlinkSync(dbPath);
+    } catch {
+      // Best-effort cleanup for CI/parallel DuckDB file handles.
+    }
   }
 
   const walPath = `${dbPath}.wal`;
   if (existsSync(walPath)) {
-    unlinkSync(walPath);
+    try {
+      unlinkSync(walPath);
+    } catch {
+      // Best-effort cleanup for CI/parallel DuckDB file handles.
+    }
   }
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 export async function seedBenchmarkClaim(input: BenchmarkClaimInput): Promise<string> {

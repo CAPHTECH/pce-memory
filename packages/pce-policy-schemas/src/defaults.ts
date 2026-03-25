@@ -33,6 +33,12 @@ export const defaultPolicy: PolicyDocument = {
         lambda: 0.72,
         max_candidates: 48,
       },
+      query_expansion: {
+        enabled: false,
+        max_seed_entities: 3,
+        max_related_entities: 8,
+        max_expansion_terms: 6,
+      },
     },
   },
 };

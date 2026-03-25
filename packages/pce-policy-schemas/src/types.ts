@@ -30,6 +30,12 @@ export interface RetrievalPolicy {
       lambda?: number;
       max_candidates?: number;
     };
+    query_expansion?: {
+      enabled?: boolean;
+      max_seed_entities?: number;
+      max_related_entities?: number;
+      max_expansion_terms?: number;
+    };
   };
 }
 
