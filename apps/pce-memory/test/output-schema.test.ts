@@ -169,6 +169,7 @@ describe('Output Schema - ハンドラ出力検証', () => {
 
     expect(data.active_context_id).toBeDefined();
     expect(Array.isArray(data.claims)).toBe(true);
+    expect(data.claims[0]?.source).toBeDefined();
     expect(typeof data.claims_count).toBe('number');
     expect(typeof data.has_more).toBe('boolean');
     expect(data.policy_version).toBeDefined();
@@ -247,6 +248,48 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.id).toBe('ent_test_001');
     expect(data.type).toBe('Concept');
     expect(data.name).toBe('テストエンティティ');
+    expect(data.policy_version).toBeDefined();
+    expect(['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready']).toContain(data.state);
+    expect(data.request_id).toBeDefined();
+    expect(data.trace_id).toBeDefined();
+  });
+
+  it('pce_memory_link_claims: 出力がスキーマに準拠', async () => {
+    await dispatchTool('pce_memory_policy_apply', {});
+
+    const sourceText = 'schema link source';
+    const targetText = 'schema link target';
+    const source = await dispatchTool('pce_memory_upsert', {
+      text: sourceText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(sourceText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
+    });
+    const target = await dispatchTool('pce_memory_upsert', {
+      text: targetText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(targetText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
+    });
+
+    const result = await dispatchTool('pce_memory_link_claims', {
+      source_claim_id: source.structuredContent!.id as string,
+      target_claim_id: target.structuredContent!.id as string,
+      link_type: 'related',
+    });
+    const data = result.structuredContent!;
+
+    expect(data.id).toBeDefined();
+    expect(typeof data.is_new).toBe('boolean');
+    expect(data.source_claim_id).toBeDefined();
+    expect(data.target_claim_id).toBeDefined();
+    expect(data.link_type).toBe('related');
+    expect(typeof data.confidence).toBe('number');
+    expect(data.created_by).toBe('client');
     expect(data.policy_version).toBeDefined();
     expect(['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready']).toContain(data.state);
     expect(data.request_id).toBeDefined();

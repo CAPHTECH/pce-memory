@@ -139,6 +139,20 @@ CREATE TABLE IF NOT EXISTS claim_vectors (
 );
 CREATE INDEX IF NOT EXISTS idx_claim_vectors_claim_id ON claim_vectors(claim_id);
 
+CREATE TABLE IF NOT EXISTS claim_links (
+  id TEXT PRIMARY KEY,
+  source_claim_id TEXT NOT NULL,
+  target_claim_id TEXT NOT NULL,
+  link_type TEXT NOT NULL,
+  confidence REAL DEFAULT 1.0,
+  created_at TEXT NOT NULL,
+  created_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_claim_links_source ON claim_links(source_claim_id);
+CREATE INDEX IF NOT EXISTS idx_claim_links_target ON claim_links(target_claim_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_links_unique
+ON claim_links(source_claim_id, target_claim_id, link_type);
+
 -- コサイン類似度計算マクロ
 -- TLA+ claimVecRelevant: cos_sim >= threshold で判定
 CREATE MACRO IF NOT EXISTS cos_sim(a, b) AS (

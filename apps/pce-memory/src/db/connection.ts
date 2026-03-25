@@ -425,6 +425,21 @@ export async function getConnection(): Promise<DuckDBConnection> {
   return cachedConnection;
 }
 
+export async function withDedicatedConnection<T>(
+  operation: (connection: DuckDBConnection) => Promise<T>
+): Promise<T> {
+  const connection = await getDb().connect();
+  try {
+    return await operation(connection);
+  } finally {
+    try {
+      connection.closeSync();
+    } catch {
+      // close errors are non-fatal for short-lived helper connections
+    }
+  }
+}
+
 /**
  * スキーマを初期化（非同期）
  */

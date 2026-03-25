@@ -20,10 +20,17 @@ import {
 } from '../store/claims.js';
 import type { Claim, Provenance } from '../store/claims.js';
 import {
-  hybridSearchPaginated,
   hybridSearchWithScores,
   getEmbeddingService,
 } from '../store/hybridSearch.js';
+import {
+  CLAIM_LINK_TYPES,
+  isValidClaimLinkType,
+  suggestRelatedClaimLinks,
+  upsertClaimLink,
+  findOneHopClaimLinks,
+  type ClaimLinkType,
+} from '../store/claimLinks.js';
 import {
   upsertEntity,
   linkClaimEntity,
@@ -337,10 +344,17 @@ function buildSelectionReason(item: {
   source_layer?: string;
   rank: number;
   intent?: ActivateIntent;
+  source?: 'search' | 'observation' | 'claim_link';
+  link?: {
+    via_claim_id: string;
+    link_type: ClaimLinkType;
+    confidence: number;
+  };
 }): string {
   const parts = [
     `rank=${item.rank}`,
     `layer=${item.source_layer ?? mapScopeToLayer(item.claim.scope)}`,
+    `source=${item.source ?? 'search'}`,
     `score=${formatScore(item.score)}`,
     `kind=${item.claim.kind}`,
   ];
@@ -358,15 +372,30 @@ function buildSelectionReason(item: {
       parts.push(`intent_boost=${formatScore(item.score_breakdown.intent.boost)}`);
     }
   }
+  if (item.link) {
+    parts.push(`via_claim_id=${item.link.via_claim_id}`);
+    parts.push(`link_type=${item.link.link_type}`);
+    parts.push(`link_confidence=${formatScore(item.link.confidence)}`);
+  }
 
   return parts.join('; ');
 }
+
+const CLAIM_LINK_SCORE_PENALTY = 0.7;
+const CONNECTIVITY_SEED_MULTIPLIER = 3;
 
 type ActivateSearchItem = {
   claim: Claim;
   score: number;
   source_layer?: string;
   score_breakdown?: ScoreBreakdown;
+  source?: 'search' | 'observation' | 'claim_link';
+  link?: {
+    id: string;
+    via_claim_id: string;
+    link_type: ClaimLinkType;
+    confidence: number;
+  };
 };
 
 const OBSERVATION_SCORE_MERGE_HEADROOM = 0.98;
@@ -397,8 +426,123 @@ function maxActivateItemScore(items: ActivateSearchItem[]): number {
   }, Number.NEGATIVE_INFINITY);
 }
 
+function combineActivateScores(baseScore: number, additionalScore: number): number {
+  const normalizedBase = Number.isFinite(baseScore) ? Math.max(0, Math.min(1, baseScore)) : 0;
+  const normalizedAdditional = Number.isFinite(additionalScore)
+    ? Math.max(0, Math.min(1, additionalScore))
+    : 0;
+
+  return normalizedBase + normalizedAdditional * (1 - normalizedBase);
+}
+
 function getActivateExcludedWorkingStateStatuses(includeStaleTasks: boolean): ClaimStatus[] {
   return includeStaleTasks ? ['completed'] : ['completed', 'stale'];
+}
+
+function claimMatchesActivateFilters(
+  claim: Claim,
+  input: {
+    scopes: string[];
+    boundaryClasses: string[];
+    kindFilter?: ClaimKind[];
+    memoryTypeFilter?: MemoryType[];
+    excludedWorkingStateStatuses: ClaimStatus[];
+  }
+): boolean {
+  if (!input.scopes.includes(claim.scope)) {
+    return false;
+  }
+  if (!input.boundaryClasses.includes(claim.boundary_class)) {
+    return false;
+  }
+  if (input.kindFilter && !input.kindFilter.includes(claim.kind as ClaimKind)) {
+    return false;
+  }
+  if (
+    input.memoryTypeFilter &&
+    (claim.memory_type === null ||
+      claim.memory_type === undefined ||
+      !input.memoryTypeFilter.includes(claim.memory_type))
+  ) {
+    return false;
+  }
+  if (
+    claim.memory_type === 'working_state' &&
+    input.excludedWorkingStateStatuses.includes(claim.status)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function expandActivateResultsWithClaimLinks(
+  durableResults: ActivateSearchItem[],
+  input: {
+    scopes: string[];
+    boundaryClasses: string[];
+    kindFilter?: ClaimKind[];
+    memoryTypeFilter?: MemoryType[];
+    excludedWorkingStateStatuses: ClaimStatus[];
+  }
+): Promise<ActivateSearchItem[]> {
+  if (durableResults.length === 0) {
+    return durableResults;
+  }
+
+  const merged = new Map<string, ActivateSearchItem>(
+    durableResults.map((item) => [item.claim.id, { ...item, source: item.source ?? 'search' }])
+  );
+  const oneHopLinks = await findOneHopClaimLinks(durableResults.map((item) => item.claim.id));
+  if (oneHopLinks.length === 0) {
+    return [...merged.values()].sort(compareActivateSearchItems);
+  }
+
+  const connectedClaimIds = dedupeStrings(oneHopLinks.map((link) => link.connected_claim_id));
+  const connectedClaims = await findClaimsByIds(connectedClaimIds);
+  const connectedClaimsById = new Map(connectedClaims.map((claim) => [claim.id, claim]));
+  const directResultsById = new Map(durableResults.map((item) => [item.claim.id, item]));
+
+  for (const hop of oneHopLinks) {
+    const connectedClaim = connectedClaimsById.get(hop.connected_claim_id);
+    if (!connectedClaim) {
+      continue;
+    }
+    if (!claimMatchesActivateFilters(connectedClaim, input)) {
+      continue;
+    }
+
+    const viaResult = directResultsById.get(hop.seed_claim_id);
+    if (!viaResult) {
+      continue;
+    }
+
+    const score = viaResult.score * CLAIM_LINK_SCORE_PENALTY * Math.max(0, Math.min(1, hop.confidence));
+    if (!Number.isFinite(score) || score <= 0) {
+      continue;
+    }
+
+    const existing = merged.get(connectedClaim.id);
+    const nextScore =
+      existing === undefined ? score : combineActivateScores(existing.score, score);
+    if (existing && existing.score >= nextScore) {
+      continue;
+    }
+
+    merged.set(connectedClaim.id, {
+      claim: connectedClaim,
+      score: nextScore,
+      source_layer: existing?.source_layer ?? mapScopeToLayer(connectedClaim.scope),
+      source: 'claim_link',
+      link: {
+        id: hop.link_id,
+        via_claim_id: hop.seed_claim_id,
+        link_type: hop.link_type,
+        confidence: Number(hop.confidence.toFixed(4)),
+      },
+    });
+  }
+
+  return [...merged.values()].sort(compareActivateSearchItems);
 }
 
 function normalizeObservationScoresForActivate(
@@ -423,11 +567,46 @@ function normalizeObservationScoresForActivate(
   return observationResults.map((item) => ({
     ...item,
     score: item.score * scale,
+    source: item.source ?? 'observation',
   }));
 }
 
 function getActivateObservationSlotCap(topK: number): number {
   return Math.max(0, Math.floor(topK * ACTIVATE_OBSERVATION_SLOT_FRACTION));
+}
+
+function ensureClaimLinkPresence(
+  pageResults: ActivateSearchItem[],
+  allResults: ActivateSearchItem[],
+  topK: number
+): ActivateSearchItem[] {
+  if (topK < 2 || pageResults.some((item) => item.source === 'claim_link')) {
+    return pageResults;
+  }
+
+  const fallbackClaimLink = allResults.find(
+    (item) =>
+      item.source === 'claim_link' && !pageResults.some((pageItem) => pageItem.claim.id === item.claim.id)
+  );
+  if (!fallbackClaimLink) {
+    return pageResults;
+  }
+
+  const replacementIndex = (() => {
+    for (let index = pageResults.length - 1; index >= 0; index--) {
+      if (pageResults[index]?.source !== 'claim_link') {
+        return index;
+      }
+    }
+    return -1;
+  })();
+  if (replacementIndex < 0) {
+    return pageResults;
+  }
+
+  const nextPage = [...pageResults];
+  nextPage[replacementIndex] = fallbackClaimLink;
+  return nextPage.sort(compareActivateSearchItems);
 }
 
 function pageActivateResultsWithObservationCap(input: {
@@ -469,12 +648,53 @@ function pageActivateResultsWithObservationCap(input: {
     observationIndex + Math.min(observationSlotCap, remainingSlots)
   );
 
-  const searchResults = [...durablePage, ...observationPage];
+  const allResults = [...durableResults, ...observationResults].sort(compareActivateSearchItems);
+  const searchResults = ensureClaimLinkPresence(
+    [...durablePage, ...observationPage],
+    allResults,
+    input.topK
+  );
   const nextDurableIndex = durableIndex + durablePage.length;
   const nextObservationIndex = observationIndex + observationPage.length;
   const hasMore =
     nextDurableIndex < durableResults.length ||
     (observationSlotCap > 0 && nextObservationIndex < observationResults.length);
+  const nextCursor =
+    hasMore && searchResults.length > 0
+      ? searchResults[searchResults.length - 1]!.claim.id
+      : undefined;
+
+  return {
+    searchResults,
+    nextCursor,
+    hasMore,
+  };
+}
+
+function pageActivateResults(input: {
+  results: ActivateSearchItem[];
+  topK: number;
+  cursor?: string;
+}): {
+  searchResults: ActivateSearchItem[];
+  nextCursor: string | undefined;
+  hasMore: boolean;
+} {
+  const results = [...input.results].sort(compareActivateSearchItems);
+  let startIndex = 0;
+  if (input.cursor !== undefined) {
+    const cursorIndex = results.findIndex((item) => item.claim.id === input.cursor);
+    if (cursorIndex >= 0) {
+      startIndex = cursorIndex + 1;
+    }
+  }
+
+  const searchResults = ensureClaimLinkPresence(
+    results.slice(startIndex, startIndex + input.topK),
+    results,
+    input.topK
+  );
+  const hasMore = startIndex + searchResults.length < results.length;
   const nextCursor =
     hasMore && searchResults.length > 0
       ? searchResults[searchResults.length - 1]!.claim.id
@@ -1018,6 +1238,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
 
     // Graph Memory処理（ヘルパー関数に委譲）
     const graphResult = await processGraphMemory(claim.id, isNew, entities, relations);
+    const suggestedLinks = isNew ? await suggestRelatedClaimLinks(claim.id) : [];
 
     // スコープへのリソース登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
@@ -1054,6 +1275,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
       id: claim.id,
       is_new: isNew,
       content_hash: validation.resolvedHash,
+      suggested_links: suggestedLinks,
       ...graphMemoryResult,
       policy_version: getPolicyVersion(),
       state: getStateType(),
@@ -2175,6 +2397,7 @@ export async function handlePromote(args: Record<string, unknown>) {
     transactionOpen = false;
 
     transitionToHasClaims(isNew);
+    const suggestedLinks = isNew ? await suggestRelatedClaimLinks(claim.id) : [];
 
     return createToolResult({
       claim_id: claim.id,
@@ -2182,6 +2405,7 @@ export async function handlePromote(args: Record<string, unknown>) {
       is_new: isNew,
       promoted_from: candidate.id,
       rollback_token: claim.id,
+      suggested_links: suggestedLinks,
       policy_version: getPolicyVersion(),
       state: getStateType(),
       request_id: reqId,
@@ -2374,6 +2598,137 @@ export async function handleRollback(args: Record<string, unknown>) {
     );
   } finally {
     exitRequestScope(scopeId);
+  }
+}
+
+export async function handleLinkClaims(args: Record<string, unknown>) {
+  const { source_claim_id, target_claim_id, link_type, confidence } = args as {
+    source_claim_id?: unknown;
+    target_claim_id?: unknown;
+    link_type?: unknown;
+    confidence?: unknown;
+  };
+
+  const reqId = crypto.randomUUID();
+  const traceId = crypto.randomUUID();
+
+  try {
+    if (!canDoUpsert()) {
+      const error = stateError('PolicyApplied or HasClaims or Ready', getStateType());
+      return createToolResult(
+        { ...err('STATE_ERROR', error.message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (!(await checkAndConsume('tool'))) {
+      return createToolResult(
+        { ...err('RATE_LIMIT', 'rate limit exceeded', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    if (typeof source_claim_id !== 'string' || source_claim_id.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'source_claim_id is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (typeof target_claim_id !== 'string' || target_claim_id.length === 0) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'target_claim_id is required', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+    if (!isValidClaimLinkType(link_type)) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'link_type must be a supported claim link type', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (source_claim_id === target_claim_id) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'source_claim_id and target_claim_id must differ', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (
+      confidence !== undefined &&
+      (typeof confidence !== 'number' || !Number.isFinite(confidence) || confidence < 0 || confidence > 1)
+    ) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'confidence must be a number between 0 and 1', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
+    const [sourceClaim, targetClaim] = await Promise.all([
+      findClaimById(source_claim_id),
+      findClaimById(target_claim_id),
+    ]);
+    if (!sourceClaim || !targetClaim) {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'source_claim_id and target_claim_id must exist', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
+    const { link, isNew } = await upsertClaimLink({
+      source_claim_id,
+      target_claim_id,
+      link_type,
+      ...(typeof confidence === 'number' ? { confidence } : {}),
+      created_by: 'client',
+    });
+
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'link_claims',
+      ok: true,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+
+    return createToolResult({
+      id: link.id,
+      is_new: isNew,
+      source_claim_id: link.source_claim_id,
+      target_claim_id: link.target_claim_id,
+      link_type: link.link_type,
+      confidence: link.confidence,
+      created_by: link.created_by ?? 'client',
+      policy_version: getPolicyVersion(),
+      state: getStateType(),
+      request_id: reqId,
+      trace_id: traceId,
+    });
+  } catch (e: unknown) {
+    await appendLog({
+      id: `log_${reqId}`,
+      op: 'link_claims',
+      ok: false,
+      req: reqId,
+      trace: traceId,
+      policy_version: getPolicyVersion(),
+    });
+    const msg = e instanceof Error ? e.message : String(e);
+    return createToolResult(
+      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      { isError: true }
+    );
   }
 }
 
@@ -2601,26 +2956,40 @@ export async function handleActivate(args: Record<string, unknown>) {
           }
         : {}),
     };
+    const connectivityFilterSet = {
+      scopes: scope as string[],
+      boundaryClasses: allowedBoundaryClasses,
+      ...(resolvedKindFilter ? { kindFilter: resolvedKindFilter } : {}),
+      ...(resolvedMemoryTypeFilter ? { memoryTypeFilter: resolvedMemoryTypeFilter } : {}),
+      excludedWorkingStateStatuses: getActivateExcludedWorkingStateStatuses(includeStaleTasks),
+    };
+    const directCandidateLimit =
+      cursor !== undefined
+        ? Number.MAX_SAFE_INTEGER
+        : Math.max(resolvedTopK + 1, resolvedTopK * CONNECTIVITY_SEED_MULTIPLIER);
 
     let searchResults: ActivateSearchItem[];
     let nextCursor: string | undefined;
     let hasMore: boolean;
 
     if (includeObservations) {
-      const candidateLimit = cursor !== undefined ? Number.MAX_SAFE_INTEGER : resolvedTopK + 1;
       const [durableResults, observationResults] = await Promise.all([
-        hybridSearchWithScores(scope, candidateLimit, q, searchConfig),
+        hybridSearchWithScores(scope, directCandidateLimit, q, searchConfig),
         searchObservationsWithScores(q, {
           boundaryClasses: allowedBoundaryClasses,
-          limit: candidateLimit,
+          limit: directCandidateLimit,
         }),
       ]);
+      const expandedDurableResults = await expandActivateResultsWithClaimLinks(
+        durableResults.map((item) => ({ ...item, source: 'search' as const })),
+        connectivityFilterSet
+      );
       const normalizedObservationResults = normalizeObservationScoresForActivate(
-        durableResults,
-        observationResults
+        expandedDurableResults,
+        observationResults.map((item) => ({ ...item, source: 'observation' as const }))
       );
       const pagedResults = pageActivateResultsWithObservationCap({
-        durableResults,
+        durableResults: expandedDurableResults,
         observationResults: normalizedObservationResults,
         topK: resolvedTopK,
         ...(cursor !== undefined ? { cursor } : {}),
@@ -2630,14 +2999,19 @@ export async function handleActivate(args: Record<string, unknown>) {
       nextCursor = pagedResults.nextCursor;
       hasMore = pagedResults.hasMore;
     } else {
-      const searchResult = await hybridSearchPaginated(scope, resolvedTopK, q, {
+      const durableResults = await hybridSearchWithScores(scope, directCandidateLimit, q, searchConfig);
+      const expandedDurableResults = await expandActivateResultsWithClaimLinks(
+        durableResults.map((item) => ({ ...item, source: 'search' as const })),
+        connectivityFilterSet
+      );
+      const pagedResults = pageActivateResults({
+        results: expandedDurableResults,
+        topK: resolvedTopK,
         ...(cursor !== undefined ? { cursor } : {}),
-        ...searchConfig,
       });
-
-      searchResults = searchResult.results;
-      nextCursor = searchResult.next_cursor;
-      hasMore = searchResult.has_more;
+      searchResults = pagedResults.searchResults;
+      nextCursor = pagedResults.nextCursor;
+      hasMore = pagedResults.hasMore;
     }
 
     const claims = searchResults.map((r) => r.claim);
@@ -2663,6 +3037,16 @@ export async function handleActivate(args: Record<string, unknown>) {
         claim: r.claim,
         source_layer: sourceLayer,
         rank,
+        ...(r.source ? { source: r.source } : {}),
+        ...(r.link
+          ? {
+              link: {
+                via_claim_id: r.link.via_claim_id,
+                link_type: r.link.link_type,
+                confidence: r.link.confidence,
+              },
+            }
+          : {}),
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
         ...(resolvedIntent ? { intent: resolvedIntent } : {}),
       });
@@ -2671,6 +3055,8 @@ export async function handleActivate(args: Record<string, unknown>) {
         claim: r.claim,
         score: r.score,
         source_layer: sourceLayer,
+        ...(r.source ? { source: r.source } : {}),
+        ...(r.link ? { link: r.link } : {}),
         rank,
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
         selection_reason: selectionReason,
@@ -3752,6 +4138,8 @@ export async function dispatchTool(
       return handleRollback(args);
     case 'pce_memory_upsert':
       return handleUpsert(args);
+    case 'pce_memory_link_claims':
+      return handleLinkClaims(args);
     case 'pce_memory_upsert_entity':
       return handleUpsertEntity(args);
     case 'pce_memory_upsert_relation':
@@ -4561,6 +4949,18 @@ export const TOOL_DEFINITIONS = [
         is_new: { type: 'boolean' },
         promoted_from: { type: 'string' },
         rollback_token: { type: 'string' },
+        suggested_links: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              target: { type: 'string' },
+              similarity: { type: 'number' },
+              suggested_type: { type: 'string', enum: ['related'] },
+            },
+            required: ['target', 'similarity', 'suggested_type'],
+          },
+        },
         policy_version: { type: 'string' },
         state: {
           type: 'string',
@@ -4733,6 +5133,19 @@ export const TOOL_DEFINITIONS = [
           type: 'string',
           description: 'SHA256 hash of text (auto-generated or provided)',
         },
+        suggested_links: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              target: { type: 'string' },
+              similarity: { type: 'number' },
+              suggested_type: { type: 'string', enum: ['related'] },
+            },
+            required: ['target', 'similarity', 'suggested_type'],
+          },
+          description: 'Similarity-based related-link suggestions for newly created claims',
+        },
         graph_memory: {
           type: 'object',
           properties: {
@@ -4765,6 +5178,58 @@ export const TOOL_DEFINITIONS = [
         trace_id: { type: 'string', description: 'Trace identifier for debugging' },
       },
       required: ['id', 'is_new', 'policy_version', 'state', 'request_id', 'trace_id'],
+    },
+  },
+  {
+    name: 'pce_memory_link_claims',
+    description:
+      'Create or update an explicit claim-to-claim link so activate can traverse connected knowledge.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_claim_id: { type: 'string' },
+        target_claim_id: { type: 'string' },
+        link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
+        confidence: {
+          type: 'number',
+          minimum: 0,
+          maximum: 1,
+          description: 'Optional confidence override. Defaults to 1.0.',
+        },
+      },
+      required: ['source_claim_id', 'target_claim_id', 'link_type'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        is_new: { type: 'boolean' },
+        source_claim_id: { type: 'string' },
+        target_claim_id: { type: 'string' },
+        link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
+        confidence: { type: 'number' },
+        created_by: { type: 'string', enum: ['client', 'auto_similarity'] },
+        policy_version: { type: 'string' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'id',
+        'is_new',
+        'source_claim_id',
+        'target_claim_id',
+        'link_type',
+        'confidence',
+        'created_by',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
     },
   },
   {
@@ -4843,6 +5308,21 @@ export const TOOL_DEFINITIONS = [
                 type: 'string',
                 enum: ['micro', 'meso', 'macro'],
                 description: 'Layer derived from claim scope',
+              },
+              source: {
+                type: 'string',
+                enum: ['search', 'observation', 'claim_link'],
+                description: 'How the item entered the activate result set',
+              },
+              link: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  via_claim_id: { type: 'string' },
+                  link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
+                  confidence: { type: 'number' },
+                },
+                required: ['id', 'via_claim_id', 'link_type', 'confidence'],
               },
               rank: { type: 'integer', minimum: 1, description: 'Returned rank' },
               score_breakdown: {

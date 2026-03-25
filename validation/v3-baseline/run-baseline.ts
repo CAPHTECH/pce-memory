@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
   handleActivate,
+  handleLinkClaims,
   handleObserve,
   handlePolicyApply,
   handleUpsert,
@@ -78,6 +79,11 @@ type ActivatePayload = {
 type UpsertPayload = {
   id: string;
   is_new: boolean;
+  suggested_links?: Array<{
+    target: string;
+    similarity: number;
+    suggested_type: 'related';
+  }>;
 };
 
 type ObservePayload = {
@@ -791,20 +797,43 @@ async function runConnectivityBenchmark(): Promise<ConnectivityResult> {
   const recalls: number[] = [];
 
   for (let topic = 0; topic < 10; topic++) {
+    const anchorText = `Connectivity anchor ${topic}: maple-${topic} login tokens require issuer validation and short session expiry.`;
+    const relatedText = `Connectivity extension ${topic}: maple-${topic} refresh rotation extends login token controls with revocation windows and renewal ledgers.`;
     const anchorId = await seedClaim({
-      text: `Connectivity anchor ${topic}: maple-${topic} login tokens require issuer validation and short session expiry.`,
+      text: anchorText,
       provenance_at: isoDaysAgo(25 + topic),
       timestamps: {
         created_at: isoDaysAgo(25 + topic),
       },
     });
-    const relatedId = await seedClaim({
-      text: `Connectivity extension ${topic}: maple-${topic} refresh rotation extends login token controls with revocation windows and renewal ledgers.`,
-      provenance_at: isoDaysAgo(20 + topic),
-      timestamps: {
-        created_at: isoDaysAgo(20 + topic),
-      },
+    const relatedPayload = expectSuccess<UpsertPayload>(
+      await handleUpsert({
+        text: relatedText,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'knowledge',
+        content_hash: sha256(relatedText),
+        provenance: {
+          at: isoDaysAgo(20 + topic),
+          actor: 'validation-v3-baseline',
+        },
+      })
+    );
+    const relatedId = relatedPayload.id;
+    await updateClaimTimestamps(relatedId, {
+      created_at: isoDaysAgo(20 + topic),
     });
+    const suggestedTargets = relatedPayload.suggested_links?.map((item) => item.target) ?? [];
+    if (suggestedTargets.includes(anchorId)) {
+      expectSuccess(
+        await handleLinkClaims({
+          source_claim_id: relatedId,
+          target_claim_id: anchorId,
+          link_type: 'related',
+        })
+      );
+    }
 
     const payload = await activate({
       q: `maple-${topic} login tokens issuer validation`,
@@ -821,7 +850,7 @@ async function runConnectivityBenchmark(): Promise<ConnectivityResult> {
       expected_id: relatedId,
       actual_ids: actualIds,
       success,
-      notes: `anchor_id=${anchorId}`,
+      notes: `anchor_id=${anchorId} suggested_targets=${suggestedTargets.join(',')}`,
     });
   }
 
@@ -829,7 +858,7 @@ async function runConnectivityBenchmark(): Promise<ConnectivityResult> {
     name: 'CONNECTIVITY',
     score: round(average(recalls)),
     metric: 'related_claim_recall_at_5',
-    expected_baseline: 'Low recall unless the related claim also overlaps lexically with the query',
+    expected_baseline: 'High recall once suggested claim links are confirmed and activate traverses them',
     related_claim_recall_at_5: round(average(recalls)),
     pair_count: 10,
     cases,
@@ -988,7 +1017,7 @@ function buildReport(results: BenchmarkResults): string {
     '- B1 is the baseline for future freshness-aware retrieval. Higher post-v3 scores should mean newer claims displace stale variants more reliably.',
     '- B2 isolates usage learning without feedback writes. A post-v3 implementation should move the correlation positive only if plain retrieval history becomes a ranking signal.',
     '- B3 checks whether activate currently surfaces maintenance guidance for duplicates, raw observations, or dormant claims. The current baseline is expected to stay at zero unless new hint fields are introduced.',
-    '- B4 measures how often logically related claims appear without graph links. Improvements after connectivity work should raise recall without relying on lexical coincidence.',
+    '- B4 measures how often logically related claims appear after confirming suggested claim links. Improvements after connectivity work should come from claim-link traversal rather than lexical coincidence alone.',
     '- B5 gives a single regression-friendly number for a realistic multi-session flow.',
     '',
   ].join('\n');
