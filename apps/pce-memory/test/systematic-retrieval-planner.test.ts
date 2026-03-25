@@ -225,7 +225,7 @@ describe('systematic retrieval planner boundary coverage', () => {
 
 describe('systematic retrieval planner edge coverage', () => {
   it('changes ranking order when intent policy_check boosts policy hints', async () => {
-    await applyPolicy({ threshold: 0.0 });
+    await applyPolicy({ hybrid: { threshold: 0.0 } });
 
     const factId = expectSuccess(
       await upsertClaimViaTool({
@@ -513,7 +513,7 @@ describe('systematic retrieval planner failure modes', () => {
   });
 
   it('supports alpha=0 as a pure lexical policy', async () => {
-    await applyPolicy({ alpha: 0, threshold: 0.0 });
+    await applyPolicy({ hybrid: { alpha: 0, threshold: 0.0 } });
     setEmbeddingService(createMockEmbeddingService([1, 0]));
 
     const lexicalId = expectSuccess(
@@ -549,7 +549,7 @@ describe('systematic retrieval planner failure modes', () => {
   });
 
   it('supports alpha=1 as a pure vector policy', async () => {
-    await applyPolicy({ alpha: 1, threshold: 0.0 });
+    await applyPolicy({ hybrid: { alpha: 1, threshold: 0.0 } });
     setEmbeddingService(createMockEmbeddingService([1, 0]));
 
     const lexicalId = expectSuccess(

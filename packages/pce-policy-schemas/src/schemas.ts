@@ -12,6 +12,14 @@ function ensureString(field: string, val: unknown, errors: string[]) {
   if (!isString(val)) errors.push(`${field} must be string`);
 }
 
+function ensureBoolean(field: string, val: unknown, errors: string[]) {
+  if (typeof val !== 'boolean') errors.push(`${field} must be boolean`);
+}
+
+function ensureNumber(field: string, val: unknown, errors: string[]) {
+  if (typeof val !== 'number' || Number.isNaN(val)) errors.push(`${field} must be number`);
+}
+
 export function validateBoundaryPolicy(input: any): ValidationResult<BoundaryPolicy> {
   const errors: string[] = [];
   if (!input || typeof input !== 'object') {
@@ -44,5 +52,24 @@ export function validatePolicy(input: any): ValidationResult<PolicyDocument> {
   if (!input.boundary) errors.push('boundary missing');
   const boundaryResult = validateBoundaryPolicy(input.boundary ?? {});
   if (!boundaryResult.ok) errors.push(...(boundaryResult.errors ?? []));
+  if (input.maintenance !== undefined) {
+    if (!input.maintenance || typeof input.maintenance !== 'object') {
+      errors.push('maintenance must be object');
+    } else {
+      if (input.maintenance.hints_enabled !== undefined) {
+        ensureBoolean('maintenance.hints_enabled', input.maintenance.hints_enabled, errors);
+      }
+      if (input.maintenance.similarity_threshold !== undefined) {
+        ensureNumber(
+          'maintenance.similarity_threshold',
+          input.maintenance.similarity_threshold,
+          errors
+        );
+      }
+      if (input.maintenance.stale_days !== undefined) {
+        ensureNumber('maintenance.stale_days', input.maintenance.stale_days, errors);
+      }
+    }
+  }
   return errors.length ? { ok: false, errors } : { ok: true, value: input as PolicyDocument };
 }

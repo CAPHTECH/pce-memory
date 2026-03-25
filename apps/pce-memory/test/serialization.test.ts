@@ -64,6 +64,7 @@ describe('normalizeRowTimestamps', () => {
       created_at: 1704067200000000n,
       updated_at: 1704067200000000n,
       recency_anchor: 1704067200000000n,
+      last_retrieved_at: 1704067200000000n,
     };
 
     const result = normalizeRowTimestamps(row);
@@ -73,6 +74,7 @@ describe('normalizeRowTimestamps', () => {
     expect(result.created_at).toBe('2024-01-01T00:00:00.000Z');
     expect(result.updated_at).toBe('2024-01-01T00:00:00.000Z');
     expect(result.recency_anchor).toBe('2024-01-01T00:00:00.000Z');
+    expect(result.last_retrieved_at).toBe('2024-01-01T00:00:00.000Z');
   });
 
   it('カスタムタイムスタンプフィールドを正規化する', () => {

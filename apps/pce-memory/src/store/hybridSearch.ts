@@ -28,6 +28,7 @@ import {
   calculateIntentScoreBreakdown,
   calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
+  calculateUsageTermBreakdown,
   type FeedbackBoostOptions,
   type GFactorBreakdown,
   type ScoreBreakdown,
@@ -453,6 +454,13 @@ function buildTextOnlyScoreBreakdown(score: number): ScoreBreakdown {
     score_final: score,
   };
 }
+
+const NEUTRAL_G_FACTOR: GFactorBreakdown = {
+  utility_term: 1.0,
+  confidence_term: 1.0,
+  recency_term: 1.0,
+  g: 1.0,
+};
 
 function resolveAlpha(alpha: number | undefined): number {
   return typeof alpha === 'number' && Number.isFinite(alpha) ? alpha : ALPHA;
@@ -931,6 +939,7 @@ export async function textSearch(
       SELECT
         c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
         c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+        c.retrieval_count, c.last_retrieved_at,
         COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
       FROM claims c
       LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -963,6 +972,8 @@ export async function textSearch(
         created_at: row.created_at,
         updated_at: row.updated_at,
         recency_anchor: row.recency_anchor,
+        retrieval_count: Number(row.retrieval_count ?? 0),
+        last_retrieved_at: row.last_retrieved_at ?? null,
       },
       score: row.text_score,
     }));
@@ -982,6 +993,7 @@ export async function textSearch(
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+      c.retrieval_count, c.last_retrieved_at,
       COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -1017,6 +1029,8 @@ export async function textSearch(
       created_at: row.created_at,
       updated_at: row.updated_at,
       recency_anchor: row.recency_anchor,
+      retrieval_count: Number(row.retrieval_count ?? 0),
+      last_retrieved_at: row.last_retrieved_at ?? null,
     },
     score: row.text_score,
   }));
@@ -1072,6 +1086,7 @@ export async function vectorSearch(
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+      c.retrieval_count, c.last_retrieved_at,
       norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score
     FROM claims c
     INNER JOIN claim_vectors cv ON cv.claim_id = c.id
@@ -1105,6 +1120,8 @@ export async function vectorSearch(
       created_at: row.created_at,
       updated_at: row.updated_at,
       recency_anchor: row.recency_anchor,
+      retrieval_count: Number(row.retrieval_count ?? 0),
+      last_retrieved_at: row.last_retrieved_at ?? null,
     },
     score: row.vec_score,
   }));
@@ -1352,6 +1369,11 @@ function mergeResultsWithRerank(
 
     // メトリクス取得（存在しない場合はデフォルト値）
     const metrics = claimMetrics.get(id);
+    const usageTerm = calculateUsageTermBreakdown({
+      retrievalCount: claim.retrieval_count,
+      lastRetrievedAt: claim.last_retrieved_at ?? null,
+      createdAt: claim.created_at,
+    });
     let gFactor: GFactorBreakdown;
     let intentBreakdown: ReturnType<typeof calculateIntentScoreBreakdown> = undefined;
     let provenanceQuality = undefined;
@@ -1412,7 +1434,8 @@ function mergeResultsWithRerank(
       gFactor,
       intentBreakdown,
       provenanceQuality,
-      feedbackBoost
+      feedbackBoost,
+      usageTerm
     );
     const scoreFinal = breakdown.score_final;
 
@@ -1632,6 +1655,55 @@ export async function hybridSearchWithScores(
     }));
   }
 
+  if (enableRerank) {
+    const usageAwareRanked: RankedSearchResult[] = textResults
+      .filter((result) => result.score >= textOnlyThreshold)
+      .map((result) => {
+        const usageTerm = calculateUsageTermBreakdown({
+          retrievalCount: result.claim.retrieval_count,
+          lastRetrievedAt: result.claim.last_retrieved_at ?? null,
+          createdAt: result.claim.created_at,
+        });
+        const breakdown = calculateScoreBreakdown(
+          result.score,
+          0,
+          0,
+          NEUTRAL_G_FACTOR,
+          undefined,
+          undefined,
+          undefined,
+          usageTerm
+        );
+
+        return {
+          claim: result.claim,
+          fusedScore: breakdown.score_final,
+          ...(includeBreakdown ? { breakdown } : {}),
+        };
+      });
+
+    const diversifiedUsageAware =
+      mmrConfig && hasQuery
+        ? rerankWithMmr(
+            usageAwareRanked,
+            mmrConfig,
+            normalizedLimit,
+            await fetchClaimEmbeddings(
+              usageAwareRanked
+                .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+                .map((result) => result.claim.id)
+            )
+          )
+        : usageAwareRanked;
+
+    return diversifiedUsageAware.slice(0, normalizedLimit).map((result) => ({
+      claim: result.claim,
+      score: result.fusedScore,
+      source_layer: mapScopeToLayer(result.claim.scope),
+      ...(result.breakdown ? { score_breakdown: result.breakdown } : {}),
+    }));
+  }
+
   const textOnlyRanked: RankedSearchResult[] = textResults
     .filter((result) => result.score >= textOnlyThreshold)
     .map((result) => ({
@@ -1740,6 +1812,7 @@ async function fallbackToTextOnlyResults(
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+           c.retrieval_count, c.last_retrieved_at,
            COALESCE(cr.score, 0) as score
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -1772,6 +1845,8 @@ async function fallbackToTextOnlyResults(
       created_at: row.created_at,
       updated_at: row.updated_at,
       recency_anchor: row.recency_anchor,
+      retrieval_count: Number(row.retrieval_count ?? 0),
+      last_retrieved_at: row.last_retrieved_at ?? null,
     },
     score: row.score,
   }));
@@ -1852,6 +1927,154 @@ export async function getClaimVector(claimId: string): Promise<readonly number[]
   }
 
   return undefined;
+}
+
+export interface SimilarClaimMatch {
+  id: string;
+  similarity: number;
+  text_preview: string;
+  created_at: string;
+}
+
+export interface NewerSimilarClaimMatch {
+  freshness: 'stale_candidate';
+  newer_similar: string;
+  similarity: number;
+  created_at: string;
+}
+
+interface SimilarClaimRow {
+  id: string;
+  similarity: number;
+  text: string;
+  created_at: Date | string;
+}
+
+interface NewerSimilarClaimRow {
+  claim_id: string;
+  newer_similar: string;
+  similarity: number;
+  newer_created_at: Date | string;
+  newer_vector_rowid?: number | bigint;
+}
+
+function buildTextPreview(text: string, maxLength: number = 120): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function normalizeSimilarity(value: unknown): number {
+  const similarity = Number(value);
+  return Number.isFinite(similarity) ? similarity : 0;
+}
+
+export async function findSimilarActiveClaims(
+  claimId: string,
+  threshold: number = 0.85
+): Promise<SimilarClaimMatch[]> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    `SELECT
+       candidate.id,
+       cos_sim(base_cv.embedding, candidate_cv.embedding) AS similarity,
+       candidate.text,
+       candidate.created_at
+     FROM claims base
+     INNER JOIN claim_vectors base_cv ON base_cv.claim_id = base.id
+     INNER JOIN claims candidate
+       ON candidate.scope = base.scope
+      AND candidate.id <> base.id
+      AND candidate.content_hash <> base.content_hash
+      AND ${activeClaimFilter('candidate')}
+     INNER JOIN claim_vectors candidate_cv ON candidate_cv.claim_id = candidate.id
+     WHERE base.id = $1
+       AND ${activeClaimFilter('base')}
+       AND cos_sim(base_cv.embedding, candidate_cv.embedding) > $2
+     ORDER BY similarity DESC, candidate.created_at DESC, candidate.id DESC`,
+    [claimId, threshold]
+  );
+  const rawRows = reader.getRowObjects() as unknown as SimilarClaimRow[];
+  const rows = normalizeRowsTimestamps(rawRows) as SimilarClaimRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    similarity: normalizeSimilarity(row.similarity),
+    text_preview: buildTextPreview(row.text),
+    created_at:
+      typeof row.created_at === 'string' ? row.created_at : new Date(row.created_at).toISOString(),
+  }));
+}
+
+export async function findNewerSimilarClaims(
+  claimIds: readonly string[],
+  threshold: number = 0.85
+): Promise<Map<string, NewerSimilarClaimMatch>> {
+  if (claimIds.length === 0) {
+    return new Map();
+  }
+
+  const conn = await getConnection();
+  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
+  const thresholdParam = `$${claimIds.length + 1}`;
+  const reader = await conn.runAndReadAll(
+    `SELECT claim_id, newer_similar, similarity, newer_created_at
+     FROM (
+       SELECT
+         candidates.*,
+         ROW_NUMBER() OVER (
+           PARTITION BY claim_id
+           ORDER BY newer_created_at DESC, newer_vector_rowid DESC, similarity DESC, newer_similar DESC
+         ) AS rn
+       FROM (
+         SELECT
+           base.id AS claim_id,
+           newer.id AS newer_similar,
+           cos_sim(base_cv.embedding, newer_cv.embedding) AS similarity,
+            newer.created_at AS newer_created_at,
+           newer_cv.rowid AS newer_vector_rowid
+         FROM claims base
+         INNER JOIN claim_vectors base_cv ON base_cv.claim_id = base.id
+         INNER JOIN claims newer
+           ON newer.scope = base.scope
+          AND newer.id <> base.id
+          AND newer.content_hash <> base.content_hash
+          AND ${activeClaimFilter('newer')}
+         INNER JOIN claim_vectors newer_cv ON newer_cv.claim_id = newer.id
+         WHERE base.id IN (${placeholders})
+           AND ${activeClaimFilter('base')}
+           AND (
+             newer.created_at > base.created_at
+             OR (
+               newer.created_at = base.created_at
+               AND newer_cv.rowid > base_cv.rowid
+             )
+           )
+           AND cos_sim(base_cv.embedding, newer_cv.embedding) > ${thresholdParam}
+       ) AS candidates
+     ) AS ranked
+     WHERE rn = 1`,
+    [...claimIds, threshold]
+  );
+  const rawRows = reader.getRowObjects() as unknown as NewerSimilarClaimRow[];
+  const rows = normalizeRowsTimestamps(rawRows) as NewerSimilarClaimRow[];
+
+  return new Map(
+    rows.map((row) => [
+      row.claim_id,
+      {
+        freshness: 'stale_candidate' as const,
+        newer_similar: row.newer_similar,
+        similarity: normalizeSimilarity(row.similarity),
+        created_at:
+          typeof row.newer_created_at === 'string'
+            ? row.newer_created_at
+            : new Date(row.newer_created_at).toISOString(),
+      },
+    ])
+  );
 }
 
 /**

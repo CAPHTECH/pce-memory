@@ -15,6 +15,7 @@ import {
   findClaimsByIds,
   findClaimByContentHash,
   markStaleWorkingStateClaims,
+  recordClaimRetrievals,
   updateClaimStatus,
   ContentHashCollisionError,
 } from '../store/claims.js';
@@ -22,7 +23,10 @@ import type { Claim, Provenance } from '../store/claims.js';
 import {
   hybridSearchWithScores,
   getEmbeddingService,
+  findNewerSimilarClaims,
+  findSimilarActiveClaims,
 } from '../store/hybridSearch.js';
+import { collectMaintenanceHints } from '../store/maintenance.js';
 import {
   CLAIM_LINK_TYPES,
   isValidClaimLinkType,
@@ -91,6 +95,7 @@ import * as E from 'fp-ts/Either';
 
 import {
   applyPolicyOp,
+  getMaintenancePolicy,
   getPolicy,
   getRetrievalPolicy,
   getPolicyVersion,
@@ -398,6 +403,13 @@ type ActivateSearchItem = {
   };
 };
 
+type FreshnessMetadata = {
+  freshness: 'stale_candidate';
+  newer_similar: string;
+};
+
+type ActivateClaimResponse = Claim & Partial<FreshnessMetadata>;
+
 const OBSERVATION_SCORE_MERGE_HEADROOM = 0.98;
 const ACTIVATE_OBSERVATION_SLOT_FRACTION = 0.3;
 
@@ -418,6 +430,34 @@ function compareActivateSearchItems(left: ActivateSearchItem, right: ActivateSea
   }
 
   return right.claim.id.localeCompare(left.claim.id);
+}
+
+function compareActivateSearchItemsWithFreshness(
+  left: ActivateSearchItem,
+  right: ActivateSearchItem,
+  freshnessByClaimId: ReadonlyMap<string, FreshnessMetadata>
+): number {
+  const leftStale = freshnessByClaimId.has(left.claim.id);
+  const rightStale = freshnessByClaimId.has(right.claim.id);
+  if (leftStale !== rightStale) {
+    return leftStale ? 1 : -1;
+  }
+  return compareActivateSearchItems(left, right);
+}
+
+function augmentClaimWithFreshness(
+  claim: Claim,
+  freshnessByClaimId: ReadonlyMap<string, FreshnessMetadata>
+): ActivateClaimResponse {
+  const freshness = freshnessByClaimId.get(claim.id);
+  if (!freshness) {
+    return claim;
+  }
+  return {
+    ...claim,
+    freshness: freshness.freshness,
+    newer_similar: freshness.newer_similar,
+  };
 }
 
 function maxActivateItemScore(items: ActivateSearchItem[]): number {
@@ -1239,6 +1279,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
     // Graph Memory処理（ヘルパー関数に委譲）
     const graphResult = await processGraphMemory(claim.id, isNew, entities, relations);
     const suggestedLinks = isNew ? await suggestRelatedClaimLinks(claim.id) : [];
+    const similarExisting = await findSimilarActiveClaims(claim.id).catch(() => []);
 
     // スコープへのリソース登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
@@ -1276,6 +1317,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
       is_new: isNew,
       content_hash: validation.resolvedHash,
       suggested_links: suggestedLinks,
+      ...(similarExisting.length > 0 ? { similar_existing: similarExisting } : {}),
       ...graphMemoryResult,
       policy_version: getPolicyVersion(),
       state: getStateType(),
@@ -2384,6 +2426,8 @@ export async function handlePromote(args: Record<string, unknown>) {
       );
     }
 
+    const similarExisting = await findSimilarActiveClaims(claim.id).catch(() => []);
+
     await appendLog({
       id: `log_${reqId}`,
       op: 'promote',
@@ -2406,6 +2450,7 @@ export async function handlePromote(args: Record<string, unknown>) {
       promoted_from: candidate.id,
       rollback_token: claim.id,
       suggested_links: suggestedLinks,
+      ...(similarExisting.length > 0 ? { similar_existing: similarExisting } : {}),
       policy_version: getPolicyVersion(),
       state: getStateType(),
       request_id: reqId,
@@ -2875,6 +2920,7 @@ export async function handleActivate(args: Record<string, unknown>) {
 
     const policy = getPolicy();
     const retrievalPolicy = getRetrievalPolicy();
+    const maintenancePolicy = getMaintenancePolicy();
     const hybridPolicy = retrievalPolicy.hybrid ?? {};
     const allowTags = allow as string[];
     const allowedBoundaryClasses = getAllowedBoundaryClasses(policy, allowTags);
@@ -3014,7 +3060,44 @@ export async function handleActivate(args: Record<string, unknown>) {
       hasMore = pagedResults.hasMore;
     }
 
-    const claims = searchResults.map((r) => r.claim);
+    const freshnessMatches = await findNewerSimilarClaims(
+      searchResults.map((result) => result.claim.id)
+    ).catch(() => new Map());
+    const freshnessByClaimId = new Map<string, FreshnessMetadata>(
+      [...freshnessMatches.entries()].map(([claimId, freshness]) => [
+        claimId,
+        {
+          freshness: freshness.freshness,
+          newer_similar: freshness.newer_similar,
+        },
+      ])
+    );
+    if (freshnessByClaimId.size > 0) {
+      searchResults = [...searchResults].sort((left, right) =>
+        compareActivateSearchItemsWithFreshness(left, right, freshnessByClaimId)
+      );
+    }
+
+    const retrievedAt = new Date().toISOString();
+    const claims = searchResults.map((r) => {
+      if ((r.claim as { source_record_type?: string }).source_record_type === 'observation') {
+        return r.claim;
+      }
+
+      return {
+        ...r.claim,
+        retrieval_count: r.claim.retrieval_count + 1,
+        last_retrieved_at: retrievedAt,
+      };
+    });
+    const durableClaimIds = searchResults
+      .map((item) => item.claim)
+      .filter(
+        (claim): claim is Claim =>
+          (claim as { source_record_type?: string }).source_record_type !== 'observation'
+      )
+      .map((claim) => claim.id);
+    await recordClaimRetrievals(durableClaimIds, retrievedAt);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({
       id: acId,
@@ -3030,11 +3113,12 @@ export async function handleActivate(args: Record<string, unknown>) {
     }
 
     const scoredItems = searchResults.map((r, index) => {
+      const claim = augmentClaimWithFreshness(r.claim, freshnessByClaimId);
       const sourceLayer = r.source_layer ?? mapScopeToLayer(r.claim.scope);
       const rank = index + 1;
       const selectionReason = buildSelectionReason({
         score: r.score,
-        claim: r.claim,
+        claim,
         source_layer: sourceLayer,
         rank,
         ...(r.source ? { source: r.source } : {}),
@@ -3052,7 +3136,7 @@ export async function handleActivate(args: Record<string, unknown>) {
       });
 
       return {
-        claim: r.claim,
+        claim,
         score: r.score,
         source_layer: sourceLayer,
         ...(r.source ? { source: r.source } : {}),
@@ -3060,7 +3144,7 @@ export async function handleActivate(args: Record<string, unknown>) {
         rank,
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
         selection_reason: selectionReason,
-        evidences: evidenceMap?.get(r.claim.id) ?? [],
+        evidences: evidenceMap?.get(claim.id) ?? [],
       };
     });
 
@@ -3076,6 +3160,40 @@ export async function handleActivate(args: Record<string, unknown>) {
         rank: item.rank,
       }))
     );
+
+    let maintenanceHints:
+      | Awaited<ReturnType<typeof collectMaintenanceHints>>
+      | undefined = undefined;
+    if (maintenancePolicy.hints_enabled !== false) {
+      try {
+        maintenanceHints = await collectMaintenanceHints(
+          claims.map((claim) => {
+            const hintClaim = claim as Claim & {
+              source_record_type?: string;
+              transient?: boolean;
+            };
+
+            return {
+              id: hintClaim.id,
+              text: hintClaim.text,
+              ...(typeof hintClaim.source_record_type === 'string'
+                ? { source_record_type: hintClaim.source_record_type }
+                : {}),
+              ...(typeof hintClaim.transient === 'boolean'
+                ? { transient: hintClaim.transient }
+                : {}),
+            };
+          }),
+          {
+            similarityThreshold: maintenancePolicy.similarity_threshold ?? 0.9,
+            staleDays: maintenancePolicy.stale_days ?? 30,
+          }
+        );
+      } catch {
+        // Maintenance hints are best-effort and must not fail activate.
+        maintenanceHints = undefined;
+      }
+    }
 
     transitionToReady(acId);
 
@@ -3096,6 +3214,7 @@ export async function handleActivate(args: Record<string, unknown>) {
         claims_count: claims.length,
         next_cursor: nextCursor,
         has_more: hasMore,
+        ...(maintenanceHints ? { maintenance_hints: maintenanceHints } : {}),
         policy_version: getPolicyVersion(),
         state: getStateType(),
         request_id: reqId,
@@ -4333,7 +4452,8 @@ function generatePromptMessages(
 
 3. **Post-recall Actions**:
    - Send \`helpful\` feedback for useful knowledge
-   - Send \`outdated\` for stale information`,
+   - Send \`outdated\` for stale information
+   - When \`maintenance_hints\` are present, consolidate \`similar_pairs\`, send feedback for \`high_retrieval_no_feedback\`, and distill \`unprocessed_observations\` backlog`,
           },
         },
       ];
@@ -4961,6 +5081,20 @@ export const TOOL_DEFINITIONS = [
             required: ['target', 'similarity', 'suggested_type'],
           },
         },
+        similar_existing: {
+          type: 'array',
+          description: 'Nearby active claims in the same scope with cosine similarity > 0.85',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              similarity: { type: 'number' },
+              text_preview: { type: 'string' },
+              created_at: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'similarity', 'text_preview', 'created_at'],
+          },
+        },
         policy_version: { type: 'string' },
         state: {
           type: 'string',
@@ -5168,6 +5302,20 @@ export const TOOL_DEFINITIONS = [
           },
           description: 'Graph memory operation results (optional)',
         },
+        similar_existing: {
+          type: 'array',
+          description: 'Nearby active claims in the same scope with cosine similarity > 0.85',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              similarity: { type: 'number' },
+              text_preview: { type: 'string' },
+              created_at: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'similarity', 'text_preview', 'created_at'],
+          },
+        },
         policy_version: { type: 'string', description: 'Policy version' },
         state: {
           type: 'string',
@@ -5235,7 +5383,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_activate',
     description:
-      'Retrieve relevant knowledge for current task via hybrid search. Call before starting work to recall past decisions, patterns, and solutions. Returns ranked claims filtered by scope and boundary.',
+      'Retrieve relevant knowledge for current task via hybrid search. Call before starting work to recall past decisions, patterns, and solutions. Returns ranked claims filtered by scope and boundary, plus optional maintenance_hints when policy-enabled.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -5302,7 +5450,15 @@ export const TOOL_DEFINITIONS = [
           items: {
             type: 'object',
             properties: {
-              claim: { type: 'object', description: 'Claim data' },
+              claim: {
+                type: 'object',
+                description:
+                  'Claim data with optional freshness metadata when a newer similar claim exists',
+                properties: {
+                  freshness: { type: 'string', enum: ['stale_candidate'] },
+                  newer_similar: { type: 'string' },
+                },
+              },
               score: { type: 'number', description: 'Relevance score' },
               source_layer: {
                 type: 'string',
@@ -5341,6 +5497,70 @@ export const TOOL_DEFINITIONS = [
         claims_count: { type: 'integer', minimum: 0, description: 'Number of claims returned' },
         next_cursor: { type: 'string', description: 'Pagination cursor for next page' },
         has_more: { type: 'boolean', description: 'Whether more results exist' },
+        maintenance_hints: {
+          type: 'object',
+          description: 'Optional knowledge maintenance signals derived from retrieved claims and store health.',
+          properties: {
+            similar_pairs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  a: { type: 'string', description: 'First similar claim id' },
+                  b: { type: 'string', description: 'Second similar claim id' },
+                  similarity: { type: 'number', description: 'Cosine similarity score' },
+                  suggestion: {
+                    type: 'string',
+                    enum: ['consider_consolidation'],
+                    description: 'Suggested maintenance action',
+                  },
+                },
+              },
+            },
+            stale_candidates: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', description: 'Stale claim id' },
+                  last_retrieved_at: {
+                    type: 'null',
+                    description: 'Always null when retrieval_count is zero',
+                  },
+                  days_since_created: {
+                    type: 'integer',
+                    minimum: 0,
+                    description: 'Age of the claim in days',
+                  },
+                },
+              },
+            },
+            unprocessed_observations: {
+              type: 'integer',
+              minimum: 0,
+              description: 'Count of non-expired raw observations still carrying content',
+            },
+            high_retrieval_no_feedback: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', description: 'Frequently retrieved claim id' },
+                  retrieval_count: {
+                    type: 'integer',
+                    minimum: 0,
+                    description: 'Observed retrieval count from active context items',
+                  },
+                  feedback_count: {
+                    type: 'integer',
+                    minimum: 0,
+                    description: 'Feedback event count for the claim',
+                  },
+                },
+              },
+            },
+          },
+        },
         policy_version: { type: 'string', description: 'Policy version' },
         state: {
           type: 'string',

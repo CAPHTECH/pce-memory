@@ -283,6 +283,22 @@ async function migrateClaimsRollbackColumns(conn: DuckDBConnection): Promise<voi
   }
 }
 
+async function migrateClaimsUsageTracking(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'claims'))) return;
+
+  const cols = await getTableColumns(conn, 'claims');
+  if (!cols.has('retrieval_count')) {
+    console.error('[DB] Migrating claims: adding retrieval_count column...');
+    await conn.run('ALTER TABLE claims ADD COLUMN retrieval_count INTEGER DEFAULT 0');
+  }
+  await conn.run('UPDATE claims SET retrieval_count = 0 WHERE retrieval_count IS NULL');
+
+  if (!cols.has('last_retrieved_at')) {
+    console.error('[DB] Migrating claims: adding last_retrieved_at column...');
+    await conn.run('ALTER TABLE claims ADD COLUMN last_retrieved_at TEXT');
+  }
+}
+
 async function migrateObservationsBoundaryClass(conn: DuckDBConnection): Promise<void> {
   if (!(await tableExists(conn, 'observations'))) return;
 
@@ -454,6 +470,7 @@ export async function initSchema() {
   await migrateClaimsMemoryType(conn); // Issue #60: claims表にmemory_typeカラム追加
   await migrateClaimsStatus(conn); // Issue #71: claims表にstatus列を追加しworking_stateをbackfill
   await migrateClaimsRollbackColumns(conn); // Issue #61: claims表にrollback列を追加
+  await migrateClaimsUsageTracking(conn); // Issue #74: claims表にretrieve usage列を追加
   await migrateActiveContextsV2(conn); // Issue #60: active_contexts表をv2列で拡張
   await migrateObservationsBoundaryClass(conn); // Issue #61: observations表にboundary_class追加
 
