@@ -1,4 +1,4 @@
-import type { PolicyDocument } from './types.js';
+import type { BoundaryPolicy, MaintenancePolicy, PolicyDocument, RetrievalPolicy } from './types.js';
 
 export const defaultPolicy: PolicyDocument = {
   version: '0.1',
@@ -56,3 +56,15 @@ export const defaultPolicy: PolicyDocument = {
     stale_days: 30,
   },
 };
+
+export function defaultBoundaryPolicy(): BoundaryPolicy {
+  return defaultPolicy.boundary;
+}
+
+export function defaultRetrievalPolicy(): RetrievalPolicy | undefined {
+  return defaultPolicy.retrieval;
+}
+
+export function defaultMaintenancePolicy(): MaintenancePolicy | undefined {
+  return defaultPolicy.maintenance;
+}
