@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "pce-memory": {
-      "command": "npx",
-      "args": ["pce-memory@latest"]
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run-mcp-server.sh",
+      "args": []
     }
   }
 }
