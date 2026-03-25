@@ -1,0 +1,1159 @@
+{
+  "generated_at": "2026-03-25T01:16:28.754Z",
+  "experiment_1": {
+    "name": "Search Precision",
+    "inserted_claims": 100,
+    "average_precision_at_3": 0.9333,
+    "average_ndcg_at_3": 0.9838,
+    "query_results": [
+      {
+        "name": "policy_check_norm_over_task",
+        "description": "intent=policy_check should rank norm policy claims above task claims",
+        "query": "policy-fixture-alpha guardrail",
+        "intent": "policy_check",
+        "kind_filter": null,
+        "memory_type_filter": null,
+        "expected_top3": [
+          "clm_f4498ca6",
+          "clm_d16b2ffe",
+          "clm_6b0a6d5f"
+        ],
+        "actual_top3": [
+          "clm_f4498ca6",
+          "clm_d16b2ffe",
+          "clm_f8822f6f"
+        ],
+        "precision_at_3": 0.6667,
+        "ndcg_at_3": 0.9468,
+        "returned_kinds": [
+          "policy_hint",
+          "preference",
+          "fact"
+        ],
+        "returned_memory_types": [
+          "norm"
+        ],
+        "assertion_details": {
+          "normAboveTask": true,
+          "top3HasNoTask": true
+        },
+        "claims": [
+          {
+            "id": "clm_f4498ca6",
+            "text": "policy-fixture-alpha guardrail authentication policy mfa required before admin access",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.9656
+          },
+          {
+            "id": "clm_d16b2ffe",
+            "text": "policy-fixture-alpha guardrail authentication policy mfa enforced during token rotation",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.9572
+          },
+          {
+            "id": "clm_f8822f6f",
+            "text": "procedure-fixture-delta database migration rollback requires approval board",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.5642
+          },
+          {
+            "id": "clm_633ffe7f",
+            "text": "filler 43 travel itinerary passport gate astronomy nebula lens reference note",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.5588
+          },
+          {
+            "id": "clm_a151bf1a",
+            "text": "auth-fixture-epsilon authentication token refresh requires recent login",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.539
+          }
+        ]
+      },
+      {
+        "name": "resume_task_working_state_over_norm",
+        "description": "intent=resume_task should rank working_state task claims above norms",
+        "query": "resume-fixture-beta handoff",
+        "intent": "resume_task",
+        "kind_filter": null,
+        "memory_type_filter": null,
+        "expected_top3": [
+          "clm_c7046bab",
+          "clm_ad39c4bd",
+          "clm_d182a3ea"
+        ],
+        "actual_top3": [
+          "clm_c7046bab",
+          "clm_ad39c4bd",
+          "clm_d182a3ea"
+        ],
+        "precision_at_3": 1,
+        "ndcg_at_3": 1,
+        "returned_kinds": [
+          "task",
+          "fact",
+          "policy_hint"
+        ],
+        "returned_memory_types": [
+          "working_state",
+          "knowledge",
+          "norm"
+        ],
+        "assertion_details": {
+          "top1IsTask": true,
+          "taskAboveNorm": true
+        },
+        "claims": [
+          {
+            "id": "clm_c7046bab",
+            "text": "resume-fixture-beta authentication rollout handoff next deployment step",
+            "kind": "task",
+            "memory_type": "working_state",
+            "score": 0.7588
+          },
+          {
+            "id": "clm_ad39c4bd",
+            "text": "resume-fixture-beta authentication rollout handoff current blocker and owner",
+            "kind": "task",
+            "memory_type": "working_state",
+            "score": 0.7548
+          },
+          {
+            "id": "clm_d182a3ea",
+            "text": "resume-fixture-beta authentication rollout handoff architecture note",
+            "kind": "fact",
+            "memory_type": "knowledge",
+            "score": 0.4818
+          },
+          {
+            "id": "clm_9f8291c3",
+            "text": "resume-fixture-beta authentication rollout handoff requires approval checklist",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.4805
+          },
+          {
+            "id": "clm_6b141adc",
+            "text": "kind-fixture-gamma authentication compliance exception hotfix task",
+            "kind": "task",
+            "memory_type": "working_state",
+            "score": 0.4243
+          }
+        ]
+      },
+      {
+        "name": "kind_filter_is_hard_filter",
+        "description": "kind_filter should exclude higher-scoring non-policy claims",
+        "query": "kind-fixture-gamma exception",
+        "intent": null,
+        "kind_filter": [
+          "policy_hint"
+        ],
+        "memory_type_filter": null,
+        "expected_top3": [
+          "clm_9e308567",
+          "clm_a12e3bf1",
+          "clm_56863c51"
+        ],
+        "actual_top3": [
+          "clm_9e308567",
+          "clm_56863c51",
+          "clm_a12e3bf1"
+        ],
+        "precision_at_3": 1,
+        "ndcg_at_3": 0.9721,
+        "returned_kinds": [
+          "policy_hint"
+        ],
+        "returned_memory_types": [
+          "norm",
+          "knowledge",
+          "procedure"
+        ],
+        "assertion_details": {
+          "allPolicyHint": true,
+          "decoysFilteredOut": true
+        },
+        "claims": [
+          {
+            "id": "clm_9e308567",
+            "text": "kind-fixture-gamma authentication compliance exception expires after seven days",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.4558
+          },
+          {
+            "id": "clm_56863c51",
+            "text": "kind-fixture-gamma authentication compliance exception requires security signoff",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.4354
+          },
+          {
+            "id": "clm_a12e3bf1",
+            "text": "kind-fixture-gamma authentication compliance exception reference template",
+            "kind": "policy_hint",
+            "memory_type": "knowledge",
+            "score": 0.4349
+          },
+          {
+            "id": "clm_633ffe7f",
+            "text": "filler 43 travel itinerary passport gate astronomy nebula lens reference note",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.2767
+          },
+          {
+            "id": "clm_c6bcf054",
+            "text": "filler 7 travel itinerary passport gate astronomy nebula lens reference note",
+            "kind": "policy_hint",
+            "memory_type": "procedure",
+            "score": 0.2613
+          }
+        ]
+      },
+      {
+        "name": "memory_type_filter_is_hard_filter",
+        "description": "memory_type_filter should return only procedure claims",
+        "query": "procedure-fixture-delta rollback",
+        "intent": null,
+        "kind_filter": null,
+        "memory_type_filter": [
+          "procedure"
+        ],
+        "expected_top3": [
+          "clm_0dda6e3c",
+          "clm_33685198",
+          "clm_4c20fb7d"
+        ],
+        "actual_top3": [
+          "clm_0dda6e3c",
+          "clm_33685198",
+          "clm_4c20fb7d"
+        ],
+        "precision_at_3": 1,
+        "ndcg_at_3": 1,
+        "returned_kinds": [
+          "fact",
+          "preference",
+          "policy_hint",
+          "task"
+        ],
+        "returned_memory_types": [
+          "procedure"
+        ],
+        "assertion_details": {
+          "allProcedure": true,
+          "decoysFilteredOut": true
+        },
+        "claims": [
+          {
+            "id": "clm_0dda6e3c",
+            "text": "procedure-fixture-delta database migration rollback validation checklist",
+            "kind": "fact",
+            "memory_type": "procedure",
+            "score": 0.4264
+          },
+          {
+            "id": "clm_33685198",
+            "text": "procedure-fixture-delta database migration rollback communication plan",
+            "kind": "fact",
+            "memory_type": "procedure",
+            "score": 0.4226
+          },
+          {
+            "id": "clm_4c20fb7d",
+            "text": "procedure-fixture-delta database migration rollback step by step runbook",
+            "kind": "fact",
+            "memory_type": "procedure",
+            "score": 0.4076
+          },
+          {
+            "id": "clm_792820af",
+            "text": "filler 22 weather pressure front radar billing invoice ledger reference note",
+            "kind": "preference",
+            "memory_type": "procedure",
+            "score": 0.223
+          },
+          {
+            "id": "clm_c6bcf054",
+            "text": "filler 7 travel itinerary passport gate astronomy nebula lens reference note",
+            "kind": "policy_hint",
+            "memory_type": "procedure",
+            "score": 0.2194
+          }
+        ]
+      },
+      {
+        "name": "authentication_query_avoids_caching_noise",
+        "description": "queries about authentication shouldn't surface caching claims in top-3",
+        "query": "auth-fixture-epsilon authentication token refresh",
+        "intent": null,
+        "kind_filter": null,
+        "memory_type_filter": null,
+        "expected_top3": [
+          "clm_a151bf1a",
+          "clm_9ca87b89",
+          "clm_cfd673f2"
+        ],
+        "actual_top3": [
+          "clm_a151bf1a",
+          "clm_9ca87b89",
+          "clm_cfd673f2"
+        ],
+        "precision_at_3": 1,
+        "ndcg_at_3": 1,
+        "returned_kinds": [
+          "policy_hint",
+          "fact",
+          "task"
+        ],
+        "returned_memory_types": [
+          "norm",
+          "knowledge",
+          "working_state"
+        ],
+        "assertion_details": {
+          "noCachingInTop3": true,
+          "allTop3Expected": true
+        },
+        "claims": [
+          {
+            "id": "clm_a151bf1a",
+            "text": "auth-fixture-epsilon authentication token refresh requires recent login",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.4956
+          },
+          {
+            "id": "clm_9ca87b89",
+            "text": "auth-fixture-epsilon authentication token refresh rotates refresh secrets",
+            "kind": "fact",
+            "memory_type": "knowledge",
+            "score": 0.494
+          },
+          {
+            "id": "clm_cfd673f2",
+            "text": "auth-fixture-epsilon authentication token refresh invalidates stolen sessions",
+            "kind": "fact",
+            "memory_type": "knowledge",
+            "score": 0.4925
+          },
+          {
+            "id": "clm_9f8291c3",
+            "text": "resume-fixture-beta authentication rollout handoff requires approval checklist",
+            "kind": "policy_hint",
+            "memory_type": "norm",
+            "score": 0.4456
+          },
+          {
+            "id": "clm_6b141adc",
+            "text": "kind-fixture-gamma authentication compliance exception hotfix task",
+            "kind": "task",
+            "memory_type": "working_state",
+            "score": 0.438
+          }
+        ]
+      }
+    ]
+  },
+  "experiment_2": {
+    "name": "Noise Tolerance",
+    "durable_claims_seeded": 10,
+    "noisy_observations_seeded": 90,
+    "query": "release rollback checklist gate",
+    "top_k_runs": [
+      {
+        "top_k": 5,
+        "returned": 5,
+        "durable_claims_in_top_k": 5,
+        "observations_in_top_k": 0,
+        "durable_share": 1,
+        "signal_to_noise_ratio": "all_signal",
+        "top_ids": [
+          {
+            "id": "clm_1091d7f9",
+            "kind": "fact",
+            "score": 0.5324
+          },
+          {
+            "id": "clm_6b9e52ec",
+            "kind": "fact",
+            "score": 0.5303
+          },
+          {
+            "id": "clm_04f07252",
+            "kind": "fact",
+            "score": 0.5282
+          },
+          {
+            "id": "clm_548508aa",
+            "kind": "fact",
+            "score": 0.5261
+          },
+          {
+            "id": "clm_4a4a03d2",
+            "kind": "fact",
+            "score": 0.524
+          }
+        ]
+      },
+      {
+        "top_k": 10,
+        "returned": 10,
+        "durable_claims_in_top_k": 10,
+        "observations_in_top_k": 0,
+        "durable_share": 1,
+        "signal_to_noise_ratio": "all_signal",
+        "top_ids": [
+          {
+            "id": "clm_1091d7f9",
+            "kind": "fact",
+            "score": 0.5324
+          },
+          {
+            "id": "clm_6b9e52ec",
+            "kind": "fact",
+            "score": 0.5303
+          },
+          {
+            "id": "clm_04f07252",
+            "kind": "fact",
+            "score": 0.5282
+          },
+          {
+            "id": "clm_548508aa",
+            "kind": "fact",
+            "score": 0.5261
+          },
+          {
+            "id": "clm_4a4a03d2",
+            "kind": "fact",
+            "score": 0.524
+          },
+          {
+            "id": "clm_016ae78e",
+            "kind": "fact",
+            "score": 0.5219
+          },
+          {
+            "id": "clm_0b44771c",
+            "kind": "fact",
+            "score": 0.5198
+          },
+          {
+            "id": "clm_5b1ca8f1",
+            "kind": "fact",
+            "score": 0.5177
+          },
+          {
+            "id": "clm_488a764b",
+            "kind": "fact",
+            "score": 0.5156
+          },
+          {
+            "id": "clm_a85a5877",
+            "kind": "fact",
+            "score": 0.4989
+          }
+        ]
+      },
+      {
+        "top_k": 20,
+        "returned": 16,
+        "durable_claims_in_top_k": 10,
+        "observations_in_top_k": 6,
+        "durable_share": 0.625,
+        "signal_to_noise_ratio": 1.6667,
+        "top_ids": [
+          {
+            "id": "clm_1091d7f9",
+            "kind": "fact",
+            "score": 0.5324
+          },
+          {
+            "id": "clm_6b9e52ec",
+            "kind": "fact",
+            "score": 0.5303
+          },
+          {
+            "id": "clm_04f07252",
+            "kind": "fact",
+            "score": 0.5282
+          },
+          {
+            "id": "clm_548508aa",
+            "kind": "fact",
+            "score": 0.5261
+          },
+          {
+            "id": "clm_4a4a03d2",
+            "kind": "fact",
+            "score": 0.524
+          },
+          {
+            "id": "clm_016ae78e",
+            "kind": "fact",
+            "score": 0.5219
+          },
+          {
+            "id": "clm_0b44771c",
+            "kind": "fact",
+            "score": 0.5198
+          },
+          {
+            "id": "clm_5b1ca8f1",
+            "kind": "fact",
+            "score": 0.5177
+          },
+          {
+            "id": "clm_488a764b",
+            "kind": "fact",
+            "score": 0.5156
+          },
+          {
+            "id": "clm_a85a5877",
+            "kind": "fact",
+            "score": 0.4989
+          }
+        ]
+      }
+    ]
+  },
+  "experiment_3": {
+    "name": "Temporal Decay",
+    "query": "temporal decay retrieval fixture",
+    "full_ranking": [
+      {
+        "rank": 1,
+        "label": "fact_1h",
+        "score": 0.4381,
+        "kind": "fact",
+        "memory_type": "knowledge"
+      },
+      {
+        "rank": 2,
+        "label": "task_1h",
+        "score": 0.4376,
+        "kind": "task",
+        "memory_type": "working_state"
+      },
+      {
+        "rank": 3,
+        "label": "fact_1d",
+        "score": 0.4365,
+        "kind": "fact",
+        "memory_type": "knowledge"
+      },
+      {
+        "rank": 4,
+        "label": "fact_1w",
+        "score": 0.4261,
+        "kind": "fact",
+        "memory_type": "knowledge"
+      },
+      {
+        "rank": 5,
+        "label": "task_1d",
+        "score": 0.4234,
+        "kind": "task",
+        "memory_type": "working_state"
+      },
+      {
+        "rank": 6,
+        "label": "fact_30d",
+        "score": 0.3894,
+        "kind": "fact",
+        "memory_type": "knowledge"
+      },
+      {
+        "rank": 7,
+        "label": "task_1w",
+        "score": 0.3484,
+        "kind": "task",
+        "memory_type": "working_state"
+      },
+      {
+        "rank": 8,
+        "label": "fact_90d",
+        "score": 0.3139,
+        "kind": "fact",
+        "memory_type": "knowledge"
+      },
+      {
+        "rank": 9,
+        "label": "task_30d",
+        "score": 0.2009,
+        "kind": "task",
+        "memory_type": "working_state"
+      },
+      {
+        "rank": 10,
+        "label": "task_90d",
+        "score": 0.135,
+        "kind": "task",
+        "memory_type": "working_state"
+      }
+    ],
+    "thresholded_activate_labels": [
+      "fact_1h",
+      "task_1h",
+      "fact_1d",
+      "fact_1w",
+      "task_1d",
+      "fact_30d",
+      "task_1w",
+      "fact_90d"
+    ],
+    "assertions": {
+      "fact_recent_to_old_monotonic": true,
+      "task_recent_to_old_monotonic": true,
+      "old_task_disappears_from_thresholded_activate": true,
+      "old_fact_persists_in_thresholded_activate": true
+    },
+    "score_ratios": {
+      "fact_90d_vs_fact_1h": 0.7163,
+      "task_90d_vs_task_1h": 0.3086,
+      "fact_90d_vs_task_90d": 2.3244,
+      "fact_30d_vs_task_30d": 1.9381
+    }
+  },
+  "experiment_5": {
+    "name": "Promote Quality",
+    "query": "promotion lineage boundary source",
+    "comparison": {
+      "raw_observe_only": {
+        "path": "raw_observe_only",
+        "observation_id": "obs_27dc4fb2",
+        "score": 0.8,
+        "top_match_id": "obs_27dc4fb2",
+        "metadata": {
+          "effective_boundary_class": "internal",
+          "has_promotion_candidate": false,
+          "has_boundary_validation_result": false,
+          "evidence_count": 0,
+          "has_source_lineage": false
+        }
+      },
+      "observe_distill_promote": {
+        "path": "observe_distill_promote",
+        "observation_id": "obs_0c351385",
+        "candidate_id": "pq_a6b4b31d",
+        "claim_id": "clm_707fa4dd",
+        "score": 0.6373,
+        "top_match_id": "clm_707fa4dd",
+        "metadata": {
+          "boundary_check_allowed": true,
+          "has_promotion_candidate": true,
+          "promotion_status": "accepted",
+          "accepted_claim_id": "clm_707fa4dd",
+          "evidence_count": 1,
+          "evidence_source_types": [
+            "observation"
+          ],
+          "has_source_lineage": true
+        }
+      },
+      "direct_upsert": {
+        "path": "direct_upsert",
+        "claim_id": "clm_9760ef43",
+        "score": 0.5518,
+        "top_match_id": "clm_9760ef43",
+        "metadata": {
+          "has_promotion_candidate": false,
+          "has_boundary_validation_result": false,
+          "evidence_count": 0,
+          "has_source_lineage": false
+        }
+      }
+    },
+    "assertions": {
+      "promoted_has_more_metadata_than_raw": true,
+      "promoted_has_evidence_chain": true,
+      "direct_upsert_has_no_lineage": true,
+      "raw_lacks_boundary_validation": true
+    }
+  },
+  "experiment_6": {
+    "name": "Simulated Development Efficiency",
+    "configuration": {
+      "ollama_chat_url": "http://localhost:11434/v1/chat/completions",
+      "ollama_models_url": "http://localhost:11434/v1/models",
+      "model": "qwen3.5:122b-a10b",
+      "max_tokens": 1600,
+      "reasoning_effort": "none",
+      "available_models": [
+        "qwen3.5:9b",
+        "qwen3.5:35b",
+        "qwen3.5:122b-a10b",
+        "bge-m3:latest",
+        "qwen3-next:80b-a3b-instruct-q4_K_M",
+        "qwen3:30b-a3b",
+        "qwen3-coder-next:latest",
+        "claude-sonnet-4-5-20250929:latest",
+        "qwen3-coder:30b",
+        "gpt-oss:120b"
+      ]
+    },
+    "with_memory": {
+      "mode": "with_memory",
+      "session_1": {
+        "findings": [
+          {
+            "id": "s1-a36cf38d",
+            "title": "Cursor-based pagination requires full result set retrieval",
+            "summary": "The `hybridSearchPaginated` function fetches `Number.MAX_SAFE_INTEGER` results when a cursor is present to correctly calculate `has_more`, potentially causing performance issues on large datasets.",
+            "anchors": [
+              "hybridSearchPaginated",
+              "fetchLimit",
+              "Number.MAX_SAFE_INTEGER",
+              "cursor"
+            ],
+            "session": "session_1",
+            "source": "apps/pce-memory/src/store/hybridSearch.ts"
+          },
+          {
+            "id": "s1-86620d81",
+            "title": "Text search fallback logic ignores vector scoring",
+            "summary": "When embedding generation fails or is unavailable, the system falls back to `textSearch` and `fallbackToTextOnlyResults`, completely bypassing the `vectorSearch` and `mergeResults` fusion logic.",
+            "anchors": [
+              "textSearch",
+              "fallbackToTextOnlyResults",
+              "queryEmbedding",
+              "mergeResults"
+            ],
+            "session": "session_1",
+            "source": "apps/pce-memory/src/store/hybridSearch.ts"
+          }
+        ]
+      },
+      "session_2": {
+        "activate": {
+          "active_context_id": "ac_53cb15e9",
+          "claims": [
+            {
+              "claim": {
+                "id": "clm_628bba15",
+                "text": "retrieval correctness finding s1-86620d81 | apps/pce-memory/src/store/hybridSearch.ts session_1 | Text search fallback logic ignores vector scoring | When embedding generation fails or is unavailable, the system falls back to `textSearch` and `fallbackToTextOnlyResults`, completely bypassing the `vectorSearch` and `mergeResults` fusion logic. | anchors: textSearch, fallbackToTextOnlyResults, queryEmbedding, mergeResults",
+                "kind": "fact",
+                "scope": "project",
+                "boundary_class": "internal",
+                "memory_type": "knowledge",
+                "status": "active",
+                "content_hash": "sha256:98e3c857173e568ed2c694911a8e5c449bc5457d08b87cbb6312ef11aec051c6",
+                "utility": 0,
+                "confidence": 0.5,
+                "created_at": "2026-03-25T10:17:27.599Z",
+                "updated_at": "2026-03-25T10:17:27.599Z",
+                "recency_anchor": "2026-03-25T10:17:27.599Z"
+              },
+              "score": 0.5218216711430591,
+              "source_layer": "meso",
+              "rank": 1,
+              "score_breakdown": {
+                "s_text": 0.9,
+                "s_vec": 0.7896744106057605,
+                "S": 0.8282883668937444,
+                "g": {
+                  "utility_term": 0.8,
+                  "confidence_term": 0.75,
+                  "recency_term": 1,
+                  "g": 0.6000000000000001
+                },
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.5218216711430591
+              },
+              "selection_reason": "rank=1; layer=meso; score=0.5218; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7897",
+              "evidences": []
+            },
+            {
+              "claim": {
+                "id": "clm_11f36dd4",
+                "text": "retrieval correctness finding s1-a36cf38d | apps/pce-memory/src/store/hybridSearch.ts session_1 | Cursor-based pagination requires full result set retrieval | The `hybridSearchPaginated` function fetches `Number.MAX_SAFE_INTEGER` results when a cursor is present to correctly calculate `has_more`, potentially causing performance issues on large datasets. | anchors: hybridSearchPaginated, fetchLimit, Number.MAX_SAFE_INTEGER, cursor",
+                "kind": "fact",
+                "scope": "project",
+                "boundary_class": "internal",
+                "memory_type": "knowledge",
+                "status": "active",
+                "content_hash": "sha256:53ef65eeb63614b9cf1633799b945776959d3f5290da4f1544a409e7100c02c6",
+                "utility": 0,
+                "confidence": 0.5,
+                "created_at": "2026-03-25T10:17:27.591Z",
+                "updated_at": "2026-03-25T10:17:27.591Z",
+                "recency_anchor": "2026-03-25T10:17:27.591Z"
+              },
+              "score": 0.5121915421030458,
+              "source_layer": "meso",
+              "rank": 2,
+              "score_breakdown": {
+                "s_text": 0.9,
+                "s_vec": 0.7661576119732497,
+                "S": 0.8130024477826123,
+                "g": {
+                  "utility_term": 0.8,
+                  "confidence_term": 0.75,
+                  "recency_term": 1,
+                  "g": 0.6000000000000001
+                },
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.5121915421030458
+              },
+              "selection_reason": "rank=2; layer=meso; score=0.5122; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7662",
+              "evidences": []
+            }
+          ],
+          "claims_count": 2,
+          "has_more": false,
+          "policy_version": "0.1",
+          "state": "Ready",
+          "request_id": "fc6e98ec-e692-418b-9d34-cf3fa01a013d",
+          "trace_id": "e7049ae3-145d-4e64-a5c4-045bea615d40"
+        },
+        "findings": [
+          {
+            "id": "s2-206b15e0",
+            "title": "Provenance lineage stored as opaque text in promotion_queue",
+            "summary": "The promotion_queue table stores provenance as a TEXT column instead of JSON, preventing structured querying of lineage metadata and complicating audit trails for claim generation.",
+            "anchors": [
+              "promotion_queue",
+              "provenance"
+            ],
+            "session": "session_2",
+            "source": "apps/pce-memory/src/db/schema.sql"
+          },
+          {
+            "id": "s2-d8634a09",
+            "title": "Observation content scrubbing breaks historical retrieval",
+            "summary": "The observations table allows content to be scrubbed (NULLed) after TTL expiration, which destroys the raw data required for re-evaluating claim correctness or generating new evidence without re-fetching external sources.",
+            "anchors": [
+              "observations",
+              "content"
+            ],
+            "session": "session_2",
+            "source": "apps/pce-memory/src/db/schema.sql"
+          }
+        ]
+      },
+      "session_3": {
+        "activate": {
+          "active_context_id": "ac_75256894",
+          "claims": [
+            {
+              "claim": {
+                "id": "clm_628bba15",
+                "text": "retrieval correctness finding s1-86620d81 | apps/pce-memory/src/store/hybridSearch.ts session_1 | Text search fallback logic ignores vector scoring | When embedding generation fails or is unavailable, the system falls back to `textSearch` and `fallbackToTextOnlyResults`, completely bypassing the `vectorSearch` and `mergeResults` fusion logic. | anchors: textSearch, fallbackToTextOnlyResults, queryEmbedding, mergeResults",
+                "kind": "fact",
+                "scope": "project",
+                "boundary_class": "internal",
+                "memory_type": "knowledge",
+                "status": "active",
+                "content_hash": "sha256:98e3c857173e568ed2c694911a8e5c449bc5457d08b87cbb6312ef11aec051c6",
+                "utility": 0,
+                "confidence": 0.5,
+                "created_at": "2026-03-25T10:17:27.599Z",
+                "updated_at": "2026-03-25T10:17:27.599Z",
+                "recency_anchor": "2026-03-25T10:17:27.599Z"
+              },
+              "score": 0.5091167085220306,
+              "source_layer": "meso",
+              "rank": 1,
+              "score_breakdown": {
+                "s_text": 0.9,
+                "s_vec": 0.7586488608596593,
+                "S": 0.8081217595587786,
+                "g": {
+                  "utility_term": 0.8,
+                  "confidence_term": 0.75,
+                  "recency_term": 1,
+                  "g": 0.6000000000000001
+                },
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.5091167085220306
+              },
+              "selection_reason": "rank=1; layer=meso; score=0.5091; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7586",
+              "evidences": []
+            },
+            {
+              "claim": {
+                "id": "clm_11f36dd4",
+                "text": "retrieval correctness finding s1-a36cf38d | apps/pce-memory/src/store/hybridSearch.ts session_1 | Cursor-based pagination requires full result set retrieval | The `hybridSearchPaginated` function fetches `Number.MAX_SAFE_INTEGER` results when a cursor is present to correctly calculate `has_more`, potentially causing performance issues on large datasets. | anchors: hybridSearchPaginated, fetchLimit, Number.MAX_SAFE_INTEGER, cursor",
+                "kind": "fact",
+                "scope": "project",
+                "boundary_class": "internal",
+                "memory_type": "knowledge",
+                "status": "active",
+                "content_hash": "sha256:53ef65eeb63614b9cf1633799b945776959d3f5290da4f1544a409e7100c02c6",
+                "utility": 0,
+                "confidence": 0.5,
+                "created_at": "2026-03-25T10:17:27.591Z",
+                "updated_at": "2026-03-25T10:17:27.591Z",
+                "recency_anchor": "2026-03-25T10:17:27.591Z"
+              },
+              "score": 0.49442043613549563,
+              "source_layer": "meso",
+              "rank": 2,
+              "score_breakdown": {
+                "s_text": 0.9,
+                "s_vec": 0.7227605278034077,
+                "S": 0.7847943430722151,
+                "g": {
+                  "utility_term": 0.8,
+                  "confidence_term": 0.75,
+                  "recency_term": 1,
+                  "g": 0.6000000000000001
+                },
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.49442043613549563
+              },
+              "selection_reason": "rank=2; layer=meso; score=0.4944; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7228",
+              "evidences": []
+            },
+            {
+              "claim": {
+                "id": "clm_4856a0e1",
+                "text": "retrieval correctness finding s2-d8634a09 | apps/pce-memory/src/db/schema.sql session_2 | Observation content scrubbing breaks historical retrieval | The observations table allows content to be scrubbed (NULLed) after TTL expiration, which destroys the raw data required for re-evaluating claim correctness or generating new evidence without re-fetching external sources. | anchors: observations, content",
+                "kind": "fact",
+                "scope": "project",
+                "boundary_class": "internal",
+                "memory_type": "knowledge",
+                "status": "active",
+                "content_hash": "sha256:019e04cd1352794989243caba71ddb1d8498e652021d4bfe8c8f05a730f0a841",
+                "utility": 0,
+                "confidence": 0.5,
+                "created_at": "2026-03-25T10:17:39.371Z",
+                "updated_at": "2026-03-25T10:17:39.371Z",
+                "recency_anchor": "2026-03-25T10:17:39.371Z"
+              },
+              "score": 0.48717850948546626,
+              "source_layer": "meso",
+              "rank": 3,
+              "score_breakdown": {
+                "s_text": 0.9,
+                "s_vec": 0.7050757252392337,
+                "S": 0.7732992214055019,
+                "g": {
+                  "utility_term": 0.8,
+                  "confidence_term": 0.75,
+                  "recency_term": 1,
+                  "g": 0.6000000000000001
+                },
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.48717850948546626
+              },
+              "selection_reason": "rank=3; layer=meso; score=0.4872; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.7051",
+              "evidences": []
+            },
+            {
+              "claim": {
+                "id": "clm_391f1195",
+                "text": "retrieval correctness finding s2-206b15e0 | apps/pce-memory/src/db/schema.sql session_2 | Provenance lineage stored as opaque text in promotion_queue | The promotion_queue table stores provenance as a TEXT column instead of JSON, preventing structured querying of lineage metadata and complicating audit trails for claim generation. | anchors: promotion_queue, provenance",
+                "kind": "fact",
+                "scope": "project",
+                "boundary_class": "internal",
+                "memory_type": "knowledge",
+                "status": "active",
+                "content_hash": "sha256:b49a1850f1192d15ff86876858c0fb349ce61cf6ed786c66d90788bdfb829e3f",
+                "utility": 0,
+                "confidence": 0.5,
+                "created_at": "2026-03-25T10:17:39.360Z",
+                "updated_at": "2026-03-25T10:17:39.360Z",
+                "recency_anchor": "2026-03-25T10:17:39.360Z"
+              },
+              "score": 0.4492663997334373,
+              "source_layer": "meso",
+              "rank": 4,
+              "score_breakdown": {
+                "s_text": 0.9,
+                "s_vec": 0.6124942606433144,
+                "S": 0.7131212694181543,
+                "g": {
+                  "utility_term": 0.8,
+                  "confidence_term": 0.75,
+                  "recency_term": 1,
+                  "g": 0.6000000000000001
+                },
+                "provenance_quality": {
+                  "evidence_count": 0,
+                  "evidence_boost": 1,
+                  "has_actor_note": true,
+                  "provenance_boost": 1.05,
+                  "has_promotion_lineage": false,
+                  "promotion_lineage_boost": 1,
+                  "multiplier": 1.05
+                },
+                "score_final": 0.4492663997334373
+              },
+              "selection_reason": "rank=4; layer=meso; score=0.4493; kind=fact; memory_type=knowledge; s_text=0.9000; s_vec=0.6125",
+              "evidences": []
+            }
+          ],
+          "claims_count": 4,
+          "has_more": false,
+          "policy_version": "0.1",
+          "state": "Ready",
+          "request_id": "91427bc8-40d4-43be-b946-871b59e8efe8",
+          "trace_id": "61556798-74bd-446f-9afd-2a7dedd6d59f"
+        },
+        "decision": {
+          "status": "ok",
+          "title": "Unified Hybrid Search Fallback and Schema Integrity Strategy",
+          "summary": "To improve retrieval correctness, the system must prevent the complete bypass of vector scoring during embedding failures by implementing a weighted fallback within the merge logic rather than switching to text-only results, while simultaneously ensuring the observations table retains raw content to support historical re-evaluation and claim verification.",
+          "references": [
+            "clm_628bba15",
+            "clm_4856a0e1"
+          ],
+          "evidence": [
+            "When embedding generation fails or is unavailable, the system falls back to `textSearch` and `fallbackToTextOnlyResults`, completely bypassing the `vectorSearch` and `mergeResults` fusion logic.",
+            "The observations table allows content to be scrubbed (NULLed) after TTL expiration, which destroys the raw data required for re-evaluating claim correctness or generating new evidence without re-fetching external sources."
+          ]
+        },
+        "score": {
+          "matched_session1_ids": [
+            "clm_628bba15"
+          ],
+          "matched_session2_ids": [
+            "clm_4856a0e1"
+          ],
+          "matched_session1_anchors": [
+            "textSearch",
+            "fallbackToTextOnlyResults",
+            "mergeResults"
+          ],
+          "matched_session2_anchors": [
+            "observations",
+            "content"
+          ],
+          "references_both_sessions": true,
+          "evidence_both_sessions": true
+        }
+      }
+    },
+    "without_memory": {
+      "mode": "without_memory",
+      "session_1": {
+        "findings": [
+          {
+            "id": "s1-a36cf38d",
+            "title": "Cursor-based pagination requires full result set retrieval",
+            "summary": "The `hybridSearchPaginated` function fetches `Number.MAX_SAFE_INTEGER` results when a cursor is present to correctly calculate `has_more`, potentially causing performance issues on large datasets.",
+            "anchors": [
+              "hybridSearchPaginated",
+              "fetchLimit",
+              "Number.MAX_SAFE_INTEGER",
+              "cursor"
+            ],
+            "session": "session_1",
+            "source": "apps/pce-memory/src/store/hybridSearch.ts"
+          },
+          {
+            "id": "s1-86620d81",
+            "title": "Text search fallback logic ignores vector scoring",
+            "summary": "When embedding generation fails or is unavailable, the system falls back to `textSearch` and `fallbackToTextOnlyResults`, completely bypassing the `vectorSearch` and `mergeResults` fusion logic.",
+            "anchors": [
+              "textSearch",
+              "fallbackToTextOnlyResults",
+              "queryEmbedding",
+              "mergeResults"
+            ],
+            "session": "session_1",
+            "source": "apps/pce-memory/src/store/hybridSearch.ts"
+          }
+        ]
+      },
+      "session_2": {
+        "activate": null,
+        "findings": [
+          {
+            "id": "s2-be2863e5",
+            "title": "Ranking Index Composition and Recency Anchor Dependency",
+            "summary": "The idx_claims_ranking index optimizes retrieval for the g() ranking function by including utility, confidence, and updated_at. However, the recency calculation logic relies on the recency_anchor column, which is only updated on positive feedback. This creates a potential lineage gap where claims with stale recency anchors may be incorrectly prioritized or deprioritized if the ranking query does not explicitly join or filter based on the recency_anchor logic defined in the schema comments.",
+            "anchors": [
+              "claims",
+              "idx_claims_ranking",
+              "recency_anchor",
+              "utility"
+            ],
+            "session": "session_2",
+            "source": "apps/pce-memory/src/db/schema.sql"
+          },
+          {
+            "id": "s2-733501f6",
+            "title": "Provenance Data Type Inconsistency Across Tables",
+            "summary": "The schema defines provenance as a JSON type in the claims table but as a TEXT type in the promotion_queue table. This inconsistency affects retrieval correctness and observability when tracing the lineage of a claim from the promotion queue to the final claims table, as JSON parsing logic must be applied differently depending on the source table, potentially leading to data corruption or query failures if the application layer assumes a uniform type.",
+            "anchors": [
+              "claims",
+              "provenance",
+              "promotion_queue",
+              "evidence"
+            ],
+            "session": "session_2",
+            "source": "apps/pce-memory/src/db/schema.sql"
+          }
+        ]
+      },
+      "session_3": {
+        "activate": null,
+        "decision": {
+          "status": "no_context",
+          "title": "Retrieval Correctness Improvement Strategy",
+          "summary": "No prior findings are available to connect code-path or schema findings; therefore, the recommended design decision is to implement a hybrid retrieval approach combining dense vector search with sparse lexical matching to improve recall and precision.",
+          "references": [],
+          "evidence": []
+        },
+        "score": {
+          "matched_session1_ids": [],
+          "matched_session2_ids": [],
+          "matched_session1_anchors": [],
+          "matched_session2_anchors": [],
+          "references_both_sessions": false,
+          "evidence_both_sessions": false
+        }
+      }
+    }
+  }
+}
