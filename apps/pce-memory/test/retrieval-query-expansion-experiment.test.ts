@@ -9,7 +9,7 @@ import {
   resetPrecisionBenchmarkDb,
   runMeasuredSearch,
   seedBenchmarkClaim,
-} from '../../../validation/precision-experiments/harness';
+} from './helpers/precisionBenchmarkTestUtils';
 
 describe('retrieval precision experiment: entity graph query expansion', () => {
   let dbPath = '';

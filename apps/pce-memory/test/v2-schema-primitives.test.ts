@@ -59,8 +59,6 @@ describe('v2 schema primitives', () => {
         proposed_scope TEXT NOT NULL,
         proposed_boundary_class TEXT NOT NULL,
         proposed_memory_type TEXT,
-        proposed_entities TEXT NOT NULL DEFAULT '[]',
-        proposed_relations TEXT NOT NULL DEFAULT '[]',
         provenance TEXT NOT NULL,
         evidence_ids TEXT NOT NULL,
         policy_version_checked TEXT,
@@ -100,20 +98,6 @@ describe('v2 schema primitives', () => {
     expect(columnsByTable.get('active_contexts')?.has('intent')).toBe(true);
     expect(columnsByTable.get('active_contexts')?.has('expires_at')).toBe(true);
     expect(columnsByTable.get('active_contexts')?.has('policy_version')).toBe(true);
-
-    const promotionColumnReader = await conn.runAndReadAll(`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_name = 'promotion_queue'
-      ORDER BY column_name
-    `);
-    const promotionColumns = new Set(
-      (promotionColumnReader.getRowObjects() as Array<{ column_name: string }>).map(
-        (row) => row.column_name
-      )
-    );
-    expect(promotionColumns.has('proposed_entities')).toBe(false);
-    expect(promotionColumns.has('proposed_relations')).toBe(false);
 
     const tableReader = await conn.runAndReadAll(`
       SELECT table_name
