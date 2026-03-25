@@ -855,16 +855,21 @@ function getPromotionCandidateConflictMessage(
 ): string | null {
   const candidateMemoryType = candidate.proposed_memory_type ?? null;
   const claimMemoryType = claim.memory_type ?? null;
-  const hasMismatch =
-    claim.text !== candidate.distilled_text ||
-    claim.kind !== candidate.proposed_kind ||
-    claim.scope !== candidate.proposed_scope ||
-    claim.boundary_class !== candidate.proposed_boundary_class ||
-    claimMemoryType !== candidateMemoryType;
 
-  return hasMismatch
-    ? 'candidate_hash collides with an existing claim that has different text or metadata'
-    : null;
+  // Text mismatch is always a true collision
+  if (claim.text !== candidate.distilled_text) {
+    return 'candidate_hash collides with an existing claim that has different text';
+  }
+
+  // Kind and memory_type mismatches represent fundamentally different classifications
+  if (claim.kind !== candidate.proposed_kind || claimMemoryType !== candidateMemoryType) {
+    return 'candidate_hash collides with an existing claim that has different text or metadata';
+  }
+
+  // Scope and boundary_class differences are allowed:
+  // - scope elevation (project -> principle) is a legitimate workflow
+  // - boundary escalation (public -> internal) follows monotonicity
+  return null;
 }
 
 // ========== Upsert Helper Functions ==========
