@@ -81,7 +81,13 @@ export interface UpsertResult {
   isNew: boolean;
 }
 
+/**
+ * ContentHashCollisionError: content_hashが一致するがテキストが異なる場合のエラー
+ * DomainErrorインターフェースに準拠しつつ、Errorを継承してthrow/catchに対応
+ */
 export class ContentHashCollisionError extends Error {
+  readonly _tag = 'DomainError' as const;
+  readonly code = 'CONTENT_HASH_COLLISION' as const;
   constructor() {
     super('content_hash collision: existing claim text differs for identical content_hash');
     this.name = 'ContentHashCollisionError';
@@ -155,7 +161,8 @@ function parseClaimProvenance(claim: ClaimRow): Claim {
   if (claim.provenance && typeof claim.provenance === 'string') {
     try {
       return { ...normalizedClaim, provenance: JSON.parse(claim.provenance) as Provenance };
-    } catch {
+    } catch (e: unknown) {
+      console.warn(`[pce-memory] Failed to parse claim provenance for ${claim.id}:`, e);
       return normalizedClaim;
     }
   }

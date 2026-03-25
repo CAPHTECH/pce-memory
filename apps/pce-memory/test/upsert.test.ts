@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ContentHashCollisionError, upsertClaim } from '../src/store/claims';
+import { isDomainError } from '../src/domain/errors';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 
 beforeEach(async () => {
@@ -48,6 +49,11 @@ describe('upsertClaim', () => {
         boundary_class: 'internal',
         content_hash: 'hash123',
       })
-    ).rejects.toBeInstanceOf(ContentHashCollisionError);
+    ).rejects.toSatisfy(
+      (e: unknown) =>
+        e instanceof ContentHashCollisionError &&
+        isDomainError(e) &&
+        e.code === 'CONTENT_HASH_COLLISION'
+    );
   });
 });

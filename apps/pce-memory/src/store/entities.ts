@@ -30,7 +30,8 @@ function parseEntityAttrs(entity: Entity): Entity {
   if (entity.attrs && typeof entity.attrs === 'string') {
     try {
       return { ...entity, attrs: JSON.parse(entity.attrs as string) as Record<string, unknown> };
-    } catch {
+    } catch (e: unknown) {
+      console.warn(`[pce-memory] Failed to parse entity attrs for ${entity.id}:`, e);
       return entity;
     }
   }

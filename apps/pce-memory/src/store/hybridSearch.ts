@@ -21,6 +21,7 @@ import { getConnection } from '../db/connection.js';
 import type { Claim } from './claims.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
+import { validateEmbedding } from '../domain/validation.js';
 import {
   adjustRecencyTerm,
   calculateFeedbackBoostBreakdown,
@@ -65,11 +66,7 @@ const DEFAULT_CRITIC_SCORE = 0.5;
 /** 最小limit値 */
 const MIN_LIMIT = 1;
 
-/** 埋め込み次元数の上限（一般的なモデルの最大値） */
-const MAX_EMBEDDING_DIM = 4096;
-
-/** 埋め込み値の絶対値上限（正規化ベクトルは通常[-1, 1]範囲） */
-const MAX_EMBEDDING_MAGNITUDE = 10.0;
+// 埋め込み次元数・絶対値上限は domain/validation.ts に移動済み
 
 // ========== ユーティリティ関数 ==========
 
@@ -83,35 +80,7 @@ function activeClaimFilter(alias: string): string {
     )`;
 }
 
-/**
- * 埋め込みベクトルが有効か検証
- * - 空ベクトル禁止
- * - 次元数上限チェック（DoS防止）
- * - 各値の有限性チェック（NaN/Infinity禁止）
- * - 各値の絶対値上限チェック（異常値検出）
- *
- * @param embedding 検証対象のベクトル
- * @throws Error 不正な値が含まれる場合
- */
-function validateEmbedding(embedding: readonly number[]): void {
-  if (embedding.length === 0) {
-    throw new Error('Embedding vector must not be empty');
-  }
-  if (embedding.length > MAX_EMBEDDING_DIM) {
-    throw new Error(`Embedding dimension ${embedding.length} exceeds maximum ${MAX_EMBEDDING_DIM}`);
-  }
-  for (let i = 0; i < embedding.length; i++) {
-    const v = embedding[i];
-    if (typeof v !== 'number' || !Number.isFinite(v)) {
-      throw new Error(`Invalid embedding value at index ${i}: ${v}`);
-    }
-    if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {
-      throw new Error(
-        `Embedding value ${v} at index ${i} exceeds magnitude limit ${MAX_EMBEDDING_MAGNITUDE}`
-      );
-    }
-  }
-}
+// validateEmbedding is imported from domain/validation.ts (returns Either<DomainError, void>)
 
 /**
  * LIKEパターンの特殊文字をエスケープ
@@ -1060,7 +1029,10 @@ export async function vectorSearch(
   }
 
   // 埋め込みベクトルの検証
-  validateEmbedding(queryEmbedding);
+  const embeddingResult = validateEmbedding(queryEmbedding);
+  if (E.isLeft(embeddingResult)) {
+    throw new Error(embeddingResult.left.message);
+  }
 
   const conn = await getConnection();
   const normalizedLimit = normalizeLimit(limit);
@@ -1868,7 +1840,10 @@ export async function saveClaimVector(
   modelVersion: string
 ): Promise<void> {
   // 埋め込みベクトルの検証（SQLインジェクション防止）
-  validateEmbedding(embedding);
+  const saveEmbeddingResult = validateEmbedding(embedding);
+  if (E.isLeft(saveEmbeddingResult)) {
+    throw new Error(saveEmbeddingResult.left.message);
+  }
 
   const conn = await getConnection();
   // DuckDB Node APIは配列パラメータを直接サポートしないため、

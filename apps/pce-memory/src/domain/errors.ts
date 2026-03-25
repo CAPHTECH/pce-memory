@@ -29,7 +29,11 @@ export type ErrorCode =
   | 'SYNC_VALIDATION_ERROR' // JSONスキーマ/content_hash検証エラー
   | 'SYNC_PATH_ERROR' // パストラバーサル等のパスエラー
   | 'SYNC_STATUS_FAILED' // Phase 2: status取得エラー
-  | 'HEALTH_FAILED'; // Health report生成エラー
+  | 'HEALTH_FAILED' // Health report生成エラー
+  // Error handling unification
+  | 'CONTENT_HASH_COLLISION' // content_hash衝突（テキスト不一致）
+  | 'EMBEDDING_VALIDATION_ERROR' // 埋め込みベクトル検証エラー
+  | 'GRAPH_MEMORY_ERROR'; // Graph Memory操作の部分的失敗
 
 // ドメインエラー型
 export interface DomainError {
@@ -84,3 +88,20 @@ export const syncPathError = (message: string): DomainError =>
 // Phase 2: sync.status用エラー生成関数
 export const syncStatusError = (message: string, cause?: unknown): DomainError =>
   domainError('SYNC_STATUS_FAILED', message, cause);
+
+// Error handling unification
+export const contentHashCollisionError = (): DomainError =>
+  domainError(
+    'CONTENT_HASH_COLLISION',
+    'content_hash collision: existing claim text differs for identical content_hash'
+  );
+
+export const embeddingValidationError = (message: string): DomainError =>
+  domainError('EMBEDDING_VALIDATION_ERROR', message);
+
+export const graphMemoryError = (message: string, cause?: unknown): DomainError =>
+  domainError('GRAPH_MEMORY_ERROR', message, cause);
+
+// DomainError type guard
+export const isDomainError = (e: unknown): e is DomainError =>
+  typeof e === 'object' && e !== null && '_tag' in e && (e as DomainError)._tag === 'DomainError';

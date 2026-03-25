@@ -31,7 +31,8 @@ function parseRelationProps(relation: Relation): Relation {
   if (relation.props && typeof relation.props === 'string') {
     try {
       return { ...relation, props: JSON.parse(relation.props as string) as Record<string, unknown> };
-    } catch {
+    } catch (e: unknown) {
+      console.warn(`[pce-memory] Failed to parse relation props for ${relation.id}:`, e);
       return relation;
     }
   }
