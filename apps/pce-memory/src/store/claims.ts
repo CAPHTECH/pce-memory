@@ -189,6 +189,51 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
       return { claim: existing[0], isNew: false };
     }
 
+    // ロールバック済みまたはtombstone済みの同一content_hashが存在する場合、復活させる
+    const rolledBackReader = await conn.runAndReadAll(
+      `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1
+       AND (COALESCE(c.tombstone, FALSE) = TRUE OR ${rollbackRecordExistsFilter('c')})`,
+      [c.content_hash]
+    );
+    const rawRolledBack = rolledBackReader.getRowObjects() as unknown as ClaimRow[];
+    const rolledBack = parseClaimsProvenance(normalizeRowsTimestamps(rawRolledBack));
+    if (rolledBack.length > 0 && rolledBack[0]) {
+      const revived = rolledBack[0];
+      const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
+      const memoryType = c.memory_type ?? null;
+      const status = c.status ?? 'active';
+      // ロールバック済みclaimを復活: tombstone解除、メタデータ更新
+      await conn.run(
+        `UPDATE claims
+         SET tombstone = FALSE,
+             tombstone_at = NULL,
+             rollback_reason = NULL,
+             superseded_by = NULL,
+             kind = $1,
+             scope = $2,
+             boundary_class = $3,
+             memory_type = $4,
+             status = $5,
+             provenance = $6,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $7`,
+        [c.kind, c.scope, c.boundary_class, memoryType, status, provenanceJson, revived.id]
+      );
+      // ロールバック記録も削除して復活を完了
+      await conn.run(
+        `DELETE FROM promotion_queue WHERE accepted_claim_id = $1 AND status = 'rolled_back'`,
+        [revived.id]
+      );
+      // 復活後のレコードを取得
+      const revivedReader = await conn.runAndReadAll(
+        `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
+        [revived.id]
+      );
+      const rawRevived = revivedReader.getRowObjects() as unknown as ClaimRow[];
+      const parsed = parseClaimsProvenance(normalizeRowsTimestamps(rawRevived));
+      return { claim: parsed[0]!, isNew: true };
+    }
+
     // 新規レコード挿入（utility/confidence/timestampsはDEFAULT値を使用）
     const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
     const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
