@@ -1854,6 +1854,154 @@ export async function getClaimVector(claimId: string): Promise<readonly number[]
   return undefined;
 }
 
+export interface SimilarClaimMatch {
+  id: string;
+  similarity: number;
+  text_preview: string;
+  created_at: string;
+}
+
+export interface NewerSimilarClaimMatch {
+  freshness: 'stale_candidate';
+  newer_similar: string;
+  similarity: number;
+  created_at: string;
+}
+
+interface SimilarClaimRow {
+  id: string;
+  similarity: number;
+  text: string;
+  created_at: Date | string;
+}
+
+interface NewerSimilarClaimRow {
+  claim_id: string;
+  newer_similar: string;
+  similarity: number;
+  newer_created_at: Date | string;
+  newer_vector_rowid?: number | bigint;
+}
+
+function buildTextPreview(text: string, maxLength: number = 120): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function normalizeSimilarity(value: unknown): number {
+  const similarity = Number(value);
+  return Number.isFinite(similarity) ? similarity : 0;
+}
+
+export async function findSimilarActiveClaims(
+  claimId: string,
+  threshold: number = 0.85
+): Promise<SimilarClaimMatch[]> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    `SELECT
+       candidate.id,
+       cos_sim(base_cv.embedding, candidate_cv.embedding) AS similarity,
+       candidate.text,
+       candidate.created_at
+     FROM claims base
+     INNER JOIN claim_vectors base_cv ON base_cv.claim_id = base.id
+     INNER JOIN claims candidate
+       ON candidate.scope = base.scope
+      AND candidate.id <> base.id
+      AND candidate.content_hash <> base.content_hash
+      AND ${activeClaimFilter('candidate')}
+     INNER JOIN claim_vectors candidate_cv ON candidate_cv.claim_id = candidate.id
+     WHERE base.id = $1
+       AND ${activeClaimFilter('base')}
+       AND cos_sim(base_cv.embedding, candidate_cv.embedding) > $2
+     ORDER BY similarity DESC, candidate.created_at DESC, candidate.id DESC`,
+    [claimId, threshold]
+  );
+  const rawRows = reader.getRowObjects() as unknown as SimilarClaimRow[];
+  const rows = normalizeRowsTimestamps(rawRows) as SimilarClaimRow[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    similarity: normalizeSimilarity(row.similarity),
+    text_preview: buildTextPreview(row.text),
+    created_at:
+      typeof row.created_at === 'string' ? row.created_at : new Date(row.created_at).toISOString(),
+  }));
+}
+
+export async function findNewerSimilarClaims(
+  claimIds: readonly string[],
+  threshold: number = 0.85
+): Promise<Map<string, NewerSimilarClaimMatch>> {
+  if (claimIds.length === 0) {
+    return new Map();
+  }
+
+  const conn = await getConnection();
+  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
+  const thresholdParam = `$${claimIds.length + 1}`;
+  const reader = await conn.runAndReadAll(
+    `SELECT claim_id, newer_similar, similarity, newer_created_at
+     FROM (
+       SELECT
+         candidates.*,
+         ROW_NUMBER() OVER (
+           PARTITION BY claim_id
+           ORDER BY newer_created_at DESC, newer_vector_rowid DESC, similarity DESC, newer_similar DESC
+         ) AS rn
+       FROM (
+         SELECT
+           base.id AS claim_id,
+           newer.id AS newer_similar,
+           cos_sim(base_cv.embedding, newer_cv.embedding) AS similarity,
+            newer.created_at AS newer_created_at,
+           newer_cv.rowid AS newer_vector_rowid
+         FROM claims base
+         INNER JOIN claim_vectors base_cv ON base_cv.claim_id = base.id
+         INNER JOIN claims newer
+           ON newer.scope = base.scope
+          AND newer.id <> base.id
+          AND newer.content_hash <> base.content_hash
+          AND ${activeClaimFilter('newer')}
+         INNER JOIN claim_vectors newer_cv ON newer_cv.claim_id = newer.id
+         WHERE base.id IN (${placeholders})
+           AND ${activeClaimFilter('base')}
+           AND (
+             newer.created_at > base.created_at
+             OR (
+               newer.created_at = base.created_at
+               AND newer_cv.rowid > base_cv.rowid
+             )
+           )
+           AND cos_sim(base_cv.embedding, newer_cv.embedding) > ${thresholdParam}
+       ) AS candidates
+     ) AS ranked
+     WHERE rn = 1`,
+    [...claimIds, threshold]
+  );
+  const rawRows = reader.getRowObjects() as unknown as NewerSimilarClaimRow[];
+  const rows = normalizeRowsTimestamps(rawRows) as NewerSimilarClaimRow[];
+
+  return new Map(
+    rows.map((row) => [
+      row.claim_id,
+      {
+        freshness: 'stale_candidate' as const,
+        newer_similar: row.newer_similar,
+        similarity: normalizeSimilarity(row.similarity),
+        created_at:
+          typeof row.newer_created_at === 'string'
+            ? row.newer_created_at
+            : new Date(row.newer_created_at).toISOString(),
+      },
+    ])
+  );
+}
+
 /**
  * Claimの埋め込みベクトルを削除
  *

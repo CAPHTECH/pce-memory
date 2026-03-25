@@ -1,6 +1,6 @@
 # V3 Baseline Benchmark
 
-Generated at: 2026-03-25T06:17:21.169Z
+Generated at: 2026-03-25T06:38:48.349Z
 
 This benchmark uses internal handler imports from `apps/pce-memory/src/`, an isolated `:memory:` DuckDB store per dimension, and a deterministic bag-of-words embedding service for repeatable local execution.
 

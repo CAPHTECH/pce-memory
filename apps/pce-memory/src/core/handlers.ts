@@ -23,6 +23,8 @@ import {
   hybridSearchPaginated,
   hybridSearchWithScores,
   getEmbeddingService,
+  findNewerSimilarClaims,
+  findSimilarActiveClaims,
 } from '../store/hybridSearch.js';
 import {
   upsertEntity,
@@ -369,6 +371,13 @@ type ActivateSearchItem = {
   score_breakdown?: ScoreBreakdown;
 };
 
+type FreshnessMetadata = {
+  freshness: 'stale_candidate';
+  newer_similar: string;
+};
+
+type ActivateClaimResponse = Claim & Partial<FreshnessMetadata>;
+
 const OBSERVATION_SCORE_MERGE_HEADROOM = 0.98;
 const ACTIVATE_OBSERVATION_SLOT_FRACTION = 0.3;
 
@@ -389,6 +398,34 @@ function compareActivateSearchItems(left: ActivateSearchItem, right: ActivateSea
   }
 
   return right.claim.id.localeCompare(left.claim.id);
+}
+
+function compareActivateSearchItemsWithFreshness(
+  left: ActivateSearchItem,
+  right: ActivateSearchItem,
+  freshnessByClaimId: ReadonlyMap<string, FreshnessMetadata>
+): number {
+  const leftStale = freshnessByClaimId.has(left.claim.id);
+  const rightStale = freshnessByClaimId.has(right.claim.id);
+  if (leftStale !== rightStale) {
+    return leftStale ? 1 : -1;
+  }
+  return compareActivateSearchItems(left, right);
+}
+
+function augmentClaimWithFreshness(
+  claim: Claim,
+  freshnessByClaimId: ReadonlyMap<string, FreshnessMetadata>
+): ActivateClaimResponse {
+  const freshness = freshnessByClaimId.get(claim.id);
+  if (!freshness) {
+    return claim;
+  }
+  return {
+    ...claim,
+    freshness: freshness.freshness,
+    newer_similar: freshness.newer_similar,
+  };
 }
 
 function maxActivateItemScore(items: ActivateSearchItem[]): number {
@@ -1018,6 +1055,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
 
     // Graph Memory処理（ヘルパー関数に委譲）
     const graphResult = await processGraphMemory(claim.id, isNew, entities, relations);
+    const similarExisting = await findSimilarActiveClaims(claim.id).catch(() => []);
 
     // スコープへのリソース登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
@@ -1054,6 +1092,7 @@ export async function handleUpsert(args: Record<string, unknown>) {
       id: claim.id,
       is_new: isNew,
       content_hash: validation.resolvedHash,
+      ...(similarExisting.length > 0 ? { similar_existing: similarExisting } : {}),
       ...graphMemoryResult,
       policy_version: getPolicyVersion(),
       state: getStateType(),
@@ -2162,6 +2201,8 @@ export async function handlePromote(args: Record<string, unknown>) {
       );
     }
 
+    const similarExisting = await findSimilarActiveClaims(claim.id).catch(() => []);
+
     await appendLog({
       id: `log_${reqId}`,
       op: 'promote',
@@ -2182,6 +2223,7 @@ export async function handlePromote(args: Record<string, unknown>) {
       is_new: isNew,
       promoted_from: candidate.id,
       rollback_token: claim.id,
+      ...(similarExisting.length > 0 ? { similar_existing: similarExisting } : {}),
       policy_version: getPolicyVersion(),
       state: getStateType(),
       request_id: reqId,
@@ -2640,6 +2682,24 @@ export async function handleActivate(args: Record<string, unknown>) {
       hasMore = searchResult.has_more;
     }
 
+    const freshnessMatches = await findNewerSimilarClaims(
+      searchResults.map((result) => result.claim.id)
+    ).catch(() => new Map());
+    const freshnessByClaimId = new Map<string, FreshnessMetadata>(
+      [...freshnessMatches.entries()].map(([claimId, freshness]) => [
+        claimId,
+        {
+          freshness: freshness.freshness,
+          newer_similar: freshness.newer_similar,
+        },
+      ])
+    );
+    if (freshnessByClaimId.size > 0) {
+      searchResults = [...searchResults].sort((left, right) =>
+        compareActivateSearchItemsWithFreshness(left, right, freshnessByClaimId)
+      );
+    }
+
     const claims = searchResults.map((r) => r.claim);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({
@@ -2656,11 +2716,12 @@ export async function handleActivate(args: Record<string, unknown>) {
     }
 
     const scoredItems = searchResults.map((r, index) => {
+      const claim = augmentClaimWithFreshness(r.claim, freshnessByClaimId);
       const sourceLayer = r.source_layer ?? mapScopeToLayer(r.claim.scope);
       const rank = index + 1;
       const selectionReason = buildSelectionReason({
         score: r.score,
-        claim: r.claim,
+        claim,
         source_layer: sourceLayer,
         rank,
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
@@ -2668,7 +2729,7 @@ export async function handleActivate(args: Record<string, unknown>) {
       });
 
       return {
-        claim: r.claim,
+        claim,
         score: r.score,
         source_layer: sourceLayer,
         rank,
@@ -4561,6 +4622,20 @@ export const TOOL_DEFINITIONS = [
         is_new: { type: 'boolean' },
         promoted_from: { type: 'string' },
         rollback_token: { type: 'string' },
+        similar_existing: {
+          type: 'array',
+          description: 'Nearby active claims in the same scope with cosine similarity > 0.85',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              similarity: { type: 'number' },
+              text_preview: { type: 'string' },
+              created_at: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'similarity', 'text_preview', 'created_at'],
+          },
+        },
         policy_version: { type: 'string' },
         state: {
           type: 'string',
@@ -4755,6 +4830,20 @@ export const TOOL_DEFINITIONS = [
           },
           description: 'Graph memory operation results (optional)',
         },
+        similar_existing: {
+          type: 'array',
+          description: 'Nearby active claims in the same scope with cosine similarity > 0.85',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              similarity: { type: 'number' },
+              text_preview: { type: 'string' },
+              created_at: { type: 'string', format: 'date-time' },
+            },
+            required: ['id', 'similarity', 'text_preview', 'created_at'],
+          },
+        },
         policy_version: { type: 'string', description: 'Policy version' },
         state: {
           type: 'string',
@@ -4837,7 +4926,15 @@ export const TOOL_DEFINITIONS = [
           items: {
             type: 'object',
             properties: {
-              claim: { type: 'object', description: 'Claim data' },
+              claim: {
+                type: 'object',
+                description:
+                  'Claim data with optional freshness metadata when a newer similar claim exists',
+                properties: {
+                  freshness: { type: 'string', enum: ['stale_candidate'] },
+                  newer_similar: { type: 'string' },
+                },
+              },
               score: { type: 'number', description: 'Relevance score' },
               source_layer: {
                 type: 'string',
