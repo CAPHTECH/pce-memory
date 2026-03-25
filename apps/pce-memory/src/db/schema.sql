@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS promotion_queue (
   proposed_scope TEXT NOT NULL,
   proposed_boundary_class TEXT NOT NULL,
   proposed_memory_type TEXT,
+  proposed_entities TEXT NOT NULL DEFAULT '[]',
+  proposed_relations TEXT NOT NULL DEFAULT '[]',
   provenance TEXT NOT NULL,
   evidence_ids TEXT NOT NULL,
   policy_version_checked TEXT,

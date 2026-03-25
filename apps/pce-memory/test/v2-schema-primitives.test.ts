@@ -75,6 +75,20 @@ describe('v2 schema primitives', () => {
     expect(columnsByTable.get('active_contexts')?.has('expires_at')).toBe(true);
     expect(columnsByTable.get('active_contexts')?.has('policy_version')).toBe(true);
 
+    const promotionColumnReader = await conn.runAndReadAll(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'promotion_queue'
+      ORDER BY column_name
+    `);
+    const promotionColumns = new Set(
+      (promotionColumnReader.getRowObjects() as Array<{ column_name: string }>).map(
+        (row) => row.column_name
+      )
+    );
+    expect(promotionColumns.has('proposed_entities')).toBe(true);
+    expect(promotionColumns.has('proposed_relations')).toBe(true);
+
     const tableReader = await conn.runAndReadAll(`
       SELECT table_name
       FROM information_schema.tables
@@ -129,6 +143,17 @@ describe('v2 schema primitives', () => {
 
     expect(counts[0]?.promotion_queue_count).toBe(1);
     expect(counts[0]?.active_context_items_count).toBe(1);
+
+    const proposalReader = await conn.runAndReadAll(
+      'SELECT proposed_entities, proposed_relations FROM promotion_queue WHERE id = $1',
+      ['pq_test']
+    );
+    const proposalRows = proposalReader.getRowObjects() as Array<{
+      proposed_entities: string;
+      proposed_relations: string;
+    }>;
+    expect(proposalRows[0]?.proposed_entities).toBe('[]');
+    expect(proposalRows[0]?.proposed_relations).toBe('[]');
   });
 
   it('accepts memory_type on upsert and returns it from activate', async () => {

@@ -13,6 +13,8 @@ export interface PromotionQueueRow {
   proposed_scope: string;
   proposed_boundary_class: string;
   proposed_memory_type?: MemoryType | null;
+  proposed_entities: string;
+  proposed_relations: string;
   provenance: string;
   evidence_ids: string;
   policy_version_checked?: string | null;
@@ -36,6 +38,8 @@ export interface InsertPromotionQueueInput {
   proposed_scope: string;
   proposed_boundary_class: string;
   proposed_memory_type?: MemoryType | null;
+  proposed_entities?: string;
+  proposed_relations?: string;
   provenance: string;
   evidence_ids: string;
   policy_version_checked?: string | null;
@@ -49,7 +53,7 @@ export interface InsertPromotionQueueInput {
 }
 
 const PROMOTION_QUEUE_COLUMNS =
-  'id, source_layer, target_layer, source_ids, distilled_text, candidate_hash, proposed_kind, proposed_scope, proposed_boundary_class, proposed_memory_type, provenance, evidence_ids, policy_version_checked, boundary_check_result, status, reviewers, created_at, resolved_at, accepted_claim_id, rejected_reason';
+  'id, source_layer, target_layer, source_ids, distilled_text, candidate_hash, proposed_kind, proposed_scope, proposed_boundary_class, proposed_memory_type, proposed_entities, proposed_relations, provenance, evidence_ids, policy_version_checked, boundary_check_result, status, reviewers, created_at, resolved_at, accepted_claim_id, rejected_reason';
 
 function normalizePromotionRows(rows: PromotionQueueRow[]): PromotionQueueRow[] {
   return normalizeRowsTimestamps(rows) as PromotionQueueRow[];
@@ -63,13 +67,14 @@ export async function insertPromotionQueueRow(
     `INSERT INTO promotion_queue (
       id, source_layer, target_layer, source_ids, distilled_text, candidate_hash,
       proposed_kind, proposed_scope, proposed_boundary_class, proposed_memory_type,
-      provenance, evidence_ids, policy_version_checked, boundary_check_result, status,
-      reviewers, created_at, resolved_at, accepted_claim_id, rejected_reason
+      proposed_entities, proposed_relations, provenance, evidence_ids, policy_version_checked,
+      boundary_check_result, status, reviewers, created_at, resolved_at, accepted_claim_id,
+      rejected_reason
     ) VALUES (
       $1, $2, $3, $4, $5, $6,
       $7, $8, $9, $10,
-      $11, $12, $13, $14, $15,
-      $16, $17, $18, $19, $20
+      $11, $12, $13, $14, $15, $16,
+      $17, $18, $19, $20, $21, $22
     )`,
     [
       input.id,
@@ -82,6 +87,8 @@ export async function insertPromotionQueueRow(
       input.proposed_scope,
       input.proposed_boundary_class,
       input.proposed_memory_type ?? null,
+      input.proposed_entities ?? '[]',
+      input.proposed_relations ?? '[]',
       input.provenance,
       input.evidence_ids,
       input.policy_version_checked ?? null,

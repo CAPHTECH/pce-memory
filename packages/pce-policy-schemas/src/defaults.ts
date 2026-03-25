@@ -50,6 +50,11 @@ export const defaultPolicy: PolicyDocument = {
       },
     },
   },
+  extraction: {
+    llm_enabled: false,
+    ollama_endpoint: 'http://127.0.0.1:11434',
+    model: 'qwen3.5:9b',
+  },
 };
 
 export function defaultBoundaryPolicy() {
@@ -58,4 +63,8 @@ export function defaultBoundaryPolicy() {
 
 export function defaultRetrievalPolicy() {
   return defaultPolicy.retrieval;
+}
+
+export function defaultExtractionPolicy() {
+  return defaultPolicy.extraction;
 }
