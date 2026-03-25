@@ -5,8 +5,8 @@ import { validatePolicy } from './schemas.js';
 export function parsePolicy(yamlContent: string): ValidationResult<PolicyDocument> {
   try {
     const parsed = parse(yamlContent);
-    return validatePolicy(parsed);
-  } catch (e: any) {
-    return { ok: false, errors: [`YAML parse error: ${e.message ?? String(e)}`] };
+    return validatePolicy(parsed as Record<string, unknown>);
+  } catch (e: unknown) {
+    return { ok: false, errors: [`YAML parse error: ${e instanceof Error ? e.message : String(e)}`] };
   }
 }

@@ -542,7 +542,7 @@ function rankMap(payload: ActivatePayload): Map<string, number> {
   return new Map(payload.claims.map((item, index) => [item.claim.id, item.rank ?? index + 1]));
 }
 
-async function fetchClaimsByIds(ids: string[]): Promise<Map<string, ClaimRecord>> {
+async function _fetchClaimsByIds(ids: string[]): Promise<Map<string, ClaimRecord>> {
   if (ids.length === 0) {
     return new Map();
   }
