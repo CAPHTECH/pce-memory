@@ -47,6 +47,9 @@ export interface ScoredObservation {
   source_layer: 'micro';
 }
 
+export const OBSERVATION_RECENCY_HALF_LIFE_DAYS = 1;
+export const OBSERVATION_MAX_SCORE = 0.8;
+
 export interface InsertObservationInput {
   id: string;
   source_type: ObservationSourceType;
@@ -192,6 +195,12 @@ function buildActivatedObservationClaim(
   };
 }
 
+function calculateObservationScore(textScore: number, createdAt: Date | string): number {
+  const normalizedTextScore = Math.max(0, Math.min(1, textScore));
+  const recencyScore = recencyDecay(createdAt, OBSERVATION_RECENCY_HALF_LIFE_DAYS);
+  return normalizedTextScore * Math.min(recencyScore, OBSERVATION_MAX_SCORE);
+}
+
 export async function searchObservationsWithScores(
   query?: string,
   filters: ObservationSearchFilters = {}
@@ -231,8 +240,8 @@ export async function searchObservationsWithScores(
   const recencyExpr = `exp((-0.693147 * GREATEST(
       0.0,
       (epoch(CURRENT_TIMESTAMP) - epoch(COALESCE(o.created_at, CURRENT_TIMESTAMP))) / 86400.0
-    )) / 1.0)`;
-  const finalScoreExpr = `(${textScoreExpr}) * ${recencyExpr}`;
+    )) / ${OBSERVATION_RECENCY_HALF_LIFE_DAYS})`;
+  const finalScoreExpr = `(${textScoreExpr}) * LEAST(${recencyExpr}, ${OBSERVATION_MAX_SCORE})`;
   const limit =
     typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
       ? Math.floor(filters.limit)
@@ -280,7 +289,7 @@ export async function searchObservationsWithScores(
       const score =
         typeof row.final_score === 'number'
           ? row.final_score
-          : textScore * recencyDecay(claim.created_at, 1);
+          : calculateObservationScore(textScore, claim.created_at);
 
       return {
         claim,
