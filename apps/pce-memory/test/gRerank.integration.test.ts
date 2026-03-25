@@ -11,7 +11,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection.js';
 import { upsertClaim } from '../src/store/claims.js';
 import { recordFeedback, FEEDBACK_DELTAS } from '../src/store/feedback.js';
-import { hybridSearch, setEmbeddingService, textSearch } from '../src/store/hybridSearch.js';
+import { insertEvidence } from '../src/store/evidence.js';
+import {
+  hybridSearch,
+  hybridSearchWithScores,
+  saveClaimVector,
+  setEmbeddingService,
+  textSearch,
+} from '../src/store/hybridSearch.js';
+import { insertPromotionQueueRow } from '../src/store/promotionQueue.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as TE from 'fp-ts/TaskEither';
 import { randomUUID } from 'crypto';
@@ -391,6 +399,90 @@ describe('g() SQL Macros Integration', () => {
       });
 
       expect(results.length).toBeGreaterThan(0);
+    });
+
+    it('ranks promoted claims above direct upserts when retrieval signals are otherwise identical', async () => {
+      const sharedText = 'promotion provenance rerank comparison fixture';
+      const query = 'promotion provenance rerank';
+      const provenanceAt = new Date().toISOString();
+      const provenance = {
+        at: provenanceAt,
+        actor: 'vitest',
+        note: 'promote quality fixture',
+      };
+
+      const { claim: directClaim } = await upsertClaim({
+        text: sharedText,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'knowledge',
+        content_hash: 'prov_rank_direct',
+        provenance,
+      });
+      const { claim: promotedClaim } = await upsertClaim({
+        text: sharedText,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'knowledge',
+        content_hash: 'prov_rank_promoted',
+        provenance,
+      });
+
+      const identicalEmbedding = createNormalizedVector(42);
+      await saveClaimVector(directClaim.id, identicalEmbedding, 'test-v1');
+      await saveClaimVector(promotedClaim.id, identicalEmbedding, 'test-v1');
+
+      const evidenceId = `evd_${randomUUID().slice(0, 8)}`;
+      await insertEvidence({
+        id: evidenceId,
+        claim_id: promotedClaim.id,
+        source_type: 'observation',
+        source_id: `obs_${randomUUID().slice(0, 8)}`,
+        snippet: 'promoted fixture evidence',
+        at: provenanceAt,
+      });
+      await insertPromotionQueueRow({
+        id: `pq_${randomUUID().slice(0, 8)}`,
+        source_layer: 'micro',
+        target_layer: 'meso',
+        source_ids: JSON.stringify([`obs_${randomUUID().slice(0, 8)}`]),
+        distilled_text: sharedText,
+        candidate_hash: 'sha256:promoted-fixture',
+        proposed_kind: 'fact',
+        proposed_scope: 'project',
+        proposed_boundary_class: 'internal',
+        proposed_memory_type: 'knowledge',
+        provenance: JSON.stringify({ promotion: { provenance } }),
+        evidence_ids: JSON.stringify([evidenceId]),
+        policy_version_checked: '0.1',
+        boundary_check_result: JSON.stringify({ allowed: true }),
+        status: 'accepted',
+        reviewers: JSON.stringify(['vitest']),
+        created_at: provenanceAt,
+        resolved_at: provenanceAt,
+        accepted_claim_id: promotedClaim.id,
+      });
+
+      const results = await hybridSearchWithScores(['project'], 5, query, {
+        threshold: 0,
+        includeBreakdown: true,
+        embeddingService: createTestEmbeddingService(),
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results[0]?.claim.id).toBe(promotedClaim.id);
+
+      const promotedResult = results.find((result) => result.claim.id === promotedClaim.id);
+      const directResult = results.find((result) => result.claim.id === directClaim.id);
+
+      expect(promotedResult?.score).toBeGreaterThan(directResult?.score ?? 0);
+      expect(promotedResult?.score_breakdown?.provenance_quality?.evidence_count).toBe(1);
+      expect(promotedResult?.score_breakdown?.provenance_quality?.has_promotion_lineage).toBe(true);
+      expect(promotedResult?.score_breakdown?.provenance_quality?.multiplier ?? 0).toBeGreaterThan(
+        directResult?.score_breakdown?.provenance_quality?.multiplier ?? 0
+      );
     });
   });
 
