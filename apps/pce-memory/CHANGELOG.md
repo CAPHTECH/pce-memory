@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-03-25
+
+### Changed
+
+- **handlers.ts split**: 6,316-line monolith split into 15 focused modules under `src/core/handlers/` (max 1,350 lines)
+- **hybridSearch.ts split**: 2,064-line file split into 7 modules under `src/store/search/` (facade at 408 lines)
+- **Large test files split**: fuzz-boundary.test.ts and integration-bugs.test.ts split into focused files
+
+### Fixed
+
+- Post-refactoring import/export issues from handlers and search split
+- Dead test file for removed `claimsEither.ts`
+- Policy defaults export for removed helper functions
+- 11 bugs from comprehensive bug hunting (fuzzing, concurrency, integration, schema integrity)
+- Lint warnings eliminated (9 remaining are `no-explicit-any` warnings only)
+- Entity attrs/relation props/observation tags JSON parse on read
+- claim_links TOCTOU race condition
+- Query entity/relation limit parameter validation
+- recencyDecay division by zero guard
+- Sync push/pull path traversal validation
+- Promotion conflict check for scope/boundary differences
+- Rolled-back claim revival on matching content_hash upsert
+
+### Added
+
+- Benchmark evaluation system for search quality, scalability, and latency
+- 7 new test files from bug hunting (+5,200 lines)
+- Code quality improvements: dead code removal, error handling unification, test coverage expansion
+
 ## [0.12.0] - 2026-03-25
 
 ### Added
