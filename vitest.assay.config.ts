@@ -21,7 +21,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['apps/pce-memory/scripts/assay/*.test.ts'],
+    include: ['apps/pce-memory/scripts/{assay,benchmark}/*.test.ts'],
     testTimeout: 600000,
     hookTimeout: 600000,
     pool: 'forks',
