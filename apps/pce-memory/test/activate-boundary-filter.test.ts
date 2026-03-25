@@ -59,7 +59,7 @@ describe('activate boundary filter', () => {
       allow: ['answer:task'],
       include_meta: false,
     });
-    const claims1 = (ac1.structuredContent?.claims as any[]).map((x) => x?.claim?.id);
+    const claims1 = (ac1.structuredContent?.claims as Array<{ claim?: { id?: string } }>).map((x) => x?.claim?.id);
     expect(claims1).toContain(internalId);
     expect(claims1).not.toContain(piiId);
     expect(claims1).not.toContain(secretId);
@@ -69,7 +69,7 @@ describe('activate boundary filter', () => {
       allow: ['tool:contact-lookup'],
       include_meta: false,
     });
-    const claims2 = (ac2.structuredContent?.claims as any[]).map((x) => x?.claim?.id);
+    const claims2 = (ac2.structuredContent?.claims as Array<{ claim?: { id?: string } }>).map((x) => x?.claim?.id);
     expect(claims2).toContain(internalId);
     expect(claims2).toContain(piiId);
     expect(claims2).not.toContain(secretId);
@@ -131,7 +131,7 @@ describe('activate boundary filter', () => {
       top_k: 1,
       include_meta: false,
     });
-    const claims1 = page1.structuredContent?.claims as any[];
+    const claims1 = page1.structuredContent?.claims as Array<{ claim?: { id?: string } }>;
     expect(claims1).toHaveLength(1);
     expect(claims1[0]?.claim?.id).toBe(internalOneId);
     expect(claims1[0]?.claim?.id).not.toBe(piiId);
@@ -145,7 +145,7 @@ describe('activate boundary filter', () => {
       cursor: page1.structuredContent?.next_cursor,
       include_meta: false,
     });
-    const claims2 = page2.structuredContent?.claims as any[];
+    const claims2 = page2.structuredContent?.claims as Array<{ claim?: { id?: string } }>;
     expect(claims2).toHaveLength(1);
     expect(claims2[0]?.claim?.id).toBe(internalTwoId);
     expect(claims2[0]?.claim?.id).not.toBe(piiId);
@@ -159,7 +159,7 @@ describe('activate boundary filter', () => {
       cursor: page2.structuredContent?.next_cursor,
       include_meta: false,
     });
-    const claims3 = page3.structuredContent?.claims as any[];
+    const claims3 = page3.structuredContent?.claims as Array<{ claim?: { id?: string } }>;
     expect(claims3).toHaveLength(1);
     expect(claims3[0]?.claim?.id).toBe(internalThreeId);
     expect(claims3[0]?.claim?.id).not.toBe(piiId);

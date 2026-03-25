@@ -33,7 +33,7 @@ describe('daemon MCP JSON-RPC handler', () => {
       id: 2,
     });
 
-    const prompts = (res as any)?.result?.prompts as Array<{ name: string }> | undefined;
+    const prompts = (res as { result?: { prompts?: Array<{ name: string }> } })?.result?.prompts;
     expect(prompts?.length).toBeGreaterThan(0);
     expect(prompts?.map((p) => p.name)).toContain('recall_context');
   });
@@ -51,7 +51,7 @@ describe('daemon MCP JSON-RPC handler', () => {
       id: 3,
     });
 
-    const messages = (res as any)?.result?.messages as Array<unknown> | undefined;
+    const messages = (res as { result?: { messages?: Array<unknown> } })?.result?.messages;
     expect(messages?.length).toBeGreaterThan(0);
   });
 });
