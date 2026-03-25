@@ -96,6 +96,7 @@ async function activateWithObservations(args: {
   q?: string;
   intent?: 'resume_task' | 'debug_incident' | 'design_decision' | 'policy_check';
   include_observations?: boolean;
+  top_k?: number;
 }) {
   return expectSuccess(
     await dispatchTool('pce_memory_activate', {
@@ -106,7 +107,7 @@ async function activateWithObservations(args: {
       ...(args.include_observations !== undefined
         ? { include_observations: args.include_observations }
         : {}),
-      top_k: 10,
+      top_k: args.top_k ?? 10,
     })
   ) as ActivateResponse;
 }
@@ -221,6 +222,36 @@ describe('observation search via activate', () => {
 
     expect(activate.claims[0]?.claim.observation_id).toBe(observation.observation_id);
     expect(activate.claims[0]?.selection_reason).toContain('intent=resume_task');
+  });
+
+  it('caps observation slots to 30% of top_k when durable claims are available', async () => {
+    for (let index = 0; index < 10; index += 1) {
+      expectSuccess(
+        await upsertClaimViaTool({
+          text: `issue 69 durable activation signal ${index}`,
+          kind: 'fact',
+          scope: 'project',
+        })
+      );
+    }
+    for (let index = 0; index < 90; index += 1) {
+      await createObservation(`issue 69 noisy transient observation ${index}`, 'internal');
+    }
+
+    const activate = await activateWithObservations({
+      q: 'issue 69 activation',
+      include_observations: true,
+      top_k: 20,
+    });
+
+    const observationCount = activate.claims.filter(
+      (item) => item.claim.source_record_type === 'observation'
+    ).length;
+
+    expect(observationCount).toBeLessThanOrEqual(6);
+    expect(activate.claims.slice(0, 10).every((item) => item.claim.observation_id === undefined)).toBe(
+      true
+    );
   });
 
   it('activate remains backward compatible without include_observations flag', async () => {
