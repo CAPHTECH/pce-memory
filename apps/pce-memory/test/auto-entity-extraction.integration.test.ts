@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { dispatchTool, resetRetrievalPlannerTestState } from './helpers/retrievalPlannerTestUtils';
 import { queryEntities } from '../src/store/entities';
 import { hybridSearchWithScores } from '../src/store/hybridSearch';
+import { autoLinkClaimEntities } from '../src/store/entityExtractor';
 
 type ToolResponse = Awaited<ReturnType<typeof dispatchTool>>;
 type ToolStructuredContent = NonNullable<ToolResponse['structuredContent']>;
@@ -82,33 +83,31 @@ function buildProvenance(at: string) {
   };
 }
 
-describe('automatic entity extraction integration', () => {
-  it('auto-creates entities on upsert and improves activate retrieval via query expansion', async () => {
+describe('pattern NLP entity extraction integration', () => {
+  it('does not auto-create entities on upsert, but explicit extractor linking improves activate retrieval via query expansion', async () => {
     await dispatchTool('pce_memory_policy_apply', {
       yaml: buildPolicyYamlWithQueryExpansion(),
     });
 
+    const primaryText = 'hybridSearch.ts uses DuckDB for vector similarity';
     const primary = expectSuccess<UpsertResult>(
       await dispatchTool('pce_memory_upsert', {
-        text: 'hybridSearch.ts uses DuckDB for vector similarity',
+        text: primaryText,
         kind: 'fact',
         scope: 'project',
         boundary_class: 'internal',
-        content_hash: `sha256:${computeContentHash(
-          'hybridSearch.ts uses DuckDB for vector similarity'
-        )}`,
+        content_hash: `sha256:${computeContentHash(primaryText)}`,
         provenance: buildProvenance('2026-03-25T00:00:00.000Z'),
       })
     );
+    const relatedText = 'hybridSearch.ts controls cosine similarity thresholds';
     const related = expectSuccess<UpsertResult>(
       await dispatchTool('pce_memory_upsert', {
-        text: 'hybridSearch.ts controls cosine similarity thresholds',
+        text: relatedText,
         kind: 'fact',
         scope: 'project',
         boundary_class: 'internal',
-        content_hash: `sha256:${computeContentHash(
-          'hybridSearch.ts controls cosine similarity thresholds'
-        )}`,
+        content_hash: `sha256:${computeContentHash(relatedText)}`,
         provenance: buildProvenance('2026-03-25T00:01:00.000Z'),
       })
     );
@@ -121,14 +120,24 @@ describe('automatic entity extraction integration', () => {
       provenance: buildProvenance('2026-03-25T00:02:00.000Z'),
     });
 
-    const autoEntities = await queryEntities({
+    const entitiesBeforeExplicitLink = await queryEntities({
       claim_id: primary.id,
       limit: 10,
     });
-    const autoKeys = new Set(autoEntities.map((entity) => entity.canonical_key));
+    expect(entitiesBeforeExplicitLink).toHaveLength(0);
 
-    expect(autoKeys.has('duckdb')).toBe(true);
-    expect(autoKeys.has('hybridsearch.ts')).toBe(true);
+    const primaryLinkResult = await autoLinkClaimEntities(primary.id, primaryText);
+    const relatedLinkResult = await autoLinkClaimEntities(related.id, relatedText);
+    const linkedEntities = await queryEntities({
+      claim_id: primary.id,
+      limit: 10,
+    });
+    const linkedKeys = new Set(linkedEntities.map((entity) => entity.canonical_key));
+
+    expect(primaryLinkResult.entityCount).toBeGreaterThan(0);
+    expect(relatedLinkResult.entityCount).toBeGreaterThan(0);
+    expect(linkedKeys.has('duckdb')).toBe(true);
+    expect(linkedKeys.has('hybridsearch.ts')).toBe(true);
 
     const baseline = await hybridSearchWithScores(['project'], 3, 'duckdb', {
       enableRerank: false,
@@ -152,15 +161,16 @@ describe('automatic entity extraction integration', () => {
     expect(activatedIds).toContain(related.id);
   });
 
-  it('auto-creates entities on promote', async () => {
+  it('does not auto-create entities on promote until the extractor utility is called explicitly', async () => {
     await dispatchTool('pce_memory_policy_apply', {
       yaml: buildPolicyYamlWithQueryExpansion(),
     });
 
+    const observedText = 'Vitest verifies handleActivate behavior in pce-memory';
     const observation = expectSuccess<ObserveResult>(
       await dispatchTool('pce_memory_observe', {
         source_type: 'chat',
-        content: 'Vitest verifies handleActivate behavior in pce-memory',
+        content: observedText,
         extract: { mode: 'noop' },
       })
     );
@@ -176,6 +186,13 @@ describe('automatic entity extraction integration', () => {
       })
     );
 
+    const entitiesBeforeExplicitLink = await queryEntities({
+      claim_id: promoted.claim_id,
+      limit: 10,
+    });
+    expect(entitiesBeforeExplicitLink).toHaveLength(0);
+
+    const linkResult = await autoLinkClaimEntities(promoted.claim_id, observedText);
     const entities = await queryEntities({
       claim_id: promoted.claim_id,
       limit: 10,
@@ -183,12 +200,13 @@ describe('automatic entity extraction integration', () => {
     const keys = new Set(entities.map((entity) => entity.canonical_key));
 
     expect(promoted.is_new).toBe(true);
+    expect(linkResult.entityCount).toBeGreaterThan(0);
     expect(keys.has('vitest')).toBe(true);
     expect(keys.has('handleactivate')).toBe(true);
     expect(keys.has('pce-memory')).toBe(true);
   });
 
-  it('skips auto extraction when manual entities are provided', async () => {
+  it('keeps manually provided entities as the only links when the extractor utility is not called', async () => {
     await dispatchTool('pce_memory_policy_apply', {
       yaml: buildPolicyYamlWithQueryExpansion(),
     });
