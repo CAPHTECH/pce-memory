@@ -12,8 +12,8 @@
  * パラメータ（ADR-0004より）:
  * - α (ALPHA) = 0.65: ベクトル重視
  * - THRESHOLD = 0.15: 低ノイズフィルタ
- * - k_text = 48: テキスト検索上限
- * - k_vec = 96: ベクトル検索上限
+ * - k_text = 128: テキスト検索上限（8× k_final）
+ * - k_vec = 256: ベクトル検索上限（16× k_final）
  *
  * @see docs/adr/0004-hybrid-search-design.md
  * @see docs/spec/tlaplus/hybrid_search_simple.tla

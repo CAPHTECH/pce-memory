@@ -24,11 +24,11 @@ pce-memory's hybrid search pipeline is evaluated across three dimensions: search
 
 ### Search Quality (Ablation Study)
 
-| Search Method | Recall@10 | nDCG | Latency |
-|---------------|-----------|------|---------|
-| Text-only (BM25) | 50.0% | 50.0% | 34.7ms |
-| Vector-only (Semantic) | 87.1% | 69.0% | 32.3ms |
-| **Hybrid (BM25 + Vector)** | **91.7%** | **81.0%** | 32.6ms |
+| Search Method              | Recall@10 | nDCG      | Latency |
+| -------------------------- | --------- | --------- | ------- |
+| Text-only (BM25)           | 50.0%     | 50.0%     | 34.7ms  |
+| Vector-only (Semantic)     | 87.1%     | 69.0%     | 32.3ms  |
+| **Hybrid (BM25 + Vector)** | **91.7%** | **81.0%** | 32.6ms  |
 
 Hybrid search combines the precision of keyword matching with the semantic understanding of vector search, achieving **+41.7pp recall over text-only** and **+4.6pp over vector-only**.
 
@@ -36,31 +36,33 @@ Hybrid search combines the precision of keyword matching with the semantic under
 
 The g() reranking function leverages claim provenance quality to improve result ordering:
 
-| Metric | Without Rerank | With Rerank | Delta |
-|--------|---------------|-------------|-------|
-| Recall@10 | 65.2% | **74.2%** | **+9.1pp** |
-| nDCG | 62.4% | **67.1%** | **+4.7pp** |
+| Metric    | Without Rerank | With Rerank | Delta      |
+| --------- | -------------- | ----------- | ---------- |
+| Recall@10 | 65.2%          | **74.2%**   | **+9.1pp** |
+| nDCG      | 62.4%          | **67.1%**   | **+4.7pp** |
 
 Measured at 150 claims (golden + synthetic noise). Claims with richer provenance (actor, notes) are ranked higher.
 
 ### Scalability
 
-| Claims | P@5 | R@10 | MRR | Latency p50 |
-|--------|-----|------|-----|-------------|
-| 15 | 18.2% | 91.7% | 83.0% | 37ms |
-| 100 | 17.3% | 87.9% | 78.9% | 40ms |
-| 500 | 14.5% | 67.4% | 64.0% | 42ms |
-| 1,000 | 12.7% | 60.6% | 61.4% | 46ms |
-| 5,000 | 9.1% | 42.4% | 45.5% | 58ms |
+| Claims | P@5   | R@10  | MRR   | Latency p50 |
+| ------ | ----- | ----- | ----- | ----------- |
+| 15     | 18.2% | 91.7% | 83.0% | 38ms        |
+| 50     | 18.2% | 87.9% | 79.8% | 42ms        |
+| 100    | 17.3% | 87.9% | 78.9% | 40ms        |
+| 250    | 17.3% | 81.1% | 77.7% | 43ms        |
+| 500    | 15.5% | 72.0% | 68.6% | 45ms        |
+| 1,000  | 15.5% | 72.0% | 68.6% | 57ms        |
+| 5,000  | 12.7% | 60.6% | 61.4% | 60ms        |
 
 ### Latency Profile
 
-| Operation | Time |
-|-----------|------|
+| Operation                  | Time                     |
+| -------------------------- | ------------------------ |
 | Embedding model cold start | 177ms (once per session) |
-| Embedding (cached) | 0.1ms |
-| Search p50 (with rerank) | 37.5ms |
-| Rerank overhead | 5.1ms |
+| Embedding (cached)         | 0.1ms                    |
+| Search p50 (with rerank)   | 37.5ms                   |
+| Rerank overhead            | 5.1ms                    |
 
 All operations are well below the 100ms human perception threshold. Run `pnpm benchmark` to reproduce (requires `apps/pce-memory/external/assay-kit` submodule).
 
