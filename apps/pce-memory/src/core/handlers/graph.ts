@@ -287,7 +287,12 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
 
     // limitのバリデーション
     if (limit !== undefined) {
-      if (typeof limit !== 'number' || !Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+      if (
+        typeof limit !== 'number' ||
+        !Number.isFinite(limit) ||
+        !Number.isInteger(limit) ||
+        limit < 1
+      ) {
         return createToolResult(
           {
             ...err('VALIDATION_ERROR', 'limit must be a positive integer', reqId),
@@ -399,7 +404,12 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
 
     // limitのバリデーション
     if (limit !== undefined) {
-      if (typeof limit !== 'number' || !Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+      if (
+        typeof limit !== 'number' ||
+        !Number.isFinite(limit) ||
+        !Number.isInteger(limit) ||
+        limit < 1
+      ) {
         return createToolResult(
           {
             ...err('VALIDATION_ERROR', 'limit must be a positive integer', reqId),

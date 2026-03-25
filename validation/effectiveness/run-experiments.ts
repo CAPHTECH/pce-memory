@@ -15,10 +15,8 @@ const RESULTS_DIR = path.join(REPO_ROOT, 'validation/effectiveness/results');
 const MCP_SERVER_PATH = path.join(REPO_ROOT, 'apps/pce-memory/dist/index.js');
 const TARGET_FILE_PATH = path.join(REPO_ROOT, 'apps/pce-memory/src/store/hybridSearch.ts');
 const TARGET_FILE_LABEL = 'apps/pce-memory/src/store/hybridSearch.ts';
-const OLLAMA_CHAT_URL =
-  process.env.OLLAMA_API_URL ?? 'http://localhost:11434/v1/chat/completions';
-const OLLAMA_MODELS_URL =
-  process.env.OLLAMA_MODELS_URL ?? 'http://localhost:11434/v1/models';
+const OLLAMA_CHAT_URL = process.env.OLLAMA_API_URL ?? 'http://localhost:11434/v1/chat/completions';
+const OLLAMA_MODELS_URL = process.env.OLLAMA_MODELS_URL ?? 'http://localhost:11434/v1/models';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'qwen3.5:122b-a10b';
 const MAX_TOKENS = parsePositiveInt(process.env.OLLAMA_MAX_TOKENS) ?? 1500;
 const JSON_RETRY_MAX_TOKENS =
@@ -274,15 +272,20 @@ class OllamaClient {
     };
   }
 
-  async chatForImprovements(
-    messages: ChatMessage[]
-  ): Promise<{ text: string; parsed: ImprovementPayload; raw: ChatCompletionResponse; meta: CompletionMeta }> {
+  async chatForImprovements(messages: ChatMessage[]): Promise<{
+    text: string;
+    parsed: ImprovementPayload;
+    raw: ChatCompletionResponse;
+    meta: CompletionMeta;
+  }> {
     const completion = await this.chat(messages, {
       jsonMode: true,
       forceJsonSchema: true,
     });
     if (completion.text.length === 0) {
-      throw new Error(`Ollama returned an empty improvement response: ${JSON.stringify(completion.raw)}`);
+      throw new Error(
+        `Ollama returned an empty improvement response: ${JSON.stringify(completion.raw)}`
+      );
     }
     const parsed = parseImprovementPayload(completion.text);
     return { ...completion, parsed };
@@ -303,17 +306,15 @@ class OllamaClient {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      max_tokens: options.maxTokensOverride ?? MAX_TOKENS,
-      reasoning_effort: REASONING_EFFORT,
-      temperature: CHAT_TEMPERATURE,
+        model: OLLAMA_MODEL,
+        max_tokens: options.maxTokensOverride ?? MAX_TOKENS,
+        reasoning_effort: REASONING_EFFORT,
+        temperature: CHAT_TEMPERATURE,
         stream: false,
         messages,
         ...(options.jsonMode
           ? {
-              response_format: options.forceJsonSchema
-                ? { type: 'json_object' }
-                : { type: 'text' },
+              response_format: options.forceJsonSchema ? { type: 'json_object' } : { type: 'text' },
             }
           : {}),
       }),
@@ -362,7 +363,9 @@ class McpMemoryClient {
         return;
       }
       this.rejectAllPending(
-        new Error(`MCP server exited unexpectedly with code=${code ?? 'null'} signal=${signal ?? 'null'}`)
+        new Error(
+          `MCP server exited unexpectedly with code=${code ?? 'null'} signal=${signal ?? 'null'}`
+        )
       );
     });
 
@@ -670,19 +673,26 @@ async function runTaskContinuityWithMemory(
     };
     const activateRaw = await memory.callTool('pce_memory_activate', activateArgs);
     const activateSummary = summarizeActivateResult(activateRaw);
-    const toolTranscript = buildToolTranscript('pce_memory_activate', activateArgs, activateSummary);
+    const toolTranscript = buildToolTranscript(
+      'pce_memory_activate',
+      activateArgs,
+      activateSummary
+    );
 
-    const phaseB = await client.chat([
-      systemMessage(
-        'You are answering a task-resume question. Use the provided simulated MCP tool result as authoritative prior-session memory, and do not invent details that are absent from it.'
-      ),
-      systemMessage(buildTaskContinuityRecallInstructions()),
-      systemMessage(toolTranscript),
-      userMessage(phaseBQuestion),
-    ], {
-      jsonMode: true,
-      forceJsonSchema: true,
-    });
+    const phaseB = await client.chat(
+      [
+        systemMessage(
+          'You are answering a task-resume question. Use the provided simulated MCP tool result as authoritative prior-session memory, and do not invent details that are absent from it.'
+        ),
+        systemMessage(buildTaskContinuityRecallInstructions()),
+        systemMessage(toolTranscript),
+        userMessage(phaseBQuestion),
+      ],
+      {
+        jsonMode: true,
+        forceJsonSchema: true,
+      }
+    );
     const phaseBParsed = tryParseImprovementRecallPayload(phaseB.text);
     const phaseBMeta = mergeMetaInvalidReasons(phaseB.meta, phaseBParsed.invalid_reasons);
 
@@ -732,16 +742,19 @@ async function runTaskContinuityWithoutMemory(
 
   const phaseBQuestion =
     'What improvements were identified in the previous session for hybridSearch.ts?';
-  const phaseB = await client.chat([
-    systemMessage(
-      'You are answering from the current conversation only. If previous-session context is missing, avoid pretending that you have it.'
-    ),
-    systemMessage(buildTaskContinuityRecallInstructions()),
-    userMessage(phaseBQuestion),
-  ], {
-    jsonMode: true,
-    forceJsonSchema: true,
-  });
+  const phaseB = await client.chat(
+    [
+      systemMessage(
+        'You are answering from the current conversation only. If previous-session context is missing, avoid pretending that you have it.'
+      ),
+      systemMessage(buildTaskContinuityRecallInstructions()),
+      userMessage(phaseBQuestion),
+    ],
+    {
+      jsonMode: true,
+      forceJsonSchema: true,
+    }
+  );
   const phaseBParsed = tryParseImprovementRecallPayload(phaseB.text);
   const phaseBMeta = mergeMetaInvalidReasons(phaseB.meta, phaseBParsed.invalid_reasons);
 
@@ -768,9 +781,7 @@ async function runTaskContinuityWithoutMemory(
   };
 }
 
-async function runDesignDecisionRecallWithMemory(
-  client: OllamaClient
-): Promise<DesignRecallArm> {
+async function runDesignDecisionRecallWithMemory(client: OllamaClient): Promise<DesignRecallArm> {
   const dbPath = await createTempDbPath('design-decision-with-memory');
   const memory = new McpMemoryClient(dbPath);
   await memory.start();
@@ -797,8 +808,7 @@ async function runDesignDecisionRecallWithMemory(
       upserts.push(upsertResult);
     }
 
-    const question =
-      'What architectural decisions have been made about the retrieval pipeline?';
+    const question = 'What architectural decisions have been made about the retrieval pipeline?';
     const activateArgs = {
       intent: 'design_decision',
       q: 'architectural decisions retrieval pipeline hybrid search',
@@ -811,19 +821,26 @@ async function runDesignDecisionRecallWithMemory(
     };
     const activateRaw = await memory.callTool('pce_memory_activate', activateArgs);
     const activateSummary = summarizeActivateResult(activateRaw);
-    const toolTranscript = buildToolTranscript('pce_memory_activate', activateArgs, activateSummary);
+    const toolTranscript = buildToolTranscript(
+      'pce_memory_activate',
+      activateArgs,
+      activateSummary
+    );
 
-    const answer = await client.chat([
-      systemMessage(
-        'You are answering a design-decision recall question. Use the provided simulated MCP tool result as the source of truth and do not invent decisions outside that memory.'
-      ),
-      systemMessage(buildDesignDecisionRecallInstructions()),
-      systemMessage(toolTranscript),
-      userMessage(question),
-    ], {
-      jsonMode: true,
-      forceJsonSchema: true,
-    });
+    const answer = await client.chat(
+      [
+        systemMessage(
+          'You are answering a design-decision recall question. Use the provided simulated MCP tool result as the source of truth and do not invent decisions outside that memory.'
+        ),
+        systemMessage(buildDesignDecisionRecallInstructions()),
+        systemMessage(toolTranscript),
+        userMessage(question),
+      ],
+      {
+        jsonMode: true,
+        forceJsonSchema: true,
+      }
+    );
     const parsed = tryParseDecisionRecallPayload(answer.text);
     const meta = mergeMetaInvalidReasons(answer.meta, parsed.invalid_reasons);
 
@@ -850,18 +867,20 @@ async function runDesignDecisionRecallWithoutMemory(
   client: OllamaClient
 ): Promise<DesignRecallArm> {
   const seededDecisions = buildRetrievalDecisionSeeds();
-  const question =
-    'What architectural decisions have been made about the retrieval pipeline?';
-  const answer = await client.chat([
-    systemMessage(
-      'You are answering from the current conversation only. If you do not have prior architectural context, do not claim that you do.'
-    ),
-    systemMessage(buildDesignDecisionRecallInstructions()),
-    userMessage(question),
-  ], {
-    jsonMode: true,
-    forceJsonSchema: true,
-  });
+  const question = 'What architectural decisions have been made about the retrieval pipeline?';
+  const answer = await client.chat(
+    [
+      systemMessage(
+        'You are answering from the current conversation only. If you do not have prior architectural context, do not claim that you do.'
+      ),
+      systemMessage(buildDesignDecisionRecallInstructions()),
+      userMessage(question),
+    ],
+    {
+      jsonMode: true,
+      forceJsonSchema: true,
+    }
+  );
   const parsed = tryParseDecisionRecallPayload(answer.text);
   const meta = mergeMetaInvalidReasons(answer.meta, parsed.invalid_reasons);
 
@@ -1243,9 +1262,10 @@ function mergeMetaInvalidReasons(meta: CompletionMeta, extra: string[]): Complet
   };
 }
 
-function tryParseImprovementRecallPayload(
-  text: string
-): { value?: ImprovementRecallPayload; invalid_reasons: string[] } {
+function tryParseImprovementRecallPayload(text: string): {
+  value?: ImprovementRecallPayload;
+  invalid_reasons: string[];
+} {
   if (text.trim().length === 0) {
     return { invalid_reasons: ['missing_json_payload'] };
   }
@@ -1258,17 +1278,16 @@ function tryParseImprovementRecallPayload(
   } catch (error) {
     return {
       invalid_reasons: [
-        `improvement_recall_parse_failed:${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `improvement_recall_parse_failed:${error instanceof Error ? error.message : String(error)}`,
       ],
     };
   }
 }
 
-function tryParseDecisionRecallPayload(
-  text: string
-): { value?: DecisionRecallPayload; invalid_reasons: string[] } {
+function tryParseDecisionRecallPayload(text: string): {
+  value?: DecisionRecallPayload;
+  invalid_reasons: string[];
+} {
   if (text.trim().length === 0) {
     return { invalid_reasons: ['missing_json_payload'] };
   }
@@ -1354,7 +1373,9 @@ function scoreDesignDecisionRecall(
   meta: CompletionMeta
 ): DecisionScore {
   const recallCorpus = payload
-    ? payload.decisions.flatMap((decision) => [decision.id, decision.summary, ...decision.params]).join('\n')
+    ? payload.decisions
+        .flatMap((decision) => [decision.id, decision.summary, ...decision.params])
+        .join('\n')
     : answer;
   const decisionIds = decisions.map((decision) => decision.id);
   const detailAnchors = ['0.65', '0.15', '48', '96', 'alpha', 'threshold', 'k_text', 'k_vec'];
@@ -1382,7 +1403,10 @@ function scoreDesignDecisionRecall(
     verdict = 'invalid_response';
   } else if (payload?.status === 'no_context') {
     verdict = 'generic_or_no_context';
-  } else if (decisionIdScore.matched.length === decisions.length && detailScore.matched.length >= 3) {
+  } else if (
+    decisionIdScore.matched.length === decisions.length &&
+    detailScore.matched.length >= 3
+  ) {
     verdict = 'specific_recall';
   } else if (decisionIdScore.matched.length >= 1 || detailScore.matched.length >= 1) {
     verdict = 'partial_recall';
@@ -1625,6 +1649,6 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
   process.exit(1);
 });

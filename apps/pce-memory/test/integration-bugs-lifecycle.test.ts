@@ -4,7 +4,10 @@
  * Split from integration-bugs.test.ts
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetRetrievalPlannerTestState, upsertClaimViaTool } from './helpers/retrievalPlannerTestUtils';
+import {
+  resetRetrievalPlannerTestState,
+  upsertClaimViaTool,
+} from './helpers/retrievalPlannerTestUtils';
 import {
   applyPolicy,
   expectSuccess,

@@ -22,10 +22,7 @@
 import type { EmbeddingService } from '@pce/embeddings';
 import type { Claim } from './claims.js';
 import * as E from 'fp-ts/Either';
-import {
-  calculateScoreBreakdown,
-  calculateUsageTermBreakdown,
-} from './rerank.js';
+import { calculateScoreBreakdown, calculateUsageTermBreakdown } from './rerank.js';
 import {
   type ClaimSearchFilters,
   type HybridSearchConfig,
@@ -47,7 +44,12 @@ import {
 } from './search/types.js';
 import { textSearch, fallbackToTextOnlyResults } from './search/textSearch.js';
 import { vectorSearch } from './search/vectorSearch.js';
-import { mergeResults, mergeResultsWithRerank, getClaimStats, fetchClaimMetrics } from './search/mergeAndRerank.js';
+import {
+  mergeResults,
+  mergeResultsWithRerank,
+  getClaimStats,
+  fetchClaimMetrics,
+} from './search/mergeAndRerank.js';
 import { rerankWithMmr, fetchClaimEmbeddings } from './search/mmr.js';
 import { expandQueryWithEntityGraph } from './search/queryExpansion.js';
 import { paginateResults } from './search/pagination.js';
@@ -174,7 +176,9 @@ export async function hybridSearchWithScores(
   const rawQuery = query?.trim() ?? '';
   const hasQuery = rawQuery.length > 0;
   const effectiveQuery =
-    hasQuery && queryExpansionConfig ? await expandQueryWithEntityGraph(rawQuery, queryExpansionConfig) : rawQuery;
+    hasQuery && queryExpansionConfig
+      ? await expandQueryWithEntityGraph(rawQuery, queryExpansionConfig)
+      : rawQuery;
   const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;
   const querylessUnlimited = !hasQuery && limit >= Number.MAX_SAFE_INTEGER / 2;
 
@@ -275,18 +279,19 @@ export async function hybridSearchWithScores(
       feedbackBoostConfig
     );
 
-    const reranked = mmrConfig && hasQuery
-      ? rerankWithMmr(
-          merged,
-          mmrConfig,
-          normalizedLimit,
-          await fetchClaimEmbeddings(
-            merged
-              .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
-              .map((result) => result.claim.id)
+    const reranked =
+      mmrConfig && hasQuery
+        ? rerankWithMmr(
+            merged,
+            mmrConfig,
+            normalizedLimit,
+            await fetchClaimEmbeddings(
+              merged
+                .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+                .map((result) => result.claim.id)
+            )
           )
-        )
-      : merged;
+        : merged;
 
     return reranked.slice(0, normalizedLimit).map((r) => ({
       claim: r.claim,

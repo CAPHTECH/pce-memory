@@ -7,12 +7,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
-import {
-  appendLog,
-  appendAuditFile,
-  setAuditLogPath,
-  recordAudit,
-} from '../src/store/logs';
+import { appendLog, appendAuditFile, setAuditLogPath, recordAudit } from '../src/store/logs';
 
 let tempDir: string;
 
@@ -130,7 +125,14 @@ describe('recordAudit', () => {
     setAuditLogPath(logFile);
 
     await recordAudit(
-      { id: 'log_003', op: 'feedback', ok: true, req: 'req_003', trace: 'trace_003', policy_version: '1.0' },
+      {
+        id: 'log_003',
+        op: 'feedback',
+        ok: true,
+        req: 'req_003',
+        trace: 'trace_003',
+        policy_version: '1.0',
+      },
       { subject: 'test subject', payload_digest: 'sha256:abc' }
     );
 

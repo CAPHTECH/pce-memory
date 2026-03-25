@@ -634,7 +634,8 @@ export const TOOL_DEFINITIONS = [
         has_more: { type: 'boolean', description: 'Whether more results exist' },
         maintenance_hints: {
           type: 'object',
-          description: 'Optional knowledge maintenance signals derived from retrieved claims and store health.',
+          description:
+            'Optional knowledge maintenance signals derived from retrieved claims and store health.',
           properties: {
             similar_pairs: {
               type: 'array',

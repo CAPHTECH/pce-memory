@@ -56,9 +56,7 @@ export const validateArray = <T>(
 // スコープバリデーション
 const VALID_SCOPES = ['session', 'project', 'principle'] as const;
 
-export const validateScope = (
-  value: unknown
-): E.Either<DomainError, string> => {
+export const validateScope = (value: unknown): E.Either<DomainError, string> => {
   if (typeof value !== 'string') {
     return E.left(validationError('scope must be a string'));
   }
@@ -68,9 +66,7 @@ export const validateScope = (
   return E.right(value);
 };
 
-export const validateScopes = (
-  value: unknown
-): E.Either<DomainError, string[]> => {
+export const validateScopes = (value: unknown): E.Either<DomainError, string[]> => {
   if (!Array.isArray(value)) {
     return E.left(validationError('scope must be an array'));
   }
@@ -88,9 +84,7 @@ export const validateScopes = (
 // content_hashバリデーション
 const CONTENT_HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
-export const validateContentHash = (
-  value: unknown
-): E.Either<DomainError, string> => {
+export const validateContentHash = (value: unknown): E.Either<DomainError, string> => {
   if (typeof value !== 'string') {
     return E.left(validationError('content_hash must be a string'));
   }
@@ -103,9 +97,7 @@ export const validateContentHash = (
 // boundary_classバリデーション
 const VALID_BOUNDARY_CLASSES = ['public', 'internal', 'pii', 'secret'] as const;
 
-export const validateBoundaryClass = (
-  value: unknown
-): E.Either<DomainError, string> => {
+export const validateBoundaryClass = (value: unknown): E.Either<DomainError, string> => {
   if (typeof value !== 'string') {
     return E.left(validationError('boundary_class must be a string'));
   }
@@ -119,9 +111,7 @@ export const validateBoundaryClass = (
 const MAX_EMBEDDING_DIM = 4096;
 const MAX_EMBEDDING_MAGNITUDE = 10.0;
 
-export const validateEmbedding = (
-  embedding: readonly number[]
-): E.Either<DomainError, void> => {
+export const validateEmbedding = (embedding: readonly number[]): E.Either<DomainError, void> => {
   if (embedding.length === 0) {
     return E.left(embeddingValidationError('Embedding vector must not be empty'));
   }

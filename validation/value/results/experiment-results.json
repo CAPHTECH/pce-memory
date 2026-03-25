@@ -13,27 +13,12 @@
         "intent": "policy_check",
         "kind_filter": null,
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_28bdf644",
-          "clm_f5f612a4",
-          "clm_e5427968"
-        ],
-        "actual_top3": [
-          "clm_28bdf644",
-          "clm_f5f612a4",
-          "clm_e5427968"
-        ],
+        "expected_top3": ["clm_28bdf644", "clm_f5f612a4", "clm_e5427968"],
+        "actual_top3": ["clm_28bdf644", "clm_f5f612a4", "clm_e5427968"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "policy_hint",
-          "fact",
-          "preference"
-        ],
-        "returned_memory_types": [
-          "norm",
-          "knowledge"
-        ],
+        "returned_kinds": ["policy_hint", "fact", "preference"],
+        "returned_memory_types": ["norm", "knowledge"],
         "assertion_details": {
           "normAboveTask": true,
           "top3HasNoTask": true
@@ -83,28 +68,12 @@
         "intent": "resume_task",
         "kind_filter": null,
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_fa5aa48a",
-          "clm_2855a1ff",
-          "clm_ad233977"
-        ],
-        "actual_top3": [
-          "clm_fa5aa48a",
-          "clm_2855a1ff",
-          "clm_ad233977"
-        ],
+        "expected_top3": ["clm_fa5aa48a", "clm_2855a1ff", "clm_ad233977"],
+        "actual_top3": ["clm_fa5aa48a", "clm_2855a1ff", "clm_ad233977"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "task",
-          "fact",
-          "policy_hint"
-        ],
-        "returned_memory_types": [
-          "working_state",
-          "knowledge",
-          "norm"
-        ],
+        "returned_kinds": ["task", "fact", "policy_hint"],
+        "returned_memory_types": ["working_state", "knowledge", "norm"],
         "assertion_details": {
           "top1IsTask": true,
           "taskAboveNorm": true
@@ -152,30 +121,14 @@
         "description": "kind_filter should exclude higher-scoring non-policy claims",
         "query": "kind-fixture-gamma exception",
         "intent": null,
-        "kind_filter": [
-          "policy_hint"
-        ],
+        "kind_filter": ["policy_hint"],
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_ad797646",
-          "clm_7fa7d6dd",
-          "clm_13a65c17"
-        ],
-        "actual_top3": [
-          "clm_ad797646",
-          "clm_13a65c17",
-          "clm_7fa7d6dd"
-        ],
+        "expected_top3": ["clm_ad797646", "clm_7fa7d6dd", "clm_13a65c17"],
+        "actual_top3": ["clm_ad797646", "clm_13a65c17", "clm_7fa7d6dd"],
         "precision_at_3": 1,
         "ndcg_at_3": 0.9721,
-        "returned_kinds": [
-          "policy_hint"
-        ],
-        "returned_memory_types": [
-          "norm",
-          "knowledge",
-          "procedure"
-        ],
+        "returned_kinds": ["policy_hint"],
+        "returned_memory_types": ["norm", "knowledge", "procedure"],
         "assertion_details": {
           "allPolicyHint": true,
           "decoysFilteredOut": true
@@ -224,30 +177,13 @@
         "query": "procedure-fixture-delta rollback",
         "intent": null,
         "kind_filter": null,
-        "memory_type_filter": [
-          "procedure"
-        ],
-        "expected_top3": [
-          "clm_12766da6",
-          "clm_38c80891",
-          "clm_c972acfb"
-        ],
-        "actual_top3": [
-          "clm_12766da6",
-          "clm_38c80891",
-          "clm_c972acfb"
-        ],
+        "memory_type_filter": ["procedure"],
+        "expected_top3": ["clm_12766da6", "clm_38c80891", "clm_c972acfb"],
+        "actual_top3": ["clm_12766da6", "clm_38c80891", "clm_c972acfb"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "fact",
-          "preference",
-          "policy_hint",
-          "task"
-        ],
-        "returned_memory_types": [
-          "procedure"
-        ],
+        "returned_kinds": ["fact", "preference", "policy_hint", "task"],
+        "returned_memory_types": ["procedure"],
         "assertion_details": {
           "allProcedure": true,
           "decoysFilteredOut": true
@@ -297,28 +233,12 @@
         "intent": null,
         "kind_filter": null,
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_336fe164",
-          "clm_c29293da",
-          "clm_20d98186"
-        ],
-        "actual_top3": [
-          "clm_336fe164",
-          "clm_c29293da",
-          "clm_20d98186"
-        ],
+        "expected_top3": ["clm_336fe164", "clm_c29293da", "clm_20d98186"],
+        "actual_top3": ["clm_336fe164", "clm_c29293da", "clm_20d98186"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "policy_hint",
-          "fact",
-          "task"
-        ],
-        "returned_memory_types": [
-          "norm",
-          "knowledge",
-          "working_state"
-        ],
+        "returned_kinds": ["policy_hint", "fact", "task"],
+        "returned_memory_types": ["norm", "knowledge", "working_state"],
         "assertion_details": {
           "noCachingInTop3": true,
           "allTop3Expected": true
@@ -654,9 +574,7 @@
           "promotion_status": "accepted",
           "accepted_claim_id": "clm_05c15140",
           "evidence_count": 1,
-          "evidence_source_types": [
-            "observation"
-          ],
+          "evidence_source_types": ["observation"],
           "has_source_lineage": true
         }
       },
@@ -709,12 +627,7 @@
             "id": "s1-6faefd0f",
             "title": "MMR Re-ranking Logic Flaw",
             "summary": "The `rerankWithMmr` function incorrectly includes the `tail` (results beyond `maxCandidates`) in the final output, bypassing the diversity filtering intended for the entire result set.",
-            "anchors": [
-              "rerankWithMmr",
-              "head",
-              "tail",
-              "maxCandidates"
-            ],
+            "anchors": ["rerankWithMmr", "head", "tail", "maxCandidates"],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           },
@@ -722,12 +635,7 @@
             "id": "s1-a433d231",
             "title": "Pagination Cursor Implementation Gap",
             "summary": "Although the `PaginatedSearchResult` interface defines a `next_cursor` field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor.",
-            "anchors": [
-              "PaginatedSearchResult",
-              "next_cursor",
-              "mergeResults",
-              "vectorSearch"
-            ],
+            "anchors": ["PaginatedSearchResult", "next_cursor", "mergeResults", "vectorSearch"],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           }
@@ -836,12 +744,7 @@
             "id": "s2-b023ceb4",
             "title": "Missing Foreign Key Constraints on Evidence and Context Items",
             "summary": "The schema defines `claim_id` in the `evidence` and `active_context_items` tables but lacks explicit FOREIGN KEY constraints. This absence prevents the database from enforcing referential integrity, risking orphaned records if a claim is deleted or tombstoned, which directly compromises retrieval lineage and correctness.",
-            "anchors": [
-              "evidence",
-              "claim_id",
-              "active_context_items",
-              "active_context_id"
-            ],
+            "anchors": ["evidence", "claim_id", "active_context_items", "active_context_id"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           },
@@ -849,12 +752,7 @@
             "id": "s2-5406087f",
             "title": "Inconsistent Timestamp Data Types for Temporal Queries",
             "summary": "The schema mixes `TIMESTAMP` and `TEXT` data types for temporal fields (e.g., `created_at` is `TIMESTAMP` in `claims` but `expires_at` is `TEXT` in `active_contexts`, and `created_at` is `TEXT` in `promotion_queue`). This inconsistency hinders accurate temporal sorting, TTL-based expiration logic, and recency calculations required for the `recency_anchor` column.",
-            "anchors": [
-              "claims",
-              "created_at",
-              "active_contexts",
-              "expires_at"
-            ],
+            "anchors": ["claims", "created_at", "active_contexts", "expires_at"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           }
@@ -1048,11 +946,7 @@
           "status": "ok",
           "title": "Enforce Referential Integrity to Prevent Orphaned Retrieval Records",
           "summary": "To improve retrieval correctness, the database schema must be updated to add explicit FOREIGN KEY constraints on `claim_id` in the `evidence` and `active_context_items` tables. This addresses the critical risk of orphaned records compromising retrieval lineage, which currently exists alongside logic flaws in the hybrid search pagination and MMR re-ranking functions.",
-          "references": [
-            "clm_235af254",
-            "clm_2e8835db",
-            "clm_249a694e"
-          ],
+          "references": ["clm_235af254", "clm_2e8835db", "clm_249a694e"],
           "evidence": [
             "claim_id in the evidence and active_context_items tables but lacks explicit FOREIGN KEY constraints",
             "PaginatedSearchResult interface defines a next_cursor field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor",
@@ -1060,13 +954,8 @@
           ]
         },
         "score": {
-          "matched_session1_ids": [
-            "clm_249a694e",
-            "clm_2e8835db"
-          ],
-          "matched_session2_ids": [
-            "clm_235af254"
-          ],
+          "matched_session1_ids": ["clm_249a694e", "clm_2e8835db"],
+          "matched_session2_ids": ["clm_235af254"],
           "matched_session1_anchors": [
             "rerankWithMmr",
             "tail",
@@ -1074,11 +963,7 @@
             "PaginatedSearchResult",
             "next_cursor"
           ],
-          "matched_session2_anchors": [
-            "evidence",
-            "claim_id",
-            "active_context_items"
-          ],
+          "matched_session2_anchors": ["evidence", "claim_id", "active_context_items"],
           "references_both_sessions": true,
           "evidence_both_sessions": true
         }
@@ -1092,12 +977,7 @@
             "id": "s1-6faefd0f",
             "title": "MMR Re-ranking Logic Flaw",
             "summary": "The `rerankWithMmr` function incorrectly includes the `tail` (results beyond `maxCandidates`) in the final output, bypassing the diversity filtering intended for the entire result set.",
-            "anchors": [
-              "rerankWithMmr",
-              "head",
-              "tail",
-              "maxCandidates"
-            ],
+            "anchors": ["rerankWithMmr", "head", "tail", "maxCandidates"],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           },
@@ -1105,12 +985,7 @@
             "id": "s1-a433d231",
             "title": "Pagination Cursor Implementation Gap",
             "summary": "Although the `PaginatedSearchResult` interface defines a `next_cursor` field for pagination, the provided search and merge functions do not implement the logic to calculate or return this cursor.",
-            "anchors": [
-              "PaginatedSearchResult",
-              "next_cursor",
-              "mergeResults",
-              "vectorSearch"
-            ],
+            "anchors": ["PaginatedSearchResult", "next_cursor", "mergeResults", "vectorSearch"],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           }
@@ -1123,12 +998,7 @@
             "id": "s2-be2863e5",
             "title": "Ranking Index Composition and Recency Anchor Dependency",
             "summary": "The idx_claims_ranking index optimizes retrieval for the g() ranking function by including utility, confidence, and updated_at. However, the recency calculation logic relies on the recency_anchor column, which is only updated on positive feedback. This creates a potential lineage gap where claims with stale recency anchors may be incorrectly prioritized or deprioritized if the ranking query does not explicitly join or filter based on the recency_anchor logic defined in the schema comments.",
-            "anchors": [
-              "claims",
-              "idx_claims_ranking",
-              "recency_anchor",
-              "utility"
-            ],
+            "anchors": ["claims", "idx_claims_ranking", "recency_anchor", "utility"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           },
@@ -1136,12 +1006,7 @@
             "id": "s2-733501f6",
             "title": "Provenance Data Type Inconsistency Across Tables",
             "summary": "The schema defines provenance as a JSON type in the claims table but as a TEXT type in the promotion_queue table. This inconsistency affects retrieval correctness and observability when tracing the lineage of a claim from the promotion queue to the final claims table, as JSON parsing logic must be applied differently depending on the source table, potentially leading to data corruption or query failures if the application layer assumes a uniform type.",
-            "anchors": [
-              "claims",
-              "provenance",
-              "promotion_queue",
-              "evidence"
-            ],
+            "anchors": ["claims", "provenance", "promotion_queue", "evidence"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           }

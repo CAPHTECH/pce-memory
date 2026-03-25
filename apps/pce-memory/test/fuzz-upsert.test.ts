@@ -269,13 +269,19 @@ describe('FUZZ: pce_memory_upsert', () => {
 
     it('rejects provenance with Feb 30 date', async () => {
       const args = validUpsertArgs();
-      (args as Record<string, unknown>).provenance = { at: '2025-02-30T12:00:00Z', actor: 'claude' };
+      (args as Record<string, unknown>).provenance = {
+        at: '2025-02-30T12:00:00Z',
+        actor: 'claude',
+      };
       expectError(await dispatchTool('pce_memory_upsert', args), 'VALIDATION_ERROR');
     });
 
     it('rejects provenance with Feb 29 on non-leap year', async () => {
       const args = validUpsertArgs();
-      (args as Record<string, unknown>).provenance = { at: '2023-02-29T12:00:00Z', actor: 'claude' };
+      (args as Record<string, unknown>).provenance = {
+        at: '2023-02-29T12:00:00Z',
+        actor: 'claude',
+      };
       expectError(await dispatchTool('pce_memory_upsert', args), 'VALIDATION_ERROR');
     });
   });
@@ -323,12 +329,14 @@ describe('FUZZ: pce_memory_upsert', () => {
       for (let i = 0; i < 20; i++) {
         nested = { nested };
       }
-      const entities = [{
-        id: 'ent_nested',
-        type: 'Concept',
-        name: 'Nested Entity',
-        attrs: nested,
-      }];
+      const entities = [
+        {
+          id: 'ent_nested',
+          type: 'Concept',
+          name: 'Nested Entity',
+          attrs: nested,
+        },
+      ];
       const args = { ...validUpsertArgs(), entities };
       const result = await dispatchTool('pce_memory_upsert', args);
       expect(result).toBeDefined();

@@ -27,7 +27,7 @@ type QueryType = {
 
 async function warmupClaims(
   claims: SyntheticClaim[],
-  embeddingService: EmbeddingService,
+  embeddingService: EmbeddingService
 ): Promise<Map<string, string>> {
   const testIdToClaimId = new Map<string, string>();
   for (const claim of claims) {
@@ -40,14 +40,18 @@ async function warmupClaims(
         content_hash: claim.content_hash,
         provenance: claim.provenance,
       },
-      embeddingService,
+      embeddingService
     );
     testIdToClaimId.set(claim.id, result.claim.id);
   }
   return testIdToClaimId;
 }
 
-function resolveExpectedId(rawId: string, testIdToClaimId: Map<string, string>, queryId: string): string {
+function resolveExpectedId(
+  rawId: string,
+  testIdToClaimId: Map<string, string>,
+  queryId: string
+): string {
   const mapped = testIdToClaimId.get(rawId);
   if (!mapped) throw new Error(`Unknown expected claim "${rawId}" in query "${queryId}"`);
   return mapped;
@@ -56,7 +60,7 @@ function resolveExpectedId(rawId: string, testIdToClaimId: Map<string, string>, 
 async function measureScalePoint(
   claimCount: number,
   queries: QueryType[],
-  embeddingService: EmbeddingService,
+  embeddingService: EmbeddingService
 ): Promise<ScalabilityDataPoint> {
   console.log(`  [scalability] Seeding ${claimCount} claims...`);
   process.env.PCE_DB = ':memory:';
@@ -84,7 +88,7 @@ async function measureScalePoint(
         ['session', 'project', 'principle'],
         TOP_K,
         query.text,
-        { embeddingService, alpha: 0.65, enableRerank: true },
+        { embeddingService, alpha: 0.65, enableRerank: true }
       );
       const latencyMs = performance.now() - startTime;
       allLatencies.push(latencyMs);
@@ -110,7 +114,10 @@ async function measureScalePoint(
         }
 
         const evalStartTime = Date.now();
-        const evalItems = retrievedIds.map((id, i) => ({ id, timestampMs: evalStartTime + i * 10 }));
+        const evalItems = retrievedIds.map((id, i) => ({
+          id,
+          timestampMs: evalStartTime + i * 10,
+        }));
         const relevantArray = Array.from(relevantIdSet);
         const gradesOpt = relevanceGrades.size > 0 ? { relevanceGrades } : {};
 
@@ -154,7 +161,7 @@ async function measureScalePoint(
   };
 
   console.log(
-    `    ${claimCount} claims: P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% p50=${result.latency.p50.toFixed(0)}ms`,
+    `    ${claimCount} claims: P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% p50=${result.latency.p50.toFixed(0)}ms`
   );
 
   return result;
@@ -162,7 +169,7 @@ async function measureScalePoint(
 
 export async function runScalability(
   embeddingService: EmbeddingService,
-  datasetPath: string,
+  datasetPath: string
 ): Promise<ScalabilityResult> {
   const dataset = await loadDataset(datasetPath);
   const queries = dataset.queries as QueryType[];

@@ -31,7 +31,7 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
   lines.push('# pce-memory Benchmark Report');
   lines.push('');
   lines.push(
-    `> Generated: ${report.timestamp} | Version: ${report.version} | Model: ${report.environment.embeddingModel} (${report.environment.embeddingDim}-dim) | Node: ${report.environment.node} | Platform: ${report.environment.platform}`,
+    `> Generated: ${report.timestamp} | Version: ${report.version} | Model: ${report.environment.embeddingModel} (${report.environment.embeddingDim}-dim) | Node: ${report.environment.node} | Platform: ${report.environment.platform}`
   );
   lines.push('');
 
@@ -46,38 +46,46 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
   lines.push('');
   if (baseline && textOnly && vectorOnly) {
     lines.push(
-      `- **Hybrid search** achieves ${pct(baseline.avgRecall)} recall, outperforming text-only (${pct(textOnly.avgRecall)}) and vector-only (${pct(vectorOnly.avgRecall)})`,
+      `- **Hybrid search** achieves ${pct(baseline.avgRecall)} recall, outperforming text-only (${pct(textOnly.avgRecall)}) and vector-only (${pct(vectorOnly.avgRecall)})`
     );
     if (ablation.rerankAblation) {
       const ra = ablation.rerankAblation;
       lines.push(
-        `- **g() reranking** (${ra.claimCount} claims): nDCG ${delta(ra.delta.deltaNdcg)}, Precision ${delta(ra.delta.deltaPrecision)}, Recall ${delta(ra.delta.deltaRecall)}`,
+        `- **g() reranking** (${ra.claimCount} claims): nDCG ${delta(ra.delta.deltaNdcg)}, Precision ${delta(ra.delta.deltaPrecision)}, Recall ${delta(ra.delta.deltaRecall)}`
       );
     } else {
       lines.push(
-        `- **g() reranking** improves nDCG by ${delta(baseline.avgNdcg - (ablation.configs.find((c) => c.config.name === 'hybrid-no-rerank')?.avgNdcg ?? 0))} over hybrid without reranking`,
+        `- **g() reranking** improves nDCG by ${delta(baseline.avgNdcg - (ablation.configs.find((c) => c.config.name === 'hybrid-no-rerank')?.avgNdcg ?? 0))} over hybrid without reranking`
       );
     }
   }
   if (scale5k && scale15) {
     lines.push(
-      `- **Scalability**: recall degrades from ${pct(scale15.avgRecall)} (15 claims) to ${pct(scale5k.avgRecall)} (5,000 claims), with p50 latency at ${ms(scale5k.latency.p50)}`,
+      `- **Scalability**: recall degrades from ${pct(scale15.avgRecall)} (15 claims) to ${pct(scale5k.avgRecall)} (5,000 claims), with p50 latency at ${ms(scale5k.latency.p50)}`
     );
   }
-  lines.push(`- **Search latency**: p50 = ${ms(latencyProfile.search.p50)}, p95 = ${ms(latencyProfile.search.p95)}`);
+  lines.push(
+    `- **Search latency**: p50 = ${ms(latencyProfile.search.p50)}, p95 = ${ms(latencyProfile.search.p95)}`
+  );
   lines.push('');
 
   // 1. Ablation Study
   lines.push('## 1. Ablation Study');
   lines.push('');
-  lines.push('Measures the contribution of each search component by systematically toggling features.');
+  lines.push(
+    'Measures the contribution of each search component by systematically toggling features.'
+  );
   lines.push('');
-  lines.push('| Config | Alpha | kText | kVec | Rerank | MMR | Precision@10 | Recall@10 | MRR | nDCG | Latency |');
-  lines.push('|--------|-------|-------|------|--------|-----|-------------|-----------|-----|------|---------|');
+  lines.push(
+    '| Config | Alpha | kText | kVec | Rerank | MMR | Precision@10 | Recall@10 | MRR | nDCG | Latency |'
+  );
+  lines.push(
+    '|--------|-------|-------|------|--------|-----|-------------|-----------|-----|------|---------|'
+  );
   for (const cr of ablation.configs) {
     const c = cr.config;
     lines.push(
-      `| ${c.name === ablation.baselineName ? `**${c.name}**` : c.name} | ${c.alpha} | ${c.kText} | ${c.kVec} | ${c.enableRerank ? 'on' : 'off'} | ${c.mmr.enabled ? 'on' : 'off'} | ${pct(cr.avgPrecision)} | ${pct(cr.avgRecall)} | ${pct(cr.avgMrr)} | ${pct(cr.avgNdcg)} | ${ms(cr.avgLatencyMs)} |`,
+      `| ${c.name === ablation.baselineName ? `**${c.name}**` : c.name} | ${c.alpha} | ${c.kText} | ${c.kVec} | ${c.enableRerank ? 'on' : 'off'} | ${c.mmr.enabled ? 'on' : 'off'} | ${pct(cr.avgPrecision)} | ${pct(cr.avgRecall)} | ${pct(cr.avgMrr)} | ${pct(cr.avgNdcg)} | ${ms(cr.avgLatencyMs)} |`
     );
   }
   lines.push('');
@@ -89,7 +97,7 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
   lines.push('|--------|-----------|--------|------|-------|');
   for (const d of ablation.deltas) {
     lines.push(
-      `| ${d.configName} | ${delta(d.deltaPrecision)} | ${delta(d.deltaRecall)} | ${delta(d.deltaMrr)} | ${delta(d.deltaNdcg)} |`,
+      `| ${d.configName} | ${delta(d.deltaPrecision)} | ${delta(d.deltaRecall)} | ${delta(d.deltaMrr)} | ${delta(d.deltaNdcg)} |`
     );
   }
   lines.push('');
@@ -99,18 +107,20 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
     const ra = ablation.rerankAblation;
     lines.push('### Rerank Ablation (Large Corpus)');
     lines.push('');
-    lines.push(`Measures g() reranking effect with ${ra.claimCount} claims (golden + synthetic noise) to detect score differentiation invisible at small corpus sizes.`);
+    lines.push(
+      `Measures g() reranking effect with ${ra.claimCount} claims (golden + synthetic noise) to detect score differentiation invisible at small corpus sizes.`
+    );
     lines.push('');
     lines.push('| Config | Precision@10 | Recall@10 | MRR | nDCG | Latency |');
     lines.push('|--------|-------------|-----------|-----|------|---------|');
     lines.push(
-      `| hybrid-no-rerank | ${pct(ra.withoutRerank.avgPrecision)} | ${pct(ra.withoutRerank.avgRecall)} | ${pct(ra.withoutRerank.avgMrr)} | ${pct(ra.withoutRerank.avgNdcg)} | ${ms(ra.withoutRerank.avgLatencyMs)} |`,
+      `| hybrid-no-rerank | ${pct(ra.withoutRerank.avgPrecision)} | ${pct(ra.withoutRerank.avgRecall)} | ${pct(ra.withoutRerank.avgMrr)} | ${pct(ra.withoutRerank.avgNdcg)} | ${ms(ra.withoutRerank.avgLatencyMs)} |`
     );
     lines.push(
-      `| **hybrid-baseline** | ${pct(ra.withRerank.avgPrecision)} | ${pct(ra.withRerank.avgRecall)} | ${pct(ra.withRerank.avgMrr)} | ${pct(ra.withRerank.avgNdcg)} | ${ms(ra.withRerank.avgLatencyMs)} |`,
+      `| **hybrid-baseline** | ${pct(ra.withRerank.avgPrecision)} | ${pct(ra.withRerank.avgRecall)} | ${pct(ra.withRerank.avgMrr)} | ${pct(ra.withRerank.avgNdcg)} | ${ms(ra.withRerank.avgLatencyMs)} |`
     );
     lines.push(
-      `| **\u0394 rerank effect** | ${delta(ra.delta.deltaPrecision)} | ${delta(ra.delta.deltaRecall)} | ${delta(ra.delta.deltaMrr)} | ${delta(ra.delta.deltaNdcg)} | — |`,
+      `| **\u0394 rerank effect** | ${delta(ra.delta.deltaPrecision)} | ${delta(ra.delta.deltaRecall)} | ${delta(ra.delta.deltaMrr)} | ${delta(ra.delta.deltaNdcg)} | — |`
     );
     lines.push('');
   }
@@ -118,13 +128,15 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
   // 2. Scalability
   lines.push('## 2. Scalability');
   lines.push('');
-  lines.push('Measures search quality and latency as the knowledge base grows (baseline config: hybrid + rerank).');
+  lines.push(
+    'Measures search quality and latency as the knowledge base grows (baseline config: hybrid + rerank).'
+  );
   lines.push('');
   lines.push('| Claims | P@5 | R@5 | P@10 | R@10 | MRR | nDCG | Latency p50 | Latency p95 |');
   lines.push('|--------|-----|-----|------|------|-----|------|-------------|-------------|');
   for (const dp of scalability.dataPoints) {
     lines.push(
-      `| ${dp.claimCount.toLocaleString()} | ${pct(dp.avgPrecisionAt5)} | ${pct(dp.avgRecallAt5)} | ${pct(dp.avgPrecision)} | ${pct(dp.avgRecall)} | ${pct(dp.avgMrr)} | ${pct(dp.avgNdcg)} | ${ms(dp.latency.p50)} | ${ms(dp.latency.p95)} |`,
+      `| ${dp.claimCount.toLocaleString()} | ${pct(dp.avgPrecisionAt5)} | ${pct(dp.avgRecallAt5)} | ${pct(dp.avgPrecision)} | ${pct(dp.avgRecall)} | ${pct(dp.avgMrr)} | ${pct(dp.avgNdcg)} | ${ms(dp.latency.p50)} | ${ms(dp.latency.p95)} |`
     );
   }
   lines.push('');
@@ -150,13 +162,23 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
   // Methodology
   lines.push('## Methodology');
   lines.push('');
-  lines.push(`- **Embedding model**: ${report.environment.embeddingModel} (${report.environment.embeddingDim}-dim, local ONNX)`);
+  lines.push(
+    `- **Embedding model**: ${report.environment.embeddingModel} (${report.environment.embeddingDim}-dim, local ONNX)`
+  );
   lines.push('- **Database**: DuckDB in-memory');
   const queryCount = report.suites.ablation.configs[0]?.perQuery.length ?? 0;
-  lines.push(`- **Test corpus**: ${queryCount} golden queries across 7 categories (exact match, paraphrase, multi-hop, hard-negative discrimination)`);
-  lines.push('- **Claims**: 15 golden claims (10 positive + 5 hard negatives) + synthetic noise claims for scalability');
-  lines.push('- **IR Metrics**: Precision@k, Recall@k, MRR, nDCG computed via assay-kit `evaluateRetrieval()`');
-  lines.push('- **Latency**: `performance.now()` high-resolution timer, 20 repetitions for percentile calculation');
+  lines.push(
+    `- **Test corpus**: ${queryCount} golden queries across 7 categories (exact match, paraphrase, multi-hop, hard-negative discrimination)`
+  );
+  lines.push(
+    '- **Claims**: 15 golden claims (10 positive + 5 hard negatives) + synthetic noise claims for scalability'
+  );
+  lines.push(
+    '- **IR Metrics**: Precision@k, Recall@k, MRR, nDCG computed via assay-kit `evaluateRetrieval()`'
+  );
+  lines.push(
+    '- **Latency**: `performance.now()` high-resolution timer, 20 repetitions for percentile calculation'
+  );
   lines.push('- **Scalability**: 3 repetitions per scale point for latency stability');
   lines.push('');
 

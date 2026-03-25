@@ -18,12 +18,7 @@ import { stateError } from '../../domain/stateMachine.js';
 import { isValidClaimKind, isValidMemoryType } from '../../domain/types.js';
 import type { ClaimKind, MemoryType } from '../../domain/types.js';
 import * as E from 'fp-ts/Either';
-import {
-  getPolicy,
-  getPolicyVersion,
-  getStateType,
-  canDoUpsert,
-} from '../../state/memoryState.js';
+import { getPolicy, getPolicyVersion, getStateType, canDoUpsert } from '../../state/memoryState.js';
 import {
   enterRequestScope,
   exitRequestScope,

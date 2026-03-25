@@ -1,8 +1,4 @@
-import type {
-  PolicyDocument,
-  BoundaryPolicy,
-  ValidationResult,
-} from './types.js';
+import type { PolicyDocument, BoundaryPolicy, ValidationResult } from './types.js';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string';
@@ -20,7 +16,9 @@ function ensureNumber(field: string, val: unknown, errors: string[]) {
   if (typeof val !== 'number' || Number.isNaN(val)) errors.push(`${field} must be number`);
 }
 
-export function validateBoundaryPolicy(input: Record<string, unknown>): ValidationResult<BoundaryPolicy> {
+export function validateBoundaryPolicy(
+  input: Record<string, unknown>
+): ValidationResult<BoundaryPolicy> {
   const errors: string[] = [];
   if (!input || typeof input !== 'object') {
     return { ok: false, errors: ['boundary must be object'] };
@@ -42,7 +40,9 @@ export function validateBoundaryPolicy(input: Record<string, unknown>): Validati
         errors.push(`boundary_classes.${cls}.redact must be array`);
     });
   }
-  return errors.length ? { ok: false, errors } : { ok: true, value: input as unknown as BoundaryPolicy };
+  return errors.length
+    ? { ok: false, errors }
+    : { ok: true, value: input as unknown as BoundaryPolicy };
 }
 
 export function validatePolicy(input: Record<string, unknown>): ValidationResult<PolicyDocument> {
@@ -52,7 +52,9 @@ export function validatePolicy(input: Record<string, unknown>): ValidationResult
   }
   ensureString('version', input['version'], errors);
   if (!input['boundary']) errors.push('boundary missing');
-  const boundaryResult = validateBoundaryPolicy((input['boundary'] ?? {}) as Record<string, unknown>);
+  const boundaryResult = validateBoundaryPolicy(
+    (input['boundary'] ?? {}) as Record<string, unknown>
+  );
   if (!boundaryResult.ok) errors.push(...(boundaryResult.errors ?? []));
   if (input['maintenance'] !== undefined) {
     if (!input['maintenance'] || typeof input['maintenance'] !== 'object') {
@@ -63,16 +65,14 @@ export function validatePolicy(input: Record<string, unknown>): ValidationResult
         ensureBoolean('maintenance.hints_enabled', maint['hints_enabled'], errors);
       }
       if (maint['similarity_threshold'] !== undefined) {
-        ensureNumber(
-          'maintenance.similarity_threshold',
-          maint['similarity_threshold'],
-          errors
-        );
+        ensureNumber('maintenance.similarity_threshold', maint['similarity_threshold'], errors);
       }
       if (maint['stale_days'] !== undefined) {
         ensureNumber('maintenance.stale_days', maint['stale_days'], errors);
       }
     }
   }
-  return errors.length ? { ok: false, errors } : { ok: true, value: input as unknown as PolicyDocument };
+  return errors.length
+    ? { ok: false, errors }
+    : { ok: true, value: input as unknown as PolicyDocument };
 }

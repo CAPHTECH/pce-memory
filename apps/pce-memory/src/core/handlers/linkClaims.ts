@@ -71,7 +71,10 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
     }
     if (
       confidence !== undefined &&
-      (typeof confidence !== 'number' || !Number.isFinite(confidence) || confidence < 0 || confidence > 1)
+      (typeof confidence !== 'number' ||
+        !Number.isFinite(confidence) ||
+        confidence < 0 ||
+        confidence > 1)
     ) {
       return createToolResult(
         {

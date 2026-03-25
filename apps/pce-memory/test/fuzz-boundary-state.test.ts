@@ -154,8 +154,8 @@ describe('SECURITY: SQL injection resistance', () => {
     "'; DROP TABLE claims; --",
     "' OR '1'='1",
     "'; DELETE FROM claims WHERE '1'='1",
-    "1; SELECT * FROM claims",
-    "UNION SELECT * FROM claims--",
+    '1; SELECT * FROM claims',
+    'UNION SELECT * FROM claims--',
     "' UNION ALL SELECT NULL,NULL,NULL--",
   ];
 

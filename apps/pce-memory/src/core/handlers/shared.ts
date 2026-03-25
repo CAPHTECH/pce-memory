@@ -8,41 +8,21 @@ import { allowTagMatches as boundaryAllowTagMatches } from '@pce/boundary';
 import { computeContentHash } from '@pce/embeddings';
 import type { BoundaryPolicy } from '@pce/policy-schemas';
 import type { Claim, Provenance } from '../../store/claims.js';
-import {
-  findClaimsByIds,
-} from '../../store/claims.js';
-import {
-  upsertEntity,
-  linkClaimEntity,
-} from '../../store/entities.js';
+import { findClaimsByIds } from '../../store/claims.js';
+import { upsertEntity, linkClaimEntity } from '../../store/entities.js';
 import type { EntityInput } from '../../store/entities.js';
 import { upsertRelation } from '../../store/relations.js';
 import type { RelationInput } from '../../store/relations.js';
 import type { ClaimLinkType } from '../../store/claimLinks.js';
-import {
-  findOneHopClaimLinks,
-} from '../../store/claimLinks.js';
+import { findOneHopClaimLinks } from '../../store/claimLinks.js';
 import type { ErrorCode } from '../../domain/errors.js';
 import type { DomainError } from '../../domain/errors.js';
 import { validationError } from '../../domain/errors.js';
-import {
-  isValidClaimKind,
-} from '../../domain/types.js';
-import type {
-  ActivateIntent,
-  ClaimKind,
-  ClaimStatus,
-  MemoryType,
-} from '../../domain/types.js';
+import { isValidClaimKind } from '../../domain/types.js';
+import type { ActivateIntent, ClaimKind, ClaimStatus, MemoryType } from '../../domain/types.js';
 import * as E from 'fp-ts/Either';
-import {
-  getPolicy,
-  getStateType,
-  canDoUpsert,
-} from '../../state/memoryState.js';
-import {
-  isInActiveScope,
-} from '../../state/layerScopeState.js';
+import { getPolicy, getStateType, canDoUpsert } from '../../state/memoryState.js';
+import { isInActiveScope } from '../../state/layerScopeState.js';
 import { safeJsonStringify } from '../../utils/serialization.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { stateError } from '../../domain/stateMachine.js';
@@ -211,7 +191,10 @@ export function isAllowedByBoundary(allowList: string[], requestedAllow: string[
   return allowList.some((p) => requestedAllow.some((t) => allowTagMatches(p, t)));
 }
 
-export function getAllowedBoundaryClasses(policy: BoundaryPolicy, requestedAllow: string[]): string[] {
+export function getAllowedBoundaryClasses(
+  policy: BoundaryPolicy,
+  requestedAllow: string[]
+): string[] {
   return Object.entries(policy.boundary_classes)
     .filter(([, boundary]) => isAllowedByBoundary(boundary.allow ?? [], requestedAllow))
     .map(([boundaryClass]) => boundaryClass);
@@ -240,7 +223,9 @@ export function isDurableBoundaryClass(value: unknown): value is DurableBoundary
   return value === 'public' || value === 'internal' || value === 'pii' || value === 'secret';
 }
 
-export function getMostRestrictiveBoundary(boundaryClasses: DurableBoundaryClass[]): DurableBoundaryClass {
+export function getMostRestrictiveBoundary(
+  boundaryClasses: DurableBoundaryClass[]
+): DurableBoundaryClass {
   if (boundaryClasses.length === 0) {
     return 'internal';
   }
@@ -362,7 +347,10 @@ export function getActivateItemTimestamp(item: ActivateSearchItem): number {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-export function compareActivateSearchItems(left: ActivateSearchItem, right: ActivateSearchItem): number {
+export function compareActivateSearchItems(
+  left: ActivateSearchItem,
+  right: ActivateSearchItem
+): number {
   if (right.score !== left.score) {
     return right.score - left.score;
   }
@@ -499,14 +487,14 @@ export async function expandActivateResultsWithClaimLinks(
       continue;
     }
 
-    const score = viaResult.score * CLAIM_LINK_SCORE_PENALTY * Math.max(0, Math.min(1, hop.confidence));
+    const score =
+      viaResult.score * CLAIM_LINK_SCORE_PENALTY * Math.max(0, Math.min(1, hop.confidence));
     if (!Number.isFinite(score) || score <= 0) {
       continue;
     }
 
     const existing = merged.get(connectedClaim.id);
-    const nextScore =
-      existing === undefined ? score : combineActivateScores(existing.score, score);
+    const nextScore = existing === undefined ? score : combineActivateScores(existing.score, score);
     if (existing && existing.score >= nextScore) {
       continue;
     }
@@ -569,7 +557,8 @@ export function ensureClaimLinkPresence(
 
   const fallbackClaimLink = allResults.find(
     (item) =>
-      item.source === 'claim_link' && !pageResults.some((pageItem) => pageItem.claim.id === item.claim.id)
+      item.source === 'claim_link' &&
+      !pageResults.some((pageItem) => pageItem.claim.id === item.claim.id)
   );
   if (!fallbackClaimLink) {
     return pageResults;

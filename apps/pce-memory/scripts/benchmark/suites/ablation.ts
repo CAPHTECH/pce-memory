@@ -30,12 +30,55 @@ const BASELINE_NAME = 'hybrid-baseline';
 // We use alpha=0/1 to zero-weight the unwanted signal, and keep kText/kVec at minimum (1)
 // so the SQL query runs but the score contribution is zeroed by alpha.
 export const ABLATION_CONFIGS: AblationConfig[] = [
-  { name: 'text-only', alpha: 0.0, kText: 48, kVec: 1, enableRerank: false, mmr: { enabled: false } },
-  { name: 'vector-only', alpha: 1.0, kText: 1, kVec: 96, enableRerank: false, mmr: { enabled: false } },
-  { name: 'hybrid-no-rerank', alpha: 0.65, kText: 48, kVec: 96, enableRerank: false, mmr: { enabled: false } },
-  { name: BASELINE_NAME, alpha: 0.65, kText: 48, kVec: 96, enableRerank: true, mmr: { enabled: false } },
-  { name: 'hybrid-mmr', alpha: 0.65, kText: 48, kVec: 96, enableRerank: true, mmr: { enabled: true, lambda: 0.72 } },
-  { name: 'hybrid-intent', alpha: 0.65, kText: 48, kVec: 96, enableRerank: true, mmr: { enabled: false }, intent: 'design_decision' },
+  {
+    name: 'text-only',
+    alpha: 0.0,
+    kText: 48,
+    kVec: 1,
+    enableRerank: false,
+    mmr: { enabled: false },
+  },
+  {
+    name: 'vector-only',
+    alpha: 1.0,
+    kText: 1,
+    kVec: 96,
+    enableRerank: false,
+    mmr: { enabled: false },
+  },
+  {
+    name: 'hybrid-no-rerank',
+    alpha: 0.65,
+    kText: 48,
+    kVec: 96,
+    enableRerank: false,
+    mmr: { enabled: false },
+  },
+  {
+    name: BASELINE_NAME,
+    alpha: 0.65,
+    kText: 48,
+    kVec: 96,
+    enableRerank: true,
+    mmr: { enabled: false },
+  },
+  {
+    name: 'hybrid-mmr',
+    alpha: 0.65,
+    kText: 48,
+    kVec: 96,
+    enableRerank: true,
+    mmr: { enabled: true, lambda: 0.72 },
+  },
+  {
+    name: 'hybrid-intent',
+    alpha: 0.65,
+    kText: 48,
+    kVec: 96,
+    enableRerank: true,
+    mmr: { enabled: false },
+    intent: 'design_decision',
+  },
 ];
 
 type QueryType = {
@@ -49,8 +92,16 @@ async function warmup(embeddingService: EmbeddingService): Promise<Map<string, s
 }
 
 async function warmupClaims(
-  claims: Array<{ id: string; text: string; kind: string; scope: string; boundary_class: string; content_hash: string; provenance: { at: string; actor: string; note: string } }>,
-  embeddingService: EmbeddingService,
+  claims: Array<{
+    id: string;
+    text: string;
+    kind: string;
+    scope: string;
+    boundary_class: string;
+    content_hash: string;
+    provenance: { at: string; actor: string; note: string };
+  }>,
+  embeddingService: EmbeddingService
 ): Promise<Map<string, string>> {
   const testIdToClaimId = new Map<string, string>();
   for (const claim of claims) {
@@ -63,14 +114,18 @@ async function warmupClaims(
         content_hash: claim.content_hash,
         provenance: claim.provenance,
       },
-      embeddingService,
+      embeddingService
     );
     testIdToClaimId.set(claim.id, result.claim.id);
   }
   return testIdToClaimId;
 }
 
-function resolveExpectedId(rawId: string, testIdToClaimId: Map<string, string>, queryId: string): string {
+function resolveExpectedId(
+  rawId: string,
+  testIdToClaimId: Map<string, string>,
+  queryId: string
+): string {
   const mapped = testIdToClaimId.get(rawId);
   if (!mapped) throw new Error(`Unknown expected claim "${rawId}" in query "${queryId}"`);
   return mapped;
@@ -80,7 +135,7 @@ async function runConfigQueries(
   config: AblationConfig,
   queries: QueryType[],
   testIdToClaimId: Map<string, string>,
-  embeddingService: EmbeddingService,
+  embeddingService: EmbeddingService
 ): Promise<AblationConfigResult> {
   const topK = 10;
   const perQuery: QueryMetrics[] = [];
@@ -97,9 +152,11 @@ async function runConfigQueries(
         kText: config.kText,
         kVec: config.kVec,
         enableRerank: config.enableRerank,
-        mmr: config.mmr.enabled ? { enabled: true, lambda: config.mmr.lambda ?? 0.72, maxCandidates: 48 } : undefined,
+        mmr: config.mmr.enabled
+          ? { enabled: true, lambda: config.mmr.lambda ?? 0.72, maxCandidates: 48 }
+          : undefined,
         intent: config.intent,
-      },
+      }
     );
     const latencyMs = performance.now() - startTime;
     const retrievedIds = searchResult.results.map((c) => c.claim.id);
@@ -157,13 +214,27 @@ async function runConfigQueries(
 const RERANK_ABLATION_CLAIM_COUNT = 150;
 
 const RERANK_CONFIGS: AblationConfig[] = [
-  { name: 'hybrid-no-rerank', alpha: 0.65, kText: 48, kVec: 96, enableRerank: false, mmr: { enabled: false } },
-  { name: BASELINE_NAME, alpha: 0.65, kText: 48, kVec: 96, enableRerank: true, mmr: { enabled: false } },
+  {
+    name: 'hybrid-no-rerank',
+    alpha: 0.65,
+    kText: 48,
+    kVec: 96,
+    enableRerank: false,
+    mmr: { enabled: false },
+  },
+  {
+    name: BASELINE_NAME,
+    alpha: 0.65,
+    kText: 48,
+    kVec: 96,
+    enableRerank: true,
+    mmr: { enabled: false },
+  },
 ];
 
 async function runRerankAblation(
   embeddingService: EmbeddingService,
-  queries: QueryType[],
+  queries: QueryType[]
 ): Promise<RerankAblationResult> {
   console.log(`  [ablation] Rerank ablation with ${RERANK_ABLATION_CLAIM_COUNT} claims...`);
   const claims = generateClaims(RERANK_ABLATION_CLAIM_COUNT);
@@ -179,7 +250,7 @@ async function runRerankAblation(
     const result = await runConfigQueries(config, queries, idMap, embeddingService);
     results.push(result);
     console.log(
-      `    P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% nDCG=${(result.avgNdcg * 100).toFixed(1)}%`,
+      `    P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% nDCG=${(result.avgNdcg * 100).toFixed(1)}%`
     );
   }
 
@@ -202,7 +273,7 @@ async function runRerankAblation(
 
 export async function runAblation(
   embeddingService: EmbeddingService,
-  datasetPath: string,
+  datasetPath: string
 ): Promise<AblationResult> {
   const dataset = await loadDataset(datasetPath);
   const queries = dataset.queries as QueryType[];
@@ -219,7 +290,7 @@ export async function runAblation(
     const result = await runConfigQueries(config, queries, idMap, embeddingService);
     configs.push(result);
     console.log(
-      `    P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% nDCG=${(result.avgNdcg * 100).toFixed(1)}%`,
+      `    P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% nDCG=${(result.avgNdcg * 100).toFixed(1)}%`
     );
   }
 

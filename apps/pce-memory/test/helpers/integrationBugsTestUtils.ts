@@ -3,11 +3,7 @@
  */
 import { expect } from 'vitest';
 import { getConnection } from '../../src/db/connection';
-import {
-  applyPolicy,
-  dispatchTool,
-  upsertClaimViaTool,
-} from './retrievalPlannerTestUtils';
+import { applyPolicy, dispatchTool, upsertClaimViaTool } from './retrievalPlannerTestUtils';
 
 // Re-export for convenience
 export { applyPolicy, dispatchTool, upsertClaimViaTool };
@@ -193,10 +189,7 @@ export async function activateClaims(
   );
 }
 
-export async function submitFeedback(
-  claimId: string,
-  signal: string
-): Promise<FeedbackResult> {
+export async function submitFeedback(claimId: string, signal: string): Promise<FeedbackResult> {
   return expectSuccess<FeedbackResult>(
     await dispatchTool('pce_memory_feedback', {
       claim_id: claimId,

@@ -6,11 +6,7 @@ import { describe, it, expect } from 'vitest';
 import * as E from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { PCEMemory, stateError } from '../src/domain/stateMachine';
-import type {
-  ClaimInput,
-  ActivateInput,
-  FeedbackInput,
-} from '../src/domain/stateMachine';
+import type { ClaimInput, ActivateInput, FeedbackInput } from '../src/domain/stateMachine';
 import { domainError } from '../src/domain/errors';
 
 describe('PCEMemory.applyPolicy', () => {
@@ -244,7 +240,11 @@ describe('PCEMemory helper methods', () => {
   });
 
   it('getActiveContextId returns id for Ready', () => {
-    const m = PCEMemory.restore({ type: 'Ready', policyVersion: '1.0', activeContextId: 'ac_test' });
+    const m = PCEMemory.restore({
+      type: 'Ready',
+      policyVersion: '1.0',
+      activeContextId: 'ac_test',
+    });
     expect(m.getActiveContextId()).toBe('ac_test');
   });
 

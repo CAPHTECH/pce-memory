@@ -15,12 +15,12 @@ pnpm typecheck
 
 Results:
 
-| Command | Status | Pass count | Fail count | Notes |
-| --- | --- | ---: | ---: | --- |
-| `pnpm install` | PASS | 1 | 0 | Workspace install completed successfully; lockfile already up to date. |
-| `pnpm build` | PASS | 5 | 0 | 5 of 5 workspace package/app builds succeeded. |
-| `pnpm test` | PASS | 71 | 0 | 71 test files passed; 879 tests passed. |
-| `pnpm typecheck` | PASS | 5 | 0 | 5 of 5 workspace package/app typechecks succeeded. |
+| Command          | Status | Pass count | Fail count | Notes                                                                  |
+| ---------------- | ------ | ---------: | ---------: | ---------------------------------------------------------------------- |
+| `pnpm install`   | PASS   |          1 |          0 | Workspace install completed successfully; lockfile already up to date. |
+| `pnpm build`     | PASS   |          5 |          0 | 5 of 5 workspace package/app builds succeeded.                         |
+| `pnpm test`      | PASS   |         71 |          0 | 71 test files passed; 879 tests passed.                                |
+| `pnpm typecheck` | PASS   |          5 |          0 | 5 of 5 workspace package/app typechecks succeeded.                     |
 
 Overall Step 1 status: `4/4` commands passed.
 
@@ -62,12 +62,12 @@ Prior decay baseline for Exp3 from the checked-in revalidation artifacts:
 
 Current results:
 
-| Experiment | Baseline | Current | Result |
-| --- | --- | --- | --- |
-| Exp1 Search Precision | Avg `P@3=1.0` | Avg `P@3=1.0`, Avg `NDCG@3=0.9944` | PASS |
-| Exp2 Noise Tolerance | `top_k=20` observations `=6` | `top_k=20` observations `=6`, durable `=10`, durable share `=0.625`, returned rows `=16` | PASS |
-| Exp3 Temporal Decay | Thresholded labels and ratios listed above | Thresholded labels unchanged; ratios unchanged (`0.7163`, `0.3086`, `2.3244`, `1.9381`) | PASS |
-| Exp5 Promote Quality | Promoted claim score `=0.6373` | Raw `=0.8`, promoted `=0.6373`, direct upsert `=0.5518` | PASS |
+| Experiment            | Baseline                                   | Current                                                                                  | Result |
+| --------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- | ------ |
+| Exp1 Search Precision | Avg `P@3=1.0`                              | Avg `P@3=1.0`, Avg `NDCG@3=0.9944`                                                       | PASS   |
+| Exp2 Noise Tolerance  | `top_k=20` observations `=6`               | `top_k=20` observations `=6`, durable `=10`, durable share `=0.625`, returned rows `=16` | PASS   |
+| Exp3 Temporal Decay   | Thresholded labels and ratios listed above | Thresholded labels unchanged; ratios unchanged (`0.7163`, `0.3086`, `2.3244`, `1.9381`)  | PASS   |
+| Exp5 Promote Quality  | Promoted claim score `=0.6373`             | Raw `=0.8`, promoted `=0.6373`, direct upsert `=0.5518`                                  | PASS   |
 
 Notes:
 
@@ -86,9 +86,9 @@ pnpm test -- apps/pce-memory/test/retrieval-query-expansion-experiment.test.ts
 
 Result:
 
-| Command | Status | Pass count | Fail count |
-| --- | --- | ---: | ---: |
-| `retrieval-query-expansion-experiment.test.ts` | PASS | 1 | 0 |
+| Command                                        | Status | Pass count | Fail count |
+| ---------------------------------------------- | ------ | ---------: | ---------: |
+| `retrieval-query-expansion-experiment.test.ts` | PASS   |          1 |          0 |
 
 ## Conclusion
 

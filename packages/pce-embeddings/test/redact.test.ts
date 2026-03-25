@@ -4,12 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as E from 'fp-ts/Either';
-import {
-  prepareForEmbedding,
-  requiresRedact,
-  redactError,
-  isRedactError,
-} from '../src/redact';
+import { prepareForEmbedding, requiresRedact, redactError, isRedactError } from '../src/redact';
 
 describe('prepareForEmbedding', () => {
   it('passes through public text without redaction', () => {

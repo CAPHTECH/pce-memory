@@ -5,11 +5,7 @@
 import * as E from 'fp-ts/Either';
 import { createToolResult, err, type ToolResult } from './shared.js';
 import { appendLog } from '../../store/logs.js';
-import {
-  applyPolicyOp,
-  getPolicyVersion,
-  getStateSummary,
-} from '../../state/memoryState.js';
+import { applyPolicyOp, getPolicyVersion, getStateSummary } from '../../state/memoryState.js';
 import { getLayerScopeSummary } from '../../state/layerScopeState.js';
 
 export async function handlePolicyApply(args: Record<string, unknown>): Promise<ToolResult> {

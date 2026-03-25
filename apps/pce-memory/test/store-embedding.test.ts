@@ -5,7 +5,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as E from 'fp-ts/Either';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
-import { createDuckDBCache, getDuckDBCacheStats, cleanupExpiredEntries } from '../src/store/embedding';
+import {
+  createDuckDBCache,
+  getDuckDBCacheStats,
+  cleanupExpiredEntries,
+} from '../src/store/embedding';
 
 beforeEach(async () => {
   await resetDbAsync();

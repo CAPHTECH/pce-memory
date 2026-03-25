@@ -270,13 +270,19 @@ describe('calculateScoreBreakdown function', () => {
       createdAt: '2026-03-20T00:00:00.000Z',
       nowMs: new Date('2026-03-25T00:00:00.000Z').getTime(),
     });
-    const breakdown = calculateScoreBreakdown(0.4, 0.8, 0.65, gFactor, undefined, undefined, undefined, usageTerm);
+    const breakdown = calculateScoreBreakdown(
+      0.4,
+      0.8,
+      0.65,
+      gFactor,
+      undefined,
+      undefined,
+      undefined,
+      usageTerm
+    );
 
     expect(breakdown.usage_term).toEqual(usageTerm);
-    expect(breakdown.score_final).toBeCloseTo(
-      breakdown.S * gFactor.g * usageTerm.multiplier,
-      10
-    );
+    expect(breakdown.score_final).toBeCloseTo(breakdown.S * gFactor.g * usageTerm.multiplier, 10);
   });
 
   it('preserves individual scores in breakdown', () => {
@@ -438,7 +444,11 @@ describe('calculateIntentScoreBreakdown function', () => {
 
   it('does not penalize norm, policy_hint, or knowledge fact claims for policy_check intent', () => {
     const normBreakdown = calculateIntentScoreBreakdown('policy_check', 'fact', 'norm');
-    const policyBreakdown = calculateIntentScoreBreakdown('policy_check', 'policy_hint', 'knowledge');
+    const policyBreakdown = calculateIntentScoreBreakdown(
+      'policy_check',
+      'policy_hint',
+      'knowledge'
+    );
     const factBreakdown = calculateIntentScoreBreakdown('policy_check', 'fact', 'knowledge');
 
     expect(normBreakdown?.penalty_multiplier).toBe(1);

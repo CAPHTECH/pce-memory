@@ -24,10 +24,7 @@ describe('FUZZ: pce_memory_distill', () => {
   });
 
   it('rejects when no sources provided', async () => {
-    expectError(
-      await dispatchTool('pce_memory_distill', {}),
-      'VALIDATION_ERROR'
-    );
+    expectError(await dispatchTool('pce_memory_distill', {}), 'VALIDATION_ERROR');
   });
 
   it('rejects non-array source_observation_ids', async () => {

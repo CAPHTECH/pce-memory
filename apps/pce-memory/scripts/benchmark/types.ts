@@ -22,7 +22,8 @@ export function computeLatencyStats(samples: number[]): LatencyStats {
     return { p50: 0, p95: 0, p99: 0, mean: 0, min: 0, max: 0 };
   }
   const sorted = [...samples].sort((a, b) => a - b);
-  const percentile = (p: number) => sorted[Math.min(Math.floor(sorted.length * p), sorted.length - 1)]!;
+  const percentile = (p: number) =>
+    sorted[Math.min(Math.floor(sorted.length * p), sorted.length - 1)]!;
   const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
   return {
     p50: percentile(0.5),

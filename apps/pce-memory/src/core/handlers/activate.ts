@@ -21,23 +21,14 @@ import {
   CONNECTIVITY_SEED_MULTIPLIER,
 } from './shared.js';
 
-import {
-  markStaleWorkingStateClaims,
-  recordClaimRetrievals,
-} from '../../store/claims.js';
+import { markStaleWorkingStateClaims, recordClaimRetrievals } from '../../store/claims.js';
 import type { Claim } from '../../store/claims.js';
-import {
-  hybridSearchWithScores,
-  findNewerSimilarClaims,
-} from '../../store/hybridSearch.js';
+import { hybridSearchWithScores, findNewerSimilarClaims } from '../../store/hybridSearch.js';
 import { collectMaintenanceHints } from '../../store/maintenance.js';
 import { searchObservationsWithScores } from '../../store/observations.js';
 import { getEvidenceForClaims } from '../../store/evidence.js';
 import type { Evidence } from '../../store/evidence.js';
-import {
-  saveActiveContext,
-  saveActiveContextItems,
-} from '../../store/activeContext.js';
+import { saveActiveContext, saveActiveContextItems } from '../../store/activeContext.js';
 import { appendLog } from '../../store/logs.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { stateError } from '../../domain/stateMachine.js';
@@ -49,11 +40,7 @@ import {
   isValidClaimKind,
   isValidMemoryType,
 } from '../../domain/types.js';
-import type {
-  ActivateIntent,
-  ClaimKind,
-  MemoryType,
-} from '../../domain/types.js';
+import type { ActivateIntent, ClaimKind, MemoryType } from '../../domain/types.js';
 import {
   getMaintenancePolicy,
   getPolicy,
@@ -332,7 +319,12 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
       nextCursor = pagedResults.nextCursor;
       hasMore = pagedResults.hasMore;
     } else {
-      const durableResults = await hybridSearchWithScores(scope, directCandidateLimit, q, searchConfig);
+      const durableResults = await hybridSearchWithScores(
+        scope,
+        directCandidateLimit,
+        q,
+        searchConfig
+      );
       const expandedDurableResults = await expandActivateResultsWithClaimLinks(
         durableResults.map((item) => ({ ...item, source: 'search' as const })),
         connectivityFilterSet
@@ -403,7 +395,11 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
       const updatedClaim =
         (r.claim as { source_record_type?: string }).source_record_type === 'observation'
           ? r.claim
-          : { ...r.claim, retrieval_count: (r.claim.retrieval_count ?? 0) + 1, last_retrieved_at: retrievedAt };
+          : {
+              ...r.claim,
+              retrieval_count: (r.claim.retrieval_count ?? 0) + 1,
+              last_retrieved_at: retrievedAt,
+            };
       const claim = augmentClaimWithFreshness(updatedClaim, freshnessByClaimId);
       const sourceLayer = r.source_layer ?? mapScopeToLayer(r.claim.scope);
       const rank = index + 1;
@@ -452,9 +448,8 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
       }))
     );
 
-    let maintenanceHints:
-      | Awaited<ReturnType<typeof collectMaintenanceHints>>
-      | undefined = undefined;
+    let maintenanceHints: Awaited<ReturnType<typeof collectMaintenanceHints>> | undefined =
+      undefined;
     if (maintenancePolicy.hints_enabled !== false) {
       try {
         maintenanceHints = await collectMaintenanceHints(

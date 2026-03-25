@@ -17,11 +17,7 @@ import { insertPromotionQueueRow } from '../../store/promotionQueue.js';
 import { findRollbackRecordByClaimId } from '../../store/promotionQueue.js';
 import { appendLog } from '../../store/logs.js';
 import { checkAndConsume } from '../../store/rate.js';
-import {
-  getStateType,
-  canDoUpsert,
-  getPolicyVersion,
-} from '../../state/memoryState.js';
+import { getStateType, canDoUpsert, getPolicyVersion } from '../../state/memoryState.js';
 import {
   enterRequestScope,
   exitRequestScope,

@@ -21,12 +21,7 @@
           "label": "topic_0",
           "query": "service maple-0 API timeout rollout policy",
           "expected_id": "clm_2f61396e",
-          "actual_ids": [
-            "clm_2f61396e",
-            "clm_bbdfaeb3",
-            "clm_f12269c8",
-            "clm_11089f84"
-          ],
+          "actual_ids": ["clm_2f61396e", "clm_bbdfaeb3", "clm_f12269c8", "clm_11089f84"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=2"
         },
@@ -34,12 +29,7 @@
           "label": "topic_1",
           "query": "service maple-1 API timeout rollout policy",
           "expected_id": "clm_55121ac8",
-          "actual_ids": [
-            "clm_55121ac8",
-            "clm_2f61396e",
-            "clm_3f3559ea",
-            "clm_bbdfaeb3"
-          ],
+          "actual_ids": ["clm_55121ac8", "clm_2f61396e", "clm_3f3559ea", "clm_bbdfaeb3"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=3"
         },
@@ -47,12 +37,7 @@
           "label": "topic_2",
           "query": "service maple-2 API timeout rollout policy",
           "expected_id": "clm_4b50fd85",
-          "actual_ids": [
-            "clm_4b50fd85",
-            "clm_2f61396e",
-            "clm_55121ac8",
-            "clm_185002af"
-          ],
+          "actual_ids": ["clm_4b50fd85", "clm_2f61396e", "clm_55121ac8", "clm_185002af"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=4"
         },
@@ -60,12 +45,7 @@
           "label": "topic_3",
           "query": "service maple-3 API timeout rollout policy",
           "expected_id": "clm_a95ae8fd",
-          "actual_ids": [
-            "clm_a95ae8fd",
-            "clm_2f61396e",
-            "clm_55121ac8",
-            "clm_4b50fd85"
-          ],
+          "actual_ids": ["clm_a95ae8fd", "clm_2f61396e", "clm_55121ac8", "clm_4b50fd85"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
         },
@@ -73,12 +53,7 @@
           "label": "topic_4",
           "query": "service maple-4 API timeout rollout policy",
           "expected_id": "clm_d2a084c2",
-          "actual_ids": [
-            "clm_d2a084c2",
-            "clm_a95ae8fd",
-            "clm_2f61396e",
-            "clm_55121ac8"
-          ],
+          "actual_ids": ["clm_d2a084c2", "clm_a95ae8fd", "clm_2f61396e", "clm_55121ac8"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
         },
@@ -86,12 +61,7 @@
           "label": "topic_5",
           "query": "service maple-5 API timeout rollout policy",
           "expected_id": "clm_477d257a",
-          "actual_ids": [
-            "clm_477d257a",
-            "clm_a95ae8fd",
-            "clm_2f61396e",
-            "clm_d2a084c2"
-          ],
+          "actual_ids": ["clm_477d257a", "clm_a95ae8fd", "clm_2f61396e", "clm_d2a084c2"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
         },
@@ -99,12 +69,7 @@
           "label": "topic_6",
           "query": "service maple-6 API timeout rollout policy",
           "expected_id": "clm_870ef2a7",
-          "actual_ids": [
-            "clm_870ef2a7",
-            "clm_a95ae8fd",
-            "clm_2f61396e",
-            "clm_d2a084c2"
-          ],
+          "actual_ids": ["clm_870ef2a7", "clm_a95ae8fd", "clm_2f61396e", "clm_d2a084c2"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
         },
@@ -112,12 +77,7 @@
           "label": "topic_7",
           "query": "service maple-7 API timeout rollout policy",
           "expected_id": "clm_704776f9",
-          "actual_ids": [
-            "clm_704776f9",
-            "clm_477d257a",
-            "clm_2f61396e",
-            "clm_a95ae8fd"
-          ],
+          "actual_ids": ["clm_704776f9", "clm_477d257a", "clm_2f61396e", "clm_a95ae8fd"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
         },
@@ -125,12 +85,7 @@
           "label": "topic_8",
           "query": "service maple-8 API timeout rollout policy",
           "expected_id": "clm_4dfca0a7",
-          "actual_ids": [
-            "clm_4dfca0a7",
-            "clm_2f61396e",
-            "clm_a95ae8fd",
-            "clm_d2a084c2"
-          ],
+          "actual_ids": ["clm_4dfca0a7", "clm_2f61396e", "clm_a95ae8fd", "clm_d2a084c2"],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
         },
@@ -138,12 +93,7 @@
           "label": "topic_9",
           "query": "service maple-9 API timeout rollout policy",
           "expected_id": "clm_6a11a52d",
-          "actual_ids": [
-            "clm_4dfca0a7",
-            "clm_6a11a52d",
-            "clm_2f61396e",
-            "clm_a95ae8fd"
-          ],
+          "actual_ids": ["clm_4dfca0a7", "clm_6a11a52d", "clm_2f61396e", "clm_a95ae8fd"],
           "success": false,
           "notes": "latest_rank=2 stale_rank=miss"
         }
@@ -263,10 +213,7 @@
           "label": "topic_0",
           "query": "maple-0 login tokens issuer validation",
           "expected_id": "clm_81d99ab7",
-          "actual_ids": [
-            "clm_dbb29fd3",
-            "clm_81d99ab7"
-          ],
+          "actual_ids": ["clm_dbb29fd3", "clm_81d99ab7"],
           "success": true,
           "notes": "anchor_id=clm_dbb29fd3"
         },
@@ -274,12 +221,7 @@
           "label": "topic_1",
           "query": "maple-1 login tokens issuer validation",
           "expected_id": "clm_6e69b232",
-          "actual_ids": [
-            "clm_f0c211b4",
-            "clm_dbb29fd3",
-            "clm_6e69b232",
-            "clm_81d99ab7"
-          ],
+          "actual_ids": ["clm_f0c211b4", "clm_dbb29fd3", "clm_6e69b232", "clm_81d99ab7"],
           "success": true,
           "notes": "anchor_id=clm_f0c211b4"
         },

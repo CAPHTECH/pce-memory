@@ -13,26 +13,12 @@
         "intent": "policy_check",
         "kind_filter": null,
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_f4498ca6",
-          "clm_d16b2ffe",
-          "clm_6b0a6d5f"
-        ],
-        "actual_top3": [
-          "clm_f4498ca6",
-          "clm_d16b2ffe",
-          "clm_f8822f6f"
-        ],
+        "expected_top3": ["clm_f4498ca6", "clm_d16b2ffe", "clm_6b0a6d5f"],
+        "actual_top3": ["clm_f4498ca6", "clm_d16b2ffe", "clm_f8822f6f"],
         "precision_at_3": 0.6667,
         "ndcg_at_3": 0.9468,
-        "returned_kinds": [
-          "policy_hint",
-          "preference",
-          "fact"
-        ],
-        "returned_memory_types": [
-          "norm"
-        ],
+        "returned_kinds": ["policy_hint", "preference", "fact"],
+        "returned_memory_types": ["norm"],
         "assertion_details": {
           "normAboveTask": true,
           "top3HasNoTask": true
@@ -82,28 +68,12 @@
         "intent": "resume_task",
         "kind_filter": null,
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_c7046bab",
-          "clm_ad39c4bd",
-          "clm_d182a3ea"
-        ],
-        "actual_top3": [
-          "clm_c7046bab",
-          "clm_ad39c4bd",
-          "clm_d182a3ea"
-        ],
+        "expected_top3": ["clm_c7046bab", "clm_ad39c4bd", "clm_d182a3ea"],
+        "actual_top3": ["clm_c7046bab", "clm_ad39c4bd", "clm_d182a3ea"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "task",
-          "fact",
-          "policy_hint"
-        ],
-        "returned_memory_types": [
-          "working_state",
-          "knowledge",
-          "norm"
-        ],
+        "returned_kinds": ["task", "fact", "policy_hint"],
+        "returned_memory_types": ["working_state", "knowledge", "norm"],
         "assertion_details": {
           "top1IsTask": true,
           "taskAboveNorm": true
@@ -151,30 +121,14 @@
         "description": "kind_filter should exclude higher-scoring non-policy claims",
         "query": "kind-fixture-gamma exception",
         "intent": null,
-        "kind_filter": [
-          "policy_hint"
-        ],
+        "kind_filter": ["policy_hint"],
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_9e308567",
-          "clm_a12e3bf1",
-          "clm_56863c51"
-        ],
-        "actual_top3": [
-          "clm_9e308567",
-          "clm_56863c51",
-          "clm_a12e3bf1"
-        ],
+        "expected_top3": ["clm_9e308567", "clm_a12e3bf1", "clm_56863c51"],
+        "actual_top3": ["clm_9e308567", "clm_56863c51", "clm_a12e3bf1"],
         "precision_at_3": 1,
         "ndcg_at_3": 0.9721,
-        "returned_kinds": [
-          "policy_hint"
-        ],
-        "returned_memory_types": [
-          "norm",
-          "knowledge",
-          "procedure"
-        ],
+        "returned_kinds": ["policy_hint"],
+        "returned_memory_types": ["norm", "knowledge", "procedure"],
         "assertion_details": {
           "allPolicyHint": true,
           "decoysFilteredOut": true
@@ -223,30 +177,13 @@
         "query": "procedure-fixture-delta rollback",
         "intent": null,
         "kind_filter": null,
-        "memory_type_filter": [
-          "procedure"
-        ],
-        "expected_top3": [
-          "clm_0dda6e3c",
-          "clm_33685198",
-          "clm_4c20fb7d"
-        ],
-        "actual_top3": [
-          "clm_0dda6e3c",
-          "clm_33685198",
-          "clm_4c20fb7d"
-        ],
+        "memory_type_filter": ["procedure"],
+        "expected_top3": ["clm_0dda6e3c", "clm_33685198", "clm_4c20fb7d"],
+        "actual_top3": ["clm_0dda6e3c", "clm_33685198", "clm_4c20fb7d"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "fact",
-          "preference",
-          "policy_hint",
-          "task"
-        ],
-        "returned_memory_types": [
-          "procedure"
-        ],
+        "returned_kinds": ["fact", "preference", "policy_hint", "task"],
+        "returned_memory_types": ["procedure"],
         "assertion_details": {
           "allProcedure": true,
           "decoysFilteredOut": true
@@ -296,28 +233,12 @@
         "intent": null,
         "kind_filter": null,
         "memory_type_filter": null,
-        "expected_top3": [
-          "clm_a151bf1a",
-          "clm_9ca87b89",
-          "clm_cfd673f2"
-        ],
-        "actual_top3": [
-          "clm_a151bf1a",
-          "clm_9ca87b89",
-          "clm_cfd673f2"
-        ],
+        "expected_top3": ["clm_a151bf1a", "clm_9ca87b89", "clm_cfd673f2"],
+        "actual_top3": ["clm_a151bf1a", "clm_9ca87b89", "clm_cfd673f2"],
         "precision_at_3": 1,
         "ndcg_at_3": 1,
-        "returned_kinds": [
-          "policy_hint",
-          "fact",
-          "task"
-        ],
-        "returned_memory_types": [
-          "norm",
-          "knowledge",
-          "working_state"
-        ],
+        "returned_kinds": ["policy_hint", "fact", "task"],
+        "returned_memory_types": ["norm", "knowledge", "working_state"],
         "assertion_details": {
           "noCachingInTop3": true,
           "allTop3Expected": true
@@ -653,9 +574,7 @@
           "promotion_status": "accepted",
           "accepted_claim_id": "clm_707fa4dd",
           "evidence_count": 1,
-          "evidence_source_types": [
-            "observation"
-          ],
+          "evidence_source_types": ["observation"],
           "has_source_lineage": true
         }
       },
@@ -708,12 +627,7 @@
             "id": "s1-a36cf38d",
             "title": "Cursor-based pagination requires full result set retrieval",
             "summary": "The `hybridSearchPaginated` function fetches `Number.MAX_SAFE_INTEGER` results when a cursor is present to correctly calculate `has_more`, potentially causing performance issues on large datasets.",
-            "anchors": [
-              "hybridSearchPaginated",
-              "fetchLimit",
-              "Number.MAX_SAFE_INTEGER",
-              "cursor"
-            ],
+            "anchors": ["hybridSearchPaginated", "fetchLimit", "Number.MAX_SAFE_INTEGER", "cursor"],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           },
@@ -835,10 +749,7 @@
             "id": "s2-206b15e0",
             "title": "Provenance lineage stored as opaque text in promotion_queue",
             "summary": "The promotion_queue table stores provenance as a TEXT column instead of JSON, preventing structured querying of lineage metadata and complicating audit trails for claim generation.",
-            "anchors": [
-              "promotion_queue",
-              "provenance"
-            ],
+            "anchors": ["promotion_queue", "provenance"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           },
@@ -846,10 +757,7 @@
             "id": "s2-d8634a09",
             "title": "Observation content scrubbing breaks historical retrieval",
             "summary": "The observations table allows content to be scrubbed (NULLed) after TTL expiration, which destroys the raw data required for re-evaluating claim correctness or generating new evidence without re-fetching external sources.",
-            "anchors": [
-              "observations",
-              "content"
-            ],
+            "anchors": ["observations", "content"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           }
@@ -1043,31 +951,17 @@
           "status": "ok",
           "title": "Unified Hybrid Search Fallback and Schema Integrity Strategy",
           "summary": "To improve retrieval correctness, the system must prevent the complete bypass of vector scoring during embedding failures by implementing a weighted fallback within the merge logic rather than switching to text-only results, while simultaneously ensuring the observations table retains raw content to support historical re-evaluation and claim verification.",
-          "references": [
-            "clm_628bba15",
-            "clm_4856a0e1"
-          ],
+          "references": ["clm_628bba15", "clm_4856a0e1"],
           "evidence": [
             "When embedding generation fails or is unavailable, the system falls back to `textSearch` and `fallbackToTextOnlyResults`, completely bypassing the `vectorSearch` and `mergeResults` fusion logic.",
             "The observations table allows content to be scrubbed (NULLed) after TTL expiration, which destroys the raw data required for re-evaluating claim correctness or generating new evidence without re-fetching external sources."
           ]
         },
         "score": {
-          "matched_session1_ids": [
-            "clm_628bba15"
-          ],
-          "matched_session2_ids": [
-            "clm_4856a0e1"
-          ],
-          "matched_session1_anchors": [
-            "textSearch",
-            "fallbackToTextOnlyResults",
-            "mergeResults"
-          ],
-          "matched_session2_anchors": [
-            "observations",
-            "content"
-          ],
+          "matched_session1_ids": ["clm_628bba15"],
+          "matched_session2_ids": ["clm_4856a0e1"],
+          "matched_session1_anchors": ["textSearch", "fallbackToTextOnlyResults", "mergeResults"],
+          "matched_session2_anchors": ["observations", "content"],
           "references_both_sessions": true,
           "evidence_both_sessions": true
         }
@@ -1081,12 +975,7 @@
             "id": "s1-a36cf38d",
             "title": "Cursor-based pagination requires full result set retrieval",
             "summary": "The `hybridSearchPaginated` function fetches `Number.MAX_SAFE_INTEGER` results when a cursor is present to correctly calculate `has_more`, potentially causing performance issues on large datasets.",
-            "anchors": [
-              "hybridSearchPaginated",
-              "fetchLimit",
-              "Number.MAX_SAFE_INTEGER",
-              "cursor"
-            ],
+            "anchors": ["hybridSearchPaginated", "fetchLimit", "Number.MAX_SAFE_INTEGER", "cursor"],
             "session": "session_1",
             "source": "apps/pce-memory/src/store/hybridSearch.ts"
           },
@@ -1112,12 +1001,7 @@
             "id": "s2-be2863e5",
             "title": "Ranking Index Composition and Recency Anchor Dependency",
             "summary": "The idx_claims_ranking index optimizes retrieval for the g() ranking function by including utility, confidence, and updated_at. However, the recency calculation logic relies on the recency_anchor column, which is only updated on positive feedback. This creates a potential lineage gap where claims with stale recency anchors may be incorrectly prioritized or deprioritized if the ranking query does not explicitly join or filter based on the recency_anchor logic defined in the schema comments.",
-            "anchors": [
-              "claims",
-              "idx_claims_ranking",
-              "recency_anchor",
-              "utility"
-            ],
+            "anchors": ["claims", "idx_claims_ranking", "recency_anchor", "utility"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           },
@@ -1125,12 +1009,7 @@
             "id": "s2-733501f6",
             "title": "Provenance Data Type Inconsistency Across Tables",
             "summary": "The schema defines provenance as a JSON type in the claims table but as a TEXT type in the promotion_queue table. This inconsistency affects retrieval correctness and observability when tracing the lineage of a claim from the promotion queue to the final claims table, as JSON parsing logic must be applied differently depending on the source table, potentially leading to data corruption or query failures if the application layer assumes a uniform type.",
-            "anchors": [
-              "claims",
-              "provenance",
-              "promotion_queue",
-              "evidence"
-            ],
+            "anchors": ["claims", "provenance", "promotion_queue", "evidence"],
             "session": "session_2",
             "source": "apps/pce-memory/src/db/schema.sql"
           }

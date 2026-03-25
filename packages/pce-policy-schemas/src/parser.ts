@@ -7,6 +7,9 @@ export function parsePolicy(yamlContent: string): ValidationResult<PolicyDocumen
     const parsed = parse(yamlContent);
     return validatePolicy(parsed as Record<string, unknown>);
   } catch (e: unknown) {
-    return { ok: false, errors: [`YAML parse error: ${e instanceof Error ? e.message : String(e)}`] };
+    return {
+      ok: false,
+      errors: [`YAML parse error: ${e instanceof Error ? e.message : String(e)}`],
+    };
   }
 }

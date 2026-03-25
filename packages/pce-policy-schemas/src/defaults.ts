@@ -1,4 +1,9 @@
-import type { BoundaryPolicy, MaintenancePolicy, PolicyDocument, RetrievalPolicy } from './types.js';
+import type {
+  BoundaryPolicy,
+  MaintenancePolicy,
+  PolicyDocument,
+  RetrievalPolicy,
+} from './types.js';
 
 export const defaultPolicy: PolicyDocument = {
   version: '0.1',

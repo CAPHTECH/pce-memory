@@ -10,10 +10,7 @@ import { findClaimById, updateClaimStatus } from '../../store/claims.js';
 import { recordFeedback } from '../../store/feedback.js';
 import { updateCritic } from '../../store/critic.js';
 import { stateError } from '../../domain/stateMachine.js';
-import {
-  FEEDBACK_SIGNALS,
-  isValidFeedbackSignal,
-} from '../../domain/types.js';
+import { FEEDBACK_SIGNALS, isValidFeedbackSignal } from '../../domain/types.js';
 import type { FeedbackSignal } from '../../domain/types.js';
 import {
   getPolicy,
@@ -96,11 +93,7 @@ export async function handleFeedback(args: Record<string, unknown>): Promise<Too
     if (!isValidFeedbackSignal(signal)) {
       return createToolResult(
         {
-          ...err(
-            'VALIDATION_ERROR',
-            `signal must be one of ${FEEDBACK_SIGNALS.join('|')}`,
-            reqId
-          ),
+          ...err('VALIDATION_ERROR', `signal must be one of ${FEEDBACK_SIGNALS.join('|')}`, reqId),
           trace_id: traceId,
         },
         { isError: true }

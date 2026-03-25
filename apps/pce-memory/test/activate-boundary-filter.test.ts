@@ -59,7 +59,9 @@ describe('activate boundary filter', () => {
       allow: ['answer:task'],
       include_meta: false,
     });
-    const claims1 = (ac1.structuredContent?.claims as Array<{ claim?: { id?: string } }>).map((x) => x?.claim?.id);
+    const claims1 = (ac1.structuredContent?.claims as Array<{ claim?: { id?: string } }>).map(
+      (x) => x?.claim?.id
+    );
     expect(claims1).toContain(internalId);
     expect(claims1).not.toContain(piiId);
     expect(claims1).not.toContain(secretId);
@@ -69,7 +71,9 @@ describe('activate boundary filter', () => {
       allow: ['tool:contact-lookup'],
       include_meta: false,
     });
-    const claims2 = (ac2.structuredContent?.claims as Array<{ claim?: { id?: string } }>).map((x) => x?.claim?.id);
+    const claims2 = (ac2.structuredContent?.claims as Array<{ claim?: { id?: string } }>).map(
+      (x) => x?.claim?.id
+    );
     expect(claims2).toContain(internalId);
     expect(claims2).toContain(piiId);
     expect(claims2).not.toContain(secretId);

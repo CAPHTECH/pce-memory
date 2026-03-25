@@ -29,8 +29,14 @@ import {
 import { upsertClaimWithEmbedding } from '../../apps/pce-memory/src/store/claims';
 import { updateCritic } from '../../apps/pce-memory/src/store/critic';
 import { getEvidenceForClaim } from '../../apps/pce-memory/src/store/evidence';
-import { hybridSearchWithScores, setEmbeddingService } from '../../apps/pce-memory/src/store/hybridSearch';
-import { insertObservation, searchObservationsWithScores } from '../../apps/pce-memory/src/store/observations';
+import {
+  hybridSearchWithScores,
+  setEmbeddingService,
+} from '../../apps/pce-memory/src/store/hybridSearch';
+import {
+  insertObservation,
+  searchObservationsWithScores,
+} from '../../apps/pce-memory/src/store/observations';
 import { findPromotionQueueRowById } from '../../apps/pce-memory/src/store/promotionQueue';
 import { initRateState, resetRates } from '../../apps/pce-memory/src/store/rate';
 
@@ -184,7 +190,9 @@ function expectSuccess<T extends Record<string, unknown>>(result: ToolResultLike
 }
 
 function isActivatePayload(value: unknown): value is ActivatePayload {
-  return typeof value === 'object' && value !== null && Array.isArray((value as ActivatePayload).claims);
+  return (
+    typeof value === 'object' && value !== null && Array.isArray((value as ActivatePayload).claims)
+  );
 }
 
 function normalizeForEmbedding(text: string): string {
@@ -328,7 +336,10 @@ async function updateClaimRecord(
 
 async function updateObservationCreatedAt(observationId: string, timestamp: string): Promise<void> {
   const conn = await getConnection();
-  await conn.run('UPDATE observations SET created_at = $1 WHERE id = $2', [timestamp, observationId]);
+  await conn.run('UPDATE observations SET created_at = $1 WHERE id = $2', [
+    timestamp,
+    observationId,
+  ]);
 }
 
 async function seedClaim(input: {
@@ -444,7 +455,9 @@ async function activate(args: {
       ...(args.q !== undefined ? { q: args.q } : {}),
       ...(args.intent !== undefined ? { intent: args.intent } : {}),
       ...(args.kind_filter !== undefined ? { kind_filter: args.kind_filter } : {}),
-      ...(args.memory_type_filter !== undefined ? { memory_type_filter: args.memory_type_filter } : {}),
+      ...(args.memory_type_filter !== undefined
+        ? { memory_type_filter: args.memory_type_filter }
+        : {}),
       ...(args.include_observations !== undefined
         ? { include_observations: args.include_observations }
         : {}),
@@ -863,25 +876,27 @@ async function runExperiment1SearchPrecision(): Promise<Record<string, unknown>>
     } else if (query.name === 'kind_filter_is_hard_filter') {
       assertionDetails = {
         allPolicyHint: response.claims.every((item) => item.claim.kind === 'policy_hint'),
-        decoysFilteredOut:
-          !response.claims.some((item) =>
-            [ids.get('kind_task_decoy')!, ids.get('kind_fact_decoy')!].includes(item.claim.id)
-          ),
+        decoysFilteredOut: !response.claims.some((item) =>
+          [ids.get('kind_task_decoy')!, ids.get('kind_fact_decoy')!].includes(item.claim.id)
+        ),
       };
     } else if (query.name === 'memory_type_filter_is_hard_filter') {
       assertionDetails = {
         allProcedure: response.claims.every((item) => item.claim.memory_type === 'procedure'),
-        decoysFilteredOut:
-          !response.claims.some((item) =>
-            [ids.get('procedure_knowledge_decoy')!, ids.get('procedure_norm_decoy')!].includes(
-              item.claim.id
-            )
-          ),
+        decoysFilteredOut: !response.claims.some((item) =>
+          [ids.get('procedure_knowledge_decoy')!, ids.get('procedure_norm_decoy')!].includes(
+            item.claim.id
+          )
+        ),
       };
     } else if (query.name === 'authentication_query_avoids_caching_noise') {
       assertionDetails = {
         noCachingInTop3: !actualTop3.some((id) =>
-          [ids.get('cache_decoy_1')!, ids.get('cache_decoy_2')!, ids.get('cache_decoy_3')!].includes(id)
+          [
+            ids.get('cache_decoy_1')!,
+            ids.get('cache_decoy_2')!,
+            ids.get('cache_decoy_3')!,
+          ].includes(id)
         ),
         allTop3Expected: actualTop3.every((id) =>
           [ids.get('auth_1')!, ids.get('auth_2')!, ids.get('auth_3')!].includes(id)
@@ -1039,7 +1054,9 @@ async function runExperiment3TemporalDecay(): Promise<Record<string, unknown>> {
     rankByLabel.set(label, index + 1);
   });
 
-  const visibleLabels = thresholded.claims.map((item) => labelsById.get(item.claim.id) ?? item.claim.id);
+  const visibleLabels = thresholded.claims.map(
+    (item) => labelsById.get(item.claim.id) ?? item.claim.id
+  );
 
   return {
     name: 'Temporal Decay',
@@ -1067,15 +1084,26 @@ async function runExperiment3TemporalDecay(): Promise<Record<string, unknown>> {
       old_fact_persists_in_thresholded_activate: visibleLabels.includes('fact_90d'),
     },
     score_ratios: {
-      fact_90d_vs_fact_1h: round((scoreByLabel.get('fact_90d') ?? 0) / (scoreByLabel.get('fact_1h') ?? 1)),
-      task_90d_vs_task_1h: round((scoreByLabel.get('task_90d') ?? 0) / (scoreByLabel.get('task_1h') ?? 1)),
-      fact_90d_vs_task_90d: round((scoreByLabel.get('fact_90d') ?? 0) / (scoreByLabel.get('task_90d') ?? 1)),
-      fact_30d_vs_task_30d: round((scoreByLabel.get('fact_30d') ?? 0) / (scoreByLabel.get('task_30d') ?? 1)),
+      fact_90d_vs_fact_1h: round(
+        (scoreByLabel.get('fact_90d') ?? 0) / (scoreByLabel.get('fact_1h') ?? 1)
+      ),
+      task_90d_vs_task_1h: round(
+        (scoreByLabel.get('task_90d') ?? 0) / (scoreByLabel.get('task_1h') ?? 1)
+      ),
+      fact_90d_vs_task_90d: round(
+        (scoreByLabel.get('fact_90d') ?? 0) / (scoreByLabel.get('task_90d') ?? 1)
+      ),
+      fact_30d_vs_task_30d: round(
+        (scoreByLabel.get('fact_30d') ?? 0) / (scoreByLabel.get('task_30d') ?? 1)
+      ),
     },
   };
 }
 
-async function runRawObserveOnlyPath(text: string, query: string): Promise<Record<string, unknown>> {
+async function runRawObserveOnlyPath(
+  text: string,
+  query: string
+): Promise<Record<string, unknown>> {
   await setupIsolatedStore(0);
   const observe = expectSuccess<{ observation_id: string; effective_boundary_class?: string }>(
     await handleObserve({
@@ -1352,7 +1380,10 @@ function extractFirstJsonObject(text: string): string {
 }
 
 function sliceLines(lines: string[], startLine: number, endLine: number): string {
-  return lines.slice(startLine - 1, endLine).join('\n').trim();
+  return lines
+    .slice(startLine - 1, endLine)
+    .join('\n')
+    .trim();
 }
 
 function buildHybridSearchDigest(source: string): string {
@@ -1402,8 +1433,9 @@ function findingId(session: 'session_1' | 'session_2', source: string, title: st
 function buildActivateTranscript(payload: ActivatePayload): string {
   return [
     `Activated claims: ${payload.claims_count}`,
-    ...payload.claims.map((item) =>
-      `- ${item.claim.id}: ${item.claim.text} (score=${round(item.score)}, kind=${item.claim.kind}, memory_type=${item.claim.memory_type ?? 'null'})`
+    ...payload.claims.map(
+      (item) =>
+        `- ${item.claim.id}: ${item.claim.text} (score=${round(item.score)}, kind=${item.claim.kind}, memory_type=${item.claim.memory_type ?? 'null'})`
     ),
   ].join('\n');
 }
@@ -1501,7 +1533,11 @@ function buildSession3Prompt(activateTranscript?: string): ChatMessage[] {
 }
 
 function normalizeText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function pickAnchors(answerAnchors: string[], expectedAnchors: string[]): string[] {
@@ -1522,22 +1558,26 @@ async function analyzeSessionFindings(
     session === 'session_1'
       ? buildSession1Prompt(buildHybridSearchDigest(source))
       : buildSession2Prompt(buildSchemaDigest(source), transcript);
-  const payload = await client.chatJson<{ findings?: Array<{ title?: string; summary?: string; anchors?: string[] }> }>(
-    prompt
-  );
+  const payload = await client.chatJson<{
+    findings?: Array<{ title?: string; summary?: string; anchors?: string[] }>;
+  }>(prompt);
   const findings = Array.isArray(payload.findings) ? payload.findings.slice(0, 2) : [];
   if (findings.length !== 2) {
     throw new Error(`Expected 2 findings from ${session}, got ${JSON.stringify(payload)}`);
   }
   return findings.map((finding, index) => {
-    const title = typeof finding.title === 'string' && finding.title.trim().length > 0
-      ? finding.title.trim()
-      : `${sourceLabel} finding ${index + 1}`;
-    const summary = typeof finding.summary === 'string' && finding.summary.trim().length > 0
-      ? finding.summary.trim()
-      : 'Summary missing.';
+    const title =
+      typeof finding.title === 'string' && finding.title.trim().length > 0
+        ? finding.title.trim()
+        : `${sourceLabel} finding ${index + 1}`;
+    const summary =
+      typeof finding.summary === 'string' && finding.summary.trim().length > 0
+        ? finding.summary.trim()
+        : 'Summary missing.';
     const anchors = Array.isArray(finding.anchors)
-      ? finding.anchors.filter((value): value is string => typeof value === 'string' && value.trim().length > 0).slice(0, 4)
+      ? finding.anchors
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          .slice(0, 4)
       : [];
     return {
       id: findingId(session, sourceLabel, title),
@@ -1718,7 +1758,9 @@ function buildReport(results: Record<string, unknown>): string {
   const experiment5 = results['experiment_5'] as Record<string, unknown>;
   const experiment6 = results['experiment_6'] as Record<string, unknown>;
 
-  const experiment1Rows = ((experiment1['query_results'] as Array<Record<string, unknown>>) ?? []).map(
+  const experiment1Rows = (
+    (experiment1['query_results'] as Array<Record<string, unknown>>) ?? []
+  ).map(
     (row) =>
       `| \`${row['name']}\` | ${row['precision_at_3']} | ${row['ndcg_at_3']} | \`${(row['actual_top3'] as string[]).join('`, `')}\` |`
   );
@@ -1732,8 +1774,12 @@ function buildReport(results: Record<string, unknown>): string {
   const promoteComparison = experiment5['comparison'] as Record<string, Record<string, unknown>>;
   const withMemory = experiment6['with_memory'] as Record<string, unknown>;
   const withoutMemory = experiment6['without_memory'] as Record<string, unknown>;
-  const withScore = (((withMemory['session_3'] as Record<string, unknown>)['score'] as Record<string, unknown>) ?? {});
-  const withoutScore = (((withoutMemory['session_3'] as Record<string, unknown>)['score'] as Record<string, unknown>) ?? {});
+  const withScore =
+    ((withMemory['session_3'] as Record<string, unknown>)['score'] as Record<string, unknown>) ??
+    {};
+  const withoutScore =
+    ((withoutMemory['session_3'] as Record<string, unknown>)['score'] as Record<string, unknown>) ??
+    {};
 
   return [
     '# pce-memory Internal Validation Report',

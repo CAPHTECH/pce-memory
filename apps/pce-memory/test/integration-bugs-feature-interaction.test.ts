@@ -4,7 +4,10 @@
  * Split from integration-bugs.test.ts
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetRetrievalPlannerTestState, upsertClaimViaTool } from './helpers/retrievalPlannerTestUtils';
+import {
+  resetRetrievalPlannerTestState,
+  upsertClaimViaTool,
+} from './helpers/retrievalPlannerTestUtils';
 import {
   applyPolicy,
   dispatchTool,
@@ -78,10 +81,26 @@ maintenance:
     });
 
     // Create claims of different kinds and memory types
-    await upsertClaimViaTool({ text: 'MMR test fact knowledge about authentication', kind: 'fact', memory_type: 'knowledge' });
-    await upsertClaimViaTool({ text: 'MMR test preference procedure for naming', kind: 'preference', memory_type: 'procedure' });
-    await upsertClaimViaTool({ text: 'MMR test task working state for migration', kind: 'task', memory_type: 'working_state' });
-    await upsertClaimViaTool({ text: 'MMR test policy hint norm for security', kind: 'policy_hint', memory_type: 'norm' });
+    await upsertClaimViaTool({
+      text: 'MMR test fact knowledge about authentication',
+      kind: 'fact',
+      memory_type: 'knowledge',
+    });
+    await upsertClaimViaTool({
+      text: 'MMR test preference procedure for naming',
+      kind: 'preference',
+      memory_type: 'procedure',
+    });
+    await upsertClaimViaTool({
+      text: 'MMR test task working state for migration',
+      kind: 'task',
+      memory_type: 'working_state',
+    });
+    await upsertClaimViaTool({
+      text: 'MMR test policy hint norm for security',
+      kind: 'policy_hint',
+      memory_type: 'norm',
+    });
 
     // Activate with all filters combined
     const result = await activateClaims('MMR test authentication security', {
@@ -210,7 +229,9 @@ maintenance:
     });
 
     const claim = expectSuccess<{ id: string }>(
-      await upsertClaimViaTool({ text: 'feedback boost test claim for architecture decision JWT auth' })
+      await upsertClaimViaTool({
+        text: 'feedback boost test claim for architecture decision JWT auth',
+      })
     );
 
     // First activate to get into Ready state

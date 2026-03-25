@@ -99,7 +99,11 @@ describe('validateToken', () => {
   });
 
   it('rejects token with different length (timing-safe)', () => {
-    const env = { PCE_DB: ':memory:', NODE_ENV: 'production' as const, PCE_TOKEN: 'long-secret-token' };
+    const env = {
+      PCE_DB: ':memory:',
+      NODE_ENV: 'production' as const,
+      PCE_TOKEN: 'long-secret-token',
+    };
     expect(validateToken('short', env)).toBe(false);
   });
 

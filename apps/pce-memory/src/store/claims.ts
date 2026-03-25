@@ -521,10 +521,10 @@ function resolveStaleAfterDays(staleAfterDays: number | undefined): number {
 
 export async function updateClaimStatus(id: string, status: ClaimStatus): Promise<void> {
   const conn = await getConnection();
-  await conn.run(
-    'UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-    [status, id]
-  );
+  await conn.run('UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
+    status,
+    id,
+  ]);
 }
 
 export async function recordClaimRetrievals(
@@ -547,9 +547,11 @@ export async function recordClaimRetrievals(
   );
 }
 
-export async function markStaleWorkingStateClaims(options: {
-  staleAfterDays?: number;
-} = {}): Promise<string[]> {
+export async function markStaleWorkingStateClaims(
+  options: {
+    staleAfterDays?: number;
+  } = {}
+): Promise<string[]> {
   const conn = await getConnection();
   const staleAfterDays = resolveStaleAfterDays(options.staleAfterDays);
   const feedbackExists = await feedbackTableExists();

@@ -69,7 +69,10 @@ export async function handleSyncPush(args: Record<string, unknown>): Promise<Too
     // target_dirのパストラバーサル検証
     if (typeof target_dir === 'string' && hasPathTraversal(target_dir)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'target_dir contains path traversal segments', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'target_dir contains path traversal segments', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -78,7 +81,10 @@ export async function handleSyncPush(args: Record<string, unknown>): Promise<Too
     if (since !== undefined) {
       if (typeof since !== 'string' || !Number.isFinite(Date.parse(since))) {
         return createToolResult(
-          { ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId), trace_id: traceId },
+          {
+            ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId),
+            trace_id: traceId,
+          },
           { isError: true }
         );
       }
@@ -185,7 +191,10 @@ export async function handleSyncPull(args: Record<string, unknown>): Promise<Too
     // source_dirのパストラバーサル検証
     if (typeof source_dir === 'string' && hasPathTraversal(source_dir)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', 'source_dir contains path traversal segments', reqId), trace_id: traceId },
+        {
+          ...err('VALIDATION_ERROR', 'source_dir contains path traversal segments', reqId),
+          trace_id: traceId,
+        },
         { isError: true }
       );
     }
@@ -194,7 +203,10 @@ export async function handleSyncPull(args: Record<string, unknown>): Promise<Too
     if (since !== undefined) {
       if (typeof since !== 'string' || !Number.isFinite(Date.parse(since))) {
         return createToolResult(
-          { ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId), trace_id: traceId },
+          {
+            ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId),
+            trace_id: traceId,
+          },
           { isError: true }
         );
       }

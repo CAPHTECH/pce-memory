@@ -105,9 +105,9 @@ describe('knowledge freshness guard', () => {
         created_at: expect.any(String),
       }),
     ]);
-    expect((result.similar_existing as Array<{ similarity: number }>)[0]?.similarity).toBeGreaterThan(
-      0.85
-    );
+    expect(
+      (result.similar_existing as Array<{ similarity: number }>)[0]?.similarity
+    ).toBeGreaterThan(0.85);
   });
 
   it('promote returns similar_existing for nearby durable claims', async () => {
@@ -197,7 +197,7 @@ describe('knowledge freshness guard', () => {
     expect(staleResult?.claim.freshness).toBe('stale_candidate');
     expect(staleResult?.claim.newer_similar).toBe(freshId);
     expect(freshResult?.claim.freshness).toBeUndefined();
-    expect((freshResult?.rank ?? Number.POSITIVE_INFINITY)).toBeLessThan(
+    expect(freshResult?.rank ?? Number.POSITIVE_INFINITY).toBeLessThan(
       staleResult?.rank ?? Number.POSITIVE_INFINITY
     );
   });

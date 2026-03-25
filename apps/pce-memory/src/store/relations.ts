@@ -30,7 +30,10 @@ export type RelationInput = Omit<Relation, 'created_at'>;
 function parseRelationProps(relation: Relation): Relation {
   if (relation.props && typeof relation.props === 'string') {
     try {
-      return { ...relation, props: JSON.parse(relation.props as string) as Record<string, unknown> };
+      return {
+        ...relation,
+        props: JSON.parse(relation.props as string) as Record<string, unknown>,
+      };
     } catch (e: unknown) {
       console.warn(`[pce-memory] Failed to parse relation props for ${relation.id}:`, e);
       return relation;
@@ -214,7 +217,8 @@ export interface RelationQueryFilters {
 export async function queryRelations(filters: RelationQueryFilters): Promise<Relation[]> {
   const conn = await getConnection();
   const rawLimit = filters.limit ?? 50;
-  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 100) : 50;
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 100) : 50;
 
   const conditions: string[] = [];
   const params: (string | number)[] = [];

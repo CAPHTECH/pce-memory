@@ -249,9 +249,9 @@ describe('observation search via activate', () => {
     ).length;
 
     expect(observationCount).toBeLessThanOrEqual(6);
-    expect(activate.claims.slice(0, 10).every((item) => item.claim.observation_id === undefined)).toBe(
-      true
-    );
+    expect(
+      activate.claims.slice(0, 10).every((item) => item.claim.observation_id === undefined)
+    ).toBe(true);
   });
 
   it('activate remains backward compatible without include_observations flag', async () => {

@@ -33,7 +33,7 @@ describe('PCE-Memory Benchmark', () => {
 
     // Quality gates
     const baseline = report.suites.ablation.configs.find(
-      (c) => c.config.name === report.suites.ablation.baselineName,
+      (c) => c.config.name === report.suites.ablation.baselineName
     );
     expect(baseline).toBeDefined();
     expect(baseline!.avgRecall).toBeGreaterThan(0.5);

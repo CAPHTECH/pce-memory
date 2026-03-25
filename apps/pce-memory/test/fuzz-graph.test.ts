@@ -158,10 +158,7 @@ describe('FUZZ: pce_memory_query_entity', () => {
   });
 
   it('rejects no filters at all', async () => {
-    expectError(
-      await dispatchTool('pce_memory_query_entity', {}),
-      'VALIDATION_ERROR'
-    );
+    expectError(await dispatchTool('pce_memory_query_entity', {}), 'VALIDATION_ERROR');
   });
 
   it('rejects invalid type filter', async () => {
@@ -228,10 +225,7 @@ describe('FUZZ: pce_memory_query_relation', () => {
   });
 
   it('rejects no filters at all', async () => {
-    expectError(
-      await dispatchTool('pce_memory_query_relation', {}),
-      'VALIDATION_ERROR'
-    );
+    expectError(await dispatchTool('pce_memory_query_relation', {}), 'VALIDATION_ERROR');
   });
 
   it('rejects negative limit', async () => {

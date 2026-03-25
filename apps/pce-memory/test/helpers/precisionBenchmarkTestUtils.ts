@@ -124,7 +124,9 @@ export function measureTopK(
   const relevant = new Set(relevantIds);
   const matched = top.filter((result) => relevant.has(result.claim.id));
   const clusters = new Set(
-    top.map((result) => clusterByClaimId[result.claim.id]).filter((value): value is string => !!value)
+    top
+      .map((result) => clusterByClaimId[result.claim.id])
+      .filter((value): value is string => !!value)
   );
 
   return {
@@ -149,8 +151,7 @@ export async function runMeasuredSearch(
     samples.push(performance.now() - startedAt);
   }
 
-  const avgLatencyMs =
-    samples.reduce((sum, value) => sum + value, 0) / Math.max(samples.length, 1);
+  const avgLatencyMs = samples.reduce((sum, value) => sum + value, 0) / Math.max(samples.length, 1);
 
   return {
     results: lastResults,

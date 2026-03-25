@@ -146,9 +146,7 @@ describe('APPROACH 1: Concurrent Operations', () => {
     it('should not crash or produce invalid state', async () => {
       await setupHasClaims();
 
-      const upsertPromises = Array.from({ length: 10 }, (_, i) =>
-        handleUpsert(makeUpsertArgs(i))
-      );
+      const upsertPromises = Array.from({ length: 10 }, (_, i) => handleUpsert(makeUpsertArgs(i)));
       const activatePromises = Array.from({ length: 10 }, () =>
         handleActivate({
           scope: ['project'],
@@ -308,10 +306,7 @@ describe('APPROACH 1: Concurrent Operations', () => {
         signal: 'harmful',
       });
 
-      const [helpfulResult, harmfulResult] = await Promise.all([
-        helpfulPromise,
-        harmfulPromise,
-      ]);
+      const [helpfulResult, harmfulResult] = await Promise.all([helpfulPromise, harmfulPromise]);
 
       // Both should succeed
       expect(parseResult(helpfulResult).error).toBeUndefined();
@@ -420,9 +415,7 @@ describe('APPROACH 2: State Machine Races', () => {
       await setupPolicyApplied();
 
       // Fire 10 rapid upserts
-      const upsertPromises = Array.from({ length: 10 }, (_, i) =>
-        handleUpsert(makeUpsertArgs(i))
-      );
+      const upsertPromises = Array.from({ length: 10 }, (_, i) => handleUpsert(makeUpsertArgs(i)));
 
       const results = await Promise.all(upsertPromises);
       const parsed = results.map(parseResult);
@@ -503,9 +496,7 @@ describe('APPROACH 2: State Machine Races', () => {
     it('should track correct claim count after 20 concurrent handler upserts', async () => {
       await setupPolicyApplied();
 
-      const upsertPromises = Array.from({ length: 20 }, (_, i) =>
-        handleUpsert(makeUpsertArgs(i))
-      );
+      const upsertPromises = Array.from({ length: 20 }, (_, i) => handleUpsert(makeUpsertArgs(i)));
 
       const results = await Promise.all(upsertPromises);
       const parsed = results.map(parseResult);
@@ -515,7 +506,7 @@ describe('APPROACH 2: State Machine Races', () => {
       // The state machine claim count should match DB reality
       const conn = await getConnection();
       const reader = await conn.runAndReadAll(
-        "SELECT COUNT(*)::INTEGER AS cnt FROM claims WHERE COALESCE(tombstone, FALSE) = FALSE"
+        'SELECT COUNT(*)::INTEGER AS cnt FROM claims WHERE COALESCE(tombstone, FALSE) = FALSE'
       );
       const rows = reader.getRowObjects() as Array<{ cnt: number }>;
       const dbCount = rows[0]!.cnt;
@@ -593,18 +584,15 @@ describe('APPROACH 3: Database Races', () => {
       });
 
       // Fire 20 parallel retrieval count updates
-      const updatePromises = Array.from({ length: 20 }, () =>
-        recordClaimRetrievals([claim.id])
-      );
+      const updatePromises = Array.from({ length: 20 }, () => recordClaimRetrievals([claim.id]));
 
       await Promise.all(updatePromises);
 
       // Verify count - SQL UPDATE SET x = x + 1 is atomic in DuckDB
       const conn = await getConnection();
-      const reader = await conn.runAndReadAll(
-        'SELECT retrieval_count FROM claims WHERE id = $1',
-        [claim.id]
-      );
+      const reader = await conn.runAndReadAll('SELECT retrieval_count FROM claims WHERE id = $1', [
+        claim.id,
+      ]);
       const rows = reader.getRowObjects() as Array<{ retrieval_count: number }>;
       expect(rows[0]!.retrieval_count).toBe(20);
     });
@@ -623,18 +611,15 @@ describe('APPROACH 3: Database Races', () => {
       });
 
       // Fire 10 parallel +1 delta updates (min=0, max=5)
-      const updatePromises = Array.from({ length: 10 }, () =>
-        updateCritic(claim.id, 1, 0, 5)
-      );
+      const updatePromises = Array.from({ length: 10 }, () => updateCritic(claim.id, 1, 0, 5));
 
       await Promise.all(updatePromises);
 
       // Final score should be capped at 5 (max)
       const conn = await getConnection();
-      const reader = await conn.runAndReadAll(
-        'SELECT score FROM critic WHERE claim_id = $1',
-        [claim.id]
-      );
+      const reader = await conn.runAndReadAll('SELECT score FROM critic WHERE claim_id = $1', [
+        claim.id,
+      ]);
       const rows = reader.getRowObjects() as Array<{ score: number }>;
       expect(rows[0]!.score).toBe(5);
     });
@@ -652,20 +637,15 @@ describe('APPROACH 3: Database Races', () => {
       });
 
       // Fire 5 helpful (+1) and 5 harmful (-1) concurrently
-      const helpfulPromises = Array.from({ length: 5 }, () =>
-        updateCritic(claim.id, 1, 0, 5)
-      );
-      const harmfulPromises = Array.from({ length: 5 }, () =>
-        updateCritic(claim.id, -1, 0, 5)
-      );
+      const helpfulPromises = Array.from({ length: 5 }, () => updateCritic(claim.id, 1, 0, 5));
+      const harmfulPromises = Array.from({ length: 5 }, () => updateCritic(claim.id, -1, 0, 5));
 
       await Promise.all([...helpfulPromises, ...harmfulPromises]);
 
       const conn = await getConnection();
-      const reader = await conn.runAndReadAll(
-        'SELECT score FROM critic WHERE claim_id = $1',
-        [claim.id]
-      );
+      const reader = await conn.runAndReadAll('SELECT score FROM critic WHERE claim_id = $1', [
+        claim.id,
+      ]);
       const rows = reader.getRowObjects() as Array<{ score: number }>;
       const score = rows[0]!.score;
 
@@ -765,7 +745,7 @@ describe('APPROACH 3: Database Races', () => {
       // DB should have exactly one record
       const conn = await getConnection();
       const reader = await conn.runAndReadAll(
-        "SELECT COUNT(*)::INTEGER AS cnt FROM claims WHERE content_hash = $1 AND COALESCE(tombstone, FALSE) = FALSE",
+        'SELECT COUNT(*)::INTEGER AS cnt FROM claims WHERE content_hash = $1 AND COALESCE(tombstone, FALSE) = FALSE',
         [hash]
       );
       const rows = reader.getRowObjects() as Array<{ cnt: number }>;

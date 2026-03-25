@@ -5,11 +5,7 @@
 
 import type { Claim } from '../claims.js';
 import type { EmbeddingService } from '@pce/embeddings';
-import type {
-  FeedbackBoostOptions,
-  GFactorBreakdown,
-  ScoreBreakdown,
-} from '../rerank.js';
+import type { FeedbackBoostOptions, GFactorBreakdown, ScoreBreakdown } from '../rerank.js';
 import type { ActivateIntent, ClaimKind, ClaimStatus, MemoryType } from '../../domain/types.js';
 
 // ========== ADR-0004 パラメータ ==========
@@ -467,12 +463,17 @@ export function resolveMmrConfig(mmr: MmrConfig | undefined): Required<MmrConfig
   }
 
   const lambda =
-    typeof mmr.lambda === 'number' && Number.isFinite(mmr.lambda) && mmr.lambda > 0 && mmr.lambda < 1
+    typeof mmr.lambda === 'number' &&
+    Number.isFinite(mmr.lambda) &&
+    mmr.lambda > 0 &&
+    mmr.lambda < 1
       ? mmr.lambda
       : DEFAULT_MMR_LAMBDA;
 
   const maxCandidates =
-    typeof mmr.maxCandidates === 'number' && Number.isFinite(mmr.maxCandidates) && mmr.maxCandidates > 0
+    typeof mmr.maxCandidates === 'number' &&
+    Number.isFinite(mmr.maxCandidates) &&
+    mmr.maxCandidates > 0
       ? normalizeLimit(mmr.maxCandidates)
       : DEFAULT_MMR_MAX_CANDIDATES;
 

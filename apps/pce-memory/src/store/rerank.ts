@@ -302,8 +302,7 @@ export function calculateUsageTermBreakdown(input: {
   const lastRetrievedAtMs = toTimestampMs(input.lastRetrievedAt ?? null);
   const createdAtMs = toTimestampMs(input.createdAt);
   const usageAnchorMs = lastRetrievedAtMs ?? createdAtMs ?? nowMs;
-  const usage_anchor_source =
-    lastRetrievedAtMs !== undefined ? 'last_retrieved_at' : 'created_at';
+  const usage_anchor_source = lastRetrievedAtMs !== undefined ? 'last_retrieved_at' : 'created_at';
   const days_since_anchor = Math.max(0, (nowMs - usageAnchorMs) / DAY_IN_MS);
   const usage_decay =
     lastRetrievedAtMs !== undefined
@@ -313,11 +312,7 @@ export function calculateUsageTermBreakdown(input: {
   // This prevents a feedback loop where a single accidental retrieval
   // permanently boosts a claim above more relevant results.
   const effectiveCount = retrievalCount >= minCountForBoost ? retrievalCount : 0;
-  const retrieval_boost = clamp(
-    1.0 + Math.log2(effectiveCount + 1) * boostWeight,
-    1.0,
-    maxBoost
-  );
+  const retrieval_boost = clamp(1.0 + Math.log2(effectiveCount + 1) * boostWeight, 1.0, maxBoost);
 
   return {
     retrieval_count: retrievalCount,

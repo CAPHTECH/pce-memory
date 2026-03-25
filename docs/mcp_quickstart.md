@@ -158,13 +158,13 @@ Do not use `upsert` for:
 
 ## 5. Common mistakes
 
-| Mistake | What to do instead |
-| --- | --- |
-| Writing session state with `upsert` | Use `observe` |
-| Writing secrets with `upsert` | Use `observe` and keep it non-durable |
-| Skipping `distill` and `promote` for raw findings | Use the full v2 path |
-| Sending `feedback` for an observation ID | Send feedback for a durable `claim_id` from `activate` |
-| Using vague English like `"auth"` | Use concrete queries like `"JWT refresh token expiry"` |
+| Mistake                                           | What to do instead                                     |
+| ------------------------------------------------- | ------------------------------------------------------ |
+| Writing session state with `upsert`               | Use `observe`                                          |
+| Writing secrets with `upsert`                     | Use `observe` and keep it non-durable                  |
+| Skipping `distill` and `promote` for raw findings | Use the full v2 path                                   |
+| Sending `feedback` for an observation ID          | Send feedback for a durable `claim_id` from `activate` |
+| Using vague English like `"auth"`                 | Use concrete queries like `"JWT refresh token expiry"` |
 
 ## 6. Current tool surface
 

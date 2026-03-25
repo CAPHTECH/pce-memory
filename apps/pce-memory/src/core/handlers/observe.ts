@@ -16,12 +16,7 @@ import { analyzeTextSensitivity, redactPiiText } from '../../audit/redactText.js
 import { appendLog } from '../../store/logs.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { stateError } from '../../domain/stateMachine.js';
-import {
-  getPolicy,
-  getPolicyVersion,
-  getStateType,
-  canDoUpsert,
-} from '../../state/memoryState.js';
+import { getPolicy, getPolicyVersion, getStateType, canDoUpsert } from '../../state/memoryState.js';
 import {
   enterRequestScope,
   exitRequestScope,

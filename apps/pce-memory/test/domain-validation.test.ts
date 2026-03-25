@@ -82,7 +82,11 @@ describe('validateArray', () => {
   });
 
   it('returns Left when itemValidator fails', () => {
-    const result = validateArray<string>('items', [1, 'two', 3], (item) => typeof item === 'string');
+    const result = validateArray<string>(
+      'items',
+      [1, 'two', 3],
+      (item) => typeof item === 'string'
+    );
     expect(E.isLeft(result)).toBe(true);
     if (E.isLeft(result)) {
       expect(result.left.message).toBe('items contains invalid items');

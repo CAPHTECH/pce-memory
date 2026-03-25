@@ -13,12 +13,39 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { initDb, initSchema, resetDbAsync, getConnection } from '../src/db/connection';
-import { upsertClaim, findClaimById, findClaimByContentHash, listClaimsByScope } from '../src/store/claims';
-import { upsertEntity, getEntitiesForClaim, linkClaimEntity, findEntityById, findEntityByCanonicalKey, findEntitiesByType, queryEntities } from '../src/store/entities';
-import { upsertRelation, findRelationById, getRelationsFromEntity, getRelationsByEvidence, queryRelations } from '../src/store/relations';
+import {
+  upsertClaim,
+  findClaimById,
+  findClaimByContentHash,
+  listClaimsByScope,
+} from '../src/store/claims';
+import {
+  upsertEntity,
+  getEntitiesForClaim,
+  linkClaimEntity,
+  findEntityById,
+  findEntityByCanonicalKey,
+  findEntitiesByType,
+  queryEntities,
+} from '../src/store/entities';
+import {
+  upsertRelation,
+  findRelationById,
+  getRelationsFromEntity,
+  getRelationsByEvidence,
+  queryRelations,
+} from '../src/store/relations';
 import { insertEvidence, getEvidenceForClaim, getEvidenceForClaims } from '../src/store/evidence';
-import { insertObservation, findObservationById, findObservationsByIds } from '../src/store/observations';
-import { insertPromotionQueueRow, findPromotionQueueRowById, acceptPromotionQueueRow } from '../src/store/promotionQueue';
+import {
+  insertObservation,
+  findObservationById,
+  findObservationsByIds,
+} from '../src/store/observations';
+import {
+  insertPromotionQueueRow,
+  findPromotionQueueRowById,
+  acceptPromotionQueueRow,
+} from '../src/store/promotionQueue';
 import { recordFeedback } from '../src/store/feedback';
 
 beforeEach(async () => {
@@ -393,15 +420,28 @@ describe('Migration Safety', () => {
     const conn = await getConnection();
 
     const tables = [
-      'claims', 'active_contexts', 'active_context_items', 'promotion_queue',
-      'logs', 'feedback', 'rate_state', 'critic', 'policies',
-      'embedding_cache', 'claim_vectors', 'claim_links',
-      'entities', 'claim_entities', 'relations', 'evidence', 'observations',
+      'claims',
+      'active_contexts',
+      'active_context_items',
+      'promotion_queue',
+      'logs',
+      'feedback',
+      'rate_state',
+      'critic',
+      'policies',
+      'embedding_cache',
+      'claim_vectors',
+      'claim_links',
+      'entities',
+      'claim_entities',
+      'relations',
+      'evidence',
+      'observations',
     ];
 
     for (const table of tables) {
       const reader = await conn.runAndReadAll(
-        "SELECT COUNT(*)::INTEGER AS cnt FROM information_schema.tables WHERE table_name = $1",
+        'SELECT COUNT(*)::INTEGER AS cnt FROM information_schema.tables WHERE table_name = $1',
         [table]
       );
       const rows = reader.getRowObjects() as Array<{ cnt: number }>;
@@ -537,7 +577,7 @@ describe('Data Integrity', () => {
       // Tombstone the claim
       const conn = await getConnection();
       await conn.run(
-        "UPDATE claims SET tombstone = TRUE, tombstone_at = CURRENT_TIMESTAMP WHERE id = $1",
+        'UPDATE claims SET tombstone = TRUE, tombstone_at = CURRENT_TIMESTAMP WHERE id = $1',
         [claim.id]
       );
 
@@ -565,10 +605,7 @@ describe('Data Integrity', () => {
       });
 
       const conn = await getConnection();
-      await conn.run(
-        "UPDATE claims SET tombstone = TRUE WHERE id = $1",
-        [tombClaim.id]
-      );
+      await conn.run('UPDATE claims SET tombstone = TRUE WHERE id = $1', [tombClaim.id]);
 
       const claims = await listClaimsByScope(['project'], 100);
       expect(claims.length).toBe(1);

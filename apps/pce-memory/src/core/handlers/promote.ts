@@ -23,16 +23,10 @@ import {
   findClaimByContentHash,
 } from '../../store/claims.js';
 import type { Provenance } from '../../store/claims.js';
-import {
-  findSimilarActiveClaims,
-  getEmbeddingService,
-} from '../../store/hybridSearch.js';
+import { findSimilarActiveClaims, getEmbeddingService } from '../../store/hybridSearch.js';
 import { suggestRelatedClaimLinks } from '../../store/claimLinks.js';
 import { insertEvidence } from '../../store/evidence.js';
-import {
-  acceptPromotionQueueRow,
-  findPromotionQueueRowById,
-} from '../../store/promotionQueue.js';
+import { acceptPromotionQueueRow, findPromotionQueueRowById } from '../../store/promotionQueue.js';
 import { appendLog } from '../../store/logs.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { stateError } from '../../domain/stateMachine.js';
@@ -414,9 +408,7 @@ export async function handlePromote(args: Record<string, unknown>) {
     return createToolResult(
       {
         ...err(
-          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION'
-            ? 'VALIDATION_ERROR'
-            : 'DB_ERROR',
+          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION' ? 'VALIDATION_ERROR' : 'DB_ERROR',
           msg,
           reqId
         ),

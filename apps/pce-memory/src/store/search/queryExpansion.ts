@@ -36,7 +36,9 @@ export async function expandQueryWithEntityGraph(
 
   const pushScoredMatch = (expression: string, value: string, weight: number): void => {
     const paramIndex = params.push(value);
-    scoreClauses.push(`CASE WHEN ${expression.replaceAll('?', `$${paramIndex}`)} THEN ${weight} ELSE 0 END`);
+    scoreClauses.push(
+      `CASE WHEN ${expression.replaceAll('?', `$${paramIndex}`)} THEN ${weight} ELSE 0 END`
+    );
     whereClauses.push(expression.replaceAll('?', `$${paramIndex}`));
   };
 

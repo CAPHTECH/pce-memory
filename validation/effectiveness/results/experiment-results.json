@@ -405,9 +405,7 @@
             ],
             "total": 9
           },
-          "generic_markers": [
-            "status:no_context"
-          ],
+          "generic_markers": ["status:no_context"],
           "invalid_reasons": [],
           "verdict": "generic_or_no_context"
         }
@@ -438,24 +436,17 @@
             {
               "id": "retrieval-alpha-0-65-vector-bias",
               "summary": "The retrieval pipeline fuses text and vector scores with ALPHA=0.65, intentionally biasing ranking toward vector search results.",
-              "params": [
-                "ALPHA=0.65"
-              ]
+              "params": ["ALPHA=0.65"]
             },
             {
               "id": "retrieval-candidate-pools-48-96",
               "summary": "The retrieval pipeline expands recall with K_TEXT=48 and K_VEC=96 candidate pools before merge and reranking.",
-              "params": [
-                "K_TEXT=48",
-                "K_VEC=96"
-              ]
+              "params": ["K_TEXT=48", "K_VEC=96"]
             },
             {
               "id": "retrieval-threshold-0-15-noise-gate",
               "summary": "The retrieval pipeline applies THRESHOLD=0.15 to suppress low-signal candidates before the final result set is returned.",
-              "params": [
-                "THRESHOLD=0.15"
-              ]
+              "params": ["THRESHOLD=0.15"]
             }
           ]
         },
@@ -640,16 +631,7 @@
             "total": 3
           },
           "detail_recall": {
-            "matched": [
-              "0.65",
-              "0.15",
-              "48",
-              "96",
-              "alpha",
-              "threshold",
-              "k_text",
-              "k_vec"
-            ],
+            "matched": ["0.65", "0.15", "48", "96", "alpha", "threshold", "k_text", "k_vec"],
             "missing": [],
             "total": 8
           },
@@ -698,21 +680,10 @@
           },
           "detail_recall": {
             "matched": [],
-            "missing": [
-              "0.65",
-              "0.15",
-              "48",
-              "96",
-              "alpha",
-              "threshold",
-              "k_text",
-              "k_vec"
-            ],
+            "missing": ["0.65", "0.15", "48", "96", "alpha", "threshold", "k_text", "k_vec"],
             "total": 8
           },
-          "generic_markers": [
-            "status:no_context"
-          ],
+          "generic_markers": ["status:no_context"],
           "invalid_reasons": [],
           "verdict": "generic_or_no_context"
         }

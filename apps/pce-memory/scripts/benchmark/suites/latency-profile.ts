@@ -31,12 +31,15 @@ async function warmup(embeddingService: EmbeddingService): Promise<void> {
         content_hash: claim.content_hash,
         provenance: claim.provenance,
       },
-      embeddingService,
+      embeddingService
     );
   }
 }
 
-async function measureColdStart(): Promise<{ coldStartMs: number; embeddingService: EmbeddingService }> {
+async function measureColdStart(): Promise<{
+  coldStartMs: number;
+  embeddingService: EmbeddingService;
+}> {
   const t0 = performance.now();
   await initLocalProvider();
   const coldStartMs = performance.now() - t0;
@@ -47,7 +50,7 @@ async function measureColdStart(): Promise<{ coldStartMs: number; embeddingServi
 }
 
 async function measureEmbeddingLatency(
-  embeddingService: EmbeddingService,
+  embeddingService: EmbeddingService
 ): Promise<{ coldMs: number; warmMs: number }> {
   const text = 'ベンチマーク用テスト文字列: ハイブリッド検索の性能評価';
 
@@ -66,17 +69,16 @@ async function measureEmbeddingLatency(
 
 async function measureSearchLatency(
   embeddingService: EmbeddingService,
-  enableRerank: boolean,
+  enableRerank: boolean
 ): Promise<number[]> {
   const latencies: number[] = [];
   for (let i = 0; i < SEARCH_REPS; i++) {
     const t0 = performance.now();
-    await hybridSearchPaginated(
-      ['session', 'project', 'principle'],
-      10,
-      REPRESENTATIVE_QUERY,
-      { embeddingService, alpha: 0.65, enableRerank },
-    );
+    await hybridSearchPaginated(['session', 'project', 'principle'], 10, REPRESENTATIVE_QUERY, {
+      embeddingService,
+      alpha: 0.65,
+      enableRerank,
+    });
     latencies.push(performance.now() - t0);
   }
   return latencies;
@@ -92,7 +94,9 @@ export async function runLatencyProfile(): Promise<{
 
   console.log('  [latency] Measuring embedding latency...');
   const embedding = await measureEmbeddingLatency(embeddingService);
-  console.log(`    Embedding cold=${embedding.coldMs.toFixed(1)}ms warm=${embedding.warmMs.toFixed(1)}ms`);
+  console.log(
+    `    Embedding cold=${embedding.coldMs.toFixed(1)}ms warm=${embedding.warmMs.toFixed(1)}ms`
+  );
 
   // Setup DB for search measurements
   process.env.PCE_DB = ':memory:';

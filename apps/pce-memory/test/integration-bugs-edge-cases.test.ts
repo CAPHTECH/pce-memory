@@ -4,7 +4,10 @@
  * Split from integration-bugs.test.ts
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetRetrievalPlannerTestState, upsertClaimViaTool } from './helpers/retrievalPlannerTestUtils';
+import {
+  resetRetrievalPlannerTestState,
+  upsertClaimViaTool,
+} from './helpers/retrievalPlannerTestUtils';
 import {
   applyPolicy,
   dispatchTool,
@@ -70,7 +73,9 @@ describe('APPROACH 3: Edge Case Workflows', () => {
       await upsertClaimViaTool({ text: 'freshness pair claim A about caching strategy redis v1' })
     );
     const claimB = expectSuccess<{ id: string }>(
-      await upsertClaimViaTool({ text: 'freshness pair claim B about caching strategy redis v2 improved' })
+      await upsertClaimViaTool({
+        text: 'freshness pair claim B about caching strategy redis v2 improved',
+      })
     );
 
     // rollback A
@@ -137,8 +142,16 @@ describe('APPROACH 3: Edge Case Workflows', () => {
     await applyPolicy();
 
     // Create claims with various kinds
-    await upsertClaimViaTool({ text: 'exclude everything test fact claim', kind: 'fact', memory_type: 'knowledge' });
-    await upsertClaimViaTool({ text: 'exclude everything test pref claim', kind: 'preference', memory_type: 'procedure' });
+    await upsertClaimViaTool({
+      text: 'exclude everything test fact claim',
+      kind: 'fact',
+      memory_type: 'knowledge',
+    });
+    await upsertClaimViaTool({
+      text: 'exclude everything test pref claim',
+      kind: 'preference',
+      memory_type: 'procedure',
+    });
 
     // Activate with kind_filter that matches nothing in combination with memory_type_filter
     const result = await activateClaims('exclude everything', {
@@ -321,9 +334,7 @@ describe('APPROACH 3: Edge Case Workflows', () => {
     const distill = await distillFromObservations([obs.observation_id]);
     await promoteCandidate(distill.candidate_id);
 
-    const health = expectSuccess<HealthResult>(
-      await dispatchTool('pce_memory_health', {})
-    );
+    const health = expectSuccess<HealthResult>(await dispatchTool('pce_memory_health', {}));
 
     // Should reflect 3 claims total (2 upsert + 1 promoted)
     expect(health.total_claims).toBe(3);

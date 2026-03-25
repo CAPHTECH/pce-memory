@@ -246,7 +246,9 @@ function isLeft(value: unknown): value is LeftLike {
 }
 
 function isActivatePayload(value: unknown): value is ActivatePayload {
-  return typeof value === 'object' && value !== null && Array.isArray((value as ActivatePayload).claims);
+  return (
+    typeof value === 'object' && value !== null && Array.isArray((value as ActivatePayload).claims)
+  );
 }
 
 function asActivatePayload(result: ToolResultLike): ActivatePayload {
@@ -513,7 +515,10 @@ async function updateClaimTimestamps(
 
 async function updateObservationCreatedAt(observationId: string, timestamp: string): Promise<void> {
   const conn = await getConnection();
-  await conn.run('UPDATE observations SET created_at = $1 WHERE id = $2', [timestamp, observationId]);
+  await conn.run('UPDATE observations SET created_at = $1 WHERE id = $2', [
+    timestamp,
+    observationId,
+  ]);
 }
 
 async function activate(args: {
@@ -660,7 +665,9 @@ async function runFreshnessBenchmark(): Promise<FreshnessResult> {
   const pairWinRate = round(average(latestWins));
 
   // Composite score: 30% upsert detection + 30% stale annotation + 40% ranking
-  const compositeScore = round(upsertDetectionRate * 0.3 + staleAnnotationRate * 0.3 + top1Rate * 0.4);
+  const compositeScore = round(
+    upsertDetectionRate * 0.3 + staleAnnotationRate * 0.3 + top1Rate * 0.4
+  );
 
   return {
     name: 'FRESHNESS',
@@ -720,13 +727,13 @@ async function runUsageLearningBenchmark(): Promise<UsageLearningResult> {
   // Counts must exceed MIN_RETRIEVAL_COUNT_FOR_BOOST (10) to activate the boost.
   const designedCounts: readonly [number, number][] = [
     [0, 50], // alder: heavy usage
-    [1, 0],  // birch: never used
+    [1, 0], // birch: never used
     [2, 30], // cobalt: moderate
     [3, 12], // dune: light
     [4, 80], // ember: heaviest (also has alwayshot marker)
     [5, 20], // fjord: moderate-light
     [6, 25], // grove: moderate
-    [7, 0],  // harbor: never used
+    [7, 0], // harbor: never used
     [8, 40], // isotope: heavy
     [9, 15], // juno: light
   ];
@@ -968,7 +975,8 @@ async function runConnectivityBenchmark(): Promise<ConnectivityResult> {
     name: 'CONNECTIVITY',
     score: round(average(recalls)),
     metric: 'related_claim_recall_at_5',
-    expected_baseline: 'High recall once suggested claim links are confirmed and activate traverses them',
+    expected_baseline:
+      'High recall once suggested claim links are confirmed and activate traverses them',
     related_claim_recall_at_5: round(average(recalls)),
     pair_count: 10,
     cases,
@@ -982,12 +990,7 @@ async function runCombinedBenchmark(): Promise<CombinedResult> {
   const retainedRelevantIds: string[] = [];
 
   for (let index = 0; index < 15; index++) {
-    const topic =
-      index < 5
-        ? `auth`
-        : index < 10
-          ? `billing`
-          : `observability`;
+    const topic = index < 5 ? `auth` : index < 10 ? `billing` : `observability`;
     const text =
       topic === 'auth'
         ? `Session one auth memo ${index}: cedar login flow keeps token guardrail ${index} and issuer checks for design review.`
@@ -1027,12 +1030,11 @@ async function runCombinedBenchmark(): Promise<CombinedResult> {
   for (let index = 0; index < 10; index++) {
     const authRelevant = index < 3;
     const authDistractor = index >= 3 && index < 6;
-    const text =
-      authRelevant
-        ? `Session two auth extension ${index}: cedar login design adds rotation rollout note ${index}, token revocation drill, and recovery checklist.`
-        : authDistractor
-          ? `Session two auth distractor ${index}: cedar login support note ${index} covers FAQ edits, onboarding copy, and temporary access banners.`
-          : `Session two distractor ${index}: procurement note ${index} keeps vendor attestations in quarterly archive review.`;
+    const text = authRelevant
+      ? `Session two auth extension ${index}: cedar login design adds rotation rollout note ${index}, token revocation drill, and recovery checklist.`
+      : authDistractor
+        ? `Session two auth distractor ${index}: cedar login support note ${index} covers FAQ edits, onboarding copy, and temporary access banners.`
+        : `Session two distractor ${index}: procurement note ${index} keeps vendor attestations in quarterly archive review.`;
     const id = await seedClaim({
       text,
       provenance_at: isoDaysAgo(3 + index),

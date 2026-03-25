@@ -5,11 +5,7 @@
 import { createToolResult, err, type ToolResult } from './shared.js';
 import { computeHealthReport } from '../../store/health.js';
 import { appendLog } from '../../store/logs.js';
-import {
-  canDoQuery,
-  getPolicyVersion,
-  getStateType,
-} from '../../state/memoryState.js';
+import { canDoQuery, getPolicyVersion, getStateType } from '../../state/memoryState.js';
 import { stateError } from '../../domain/stateMachine.js';
 import { checkAndConsume } from '../../store/rate.js';
 
