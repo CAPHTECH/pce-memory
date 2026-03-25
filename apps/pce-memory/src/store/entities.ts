@@ -3,6 +3,7 @@
  * Graph Memory: Actor, Artifact, Event, Concept
  */
 import { getConnection } from '../db/connection.js';
+import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
 /**
  * Entity型（definitions.entity準拠）
@@ -22,6 +23,28 @@ export interface Entity {
 export type EntityInput = Omit<Entity, 'created_at'>;
 
 /**
+ * DBから取得したEntityのattrsフィールドをパース
+ * DuckDBはJSON列を文字列として返すため、オブジェクトに変換する
+ */
+function parseEntityAttrs(entity: Entity): Entity {
+  if (entity.attrs && typeof entity.attrs === 'string') {
+    try {
+      return { ...entity, attrs: JSON.parse(entity.attrs as string) as Record<string, unknown> };
+    } catch {
+      return entity;
+    }
+  }
+  return entity;
+}
+
+/**
+ * 複数のEntityのattrsをパースしタイムスタンプを正規化
+ */
+function normalizeEntityRows(rawRows: Entity[]): Entity[] {
+  return normalizeRowsTimestamps(rawRows).map(parseEntityAttrs);
+}
+
+/**
  * Entityを登録（idempotent upsert）
  */
 export async function upsertEntity(e: EntityInput): Promise<Entity> {
@@ -32,7 +55,8 @@ export async function upsertEntity(e: EntityInput): Promise<Entity> {
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1',
     [e.id]
   );
-  const rows = existing.getRowObjects() as unknown as Entity[];
+  const rawRows = existing.getRowObjects() as unknown as Entity[];
+  const rows = normalizeEntityRows(rawRows);
   if (rows.length > 0 && rows[0]) {
     return rows[0];
   }
@@ -48,7 +72,7 @@ export async function upsertEntity(e: EntityInput): Promise<Entity> {
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1',
     [e.id]
   );
-  return (inserted.getRowObjects() as unknown as Entity[])[0]!;
+  return normalizeEntityRows(inserted.getRowObjects() as unknown as Entity[])[0]!;
 }
 
 /**
@@ -74,7 +98,7 @@ export async function getEntitiesForClaim(claimId: string): Promise<Entity[]> {
      WHERE ce.claim_id = $1`,
     [claimId]
   );
-  return reader.getRowObjects() as unknown as Entity[];
+  return normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
 }
 
 /**
@@ -89,7 +113,7 @@ export async function findEntitiesByType(
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE type = $1 LIMIT $2',
     [type, limit]
   );
-  return reader.getRowObjects() as unknown as Entity[];
+  return normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
 }
 
 /**
@@ -101,7 +125,7 @@ export async function findEntityByCanonicalKey(canonicalKey: string): Promise<En
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE canonical_key = $1',
     [canonicalKey]
   );
-  const rows = reader.getRowObjects() as unknown as Entity[];
+  const rows = normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
   return rows[0];
 }
 
@@ -114,7 +138,7 @@ export async function findEntityByName(name: string): Promise<Entity | undefined
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE LOWER(name) = LOWER($1) ORDER BY created_at DESC LIMIT 1',
     [name]
   );
-  const rows = reader.getRowObjects() as unknown as Entity[];
+  const rows = normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
   return rows[0];
 }
 
@@ -127,7 +151,7 @@ export async function findEntityById(id: string): Promise<Entity | undefined> {
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities WHERE id = $1',
     [id]
   );
-  const rows = reader.getRowObjects() as unknown as Entity[];
+  const rows = normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
   return rows[0];
 }
 
@@ -143,7 +167,7 @@ export async function listAllEntities(limit: number = 10000): Promise<Entity[]> 
     'SELECT id, type, name, canonical_key, attrs, created_at FROM entities ORDER BY created_at DESC LIMIT $1',
     [limit]
   );
-  return reader.getRowObjects() as unknown as Entity[];
+  return normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
 }
 
 /**
@@ -183,7 +207,7 @@ export async function listEntitiesByFilter(options: EntityFilterOptions = {}): P
   params.push(limit);
 
   const reader = await conn.runAndReadAll(sql, params);
-  return reader.getRowObjects() as unknown as Entity[];
+  return normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
 }
 
 /**
@@ -251,5 +275,5 @@ export async function queryEntities(filters: EntityQueryFilters): Promise<Entity
   params.push(limit);
 
   const reader = await conn.runAndReadAll(sql, params);
-  return reader.getRowObjects() as unknown as Entity[];
+  return normalizeEntityRows(reader.getRowObjects() as unknown as Entity[]);
 }

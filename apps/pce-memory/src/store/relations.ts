@@ -3,6 +3,7 @@
  * Graph Memory: Entity間の関係
  */
 import { getConnection } from '../db/connection.js';
+import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
 /**
  * Relation型（definitions.relation準拠）
@@ -23,6 +24,28 @@ export interface Relation {
 export type RelationInput = Omit<Relation, 'created_at'>;
 
 /**
+ * DBから取得したRelationのpropsフィールドをパース
+ * DuckDBはJSON列を文字列として返すため、オブジェクトに変換する
+ */
+function parseRelationProps(relation: Relation): Relation {
+  if (relation.props && typeof relation.props === 'string') {
+    try {
+      return { ...relation, props: JSON.parse(relation.props as string) as Record<string, unknown> };
+    } catch {
+      return relation;
+    }
+  }
+  return relation;
+}
+
+/**
+ * 複数のRelationのpropsをパースしタイムスタンプを正規化
+ */
+function normalizeRelationRows(rawRows: Relation[]): Relation[] {
+  return normalizeRowsTimestamps(rawRows).map(parseRelationProps);
+}
+
+/**
  * Relationを登録（idempotent upsert）
  */
 export async function upsertRelation(r: RelationInput): Promise<Relation> {
@@ -33,7 +56,8 @@ export async function upsertRelation(r: RelationInput): Promise<Relation> {
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE id = $1',
     [r.id]
   );
-  const rows = existing.getRowObjects() as unknown as Relation[];
+  const rawRows = existing.getRowObjects() as unknown as Relation[];
+  const rows = normalizeRelationRows(rawRows);
   if (rows.length > 0 && rows[0]) {
     return rows[0];
   }
@@ -49,7 +73,7 @@ export async function upsertRelation(r: RelationInput): Promise<Relation> {
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE id = $1',
     [r.id]
   );
-  return (inserted.getRowObjects() as unknown as Relation[])[0]!;
+  return normalizeRelationRows(inserted.getRowObjects() as unknown as Relation[])[0]!;
 }
 
 /**
@@ -61,7 +85,7 @@ export async function getRelationsFromEntity(entityId: string): Promise<Relation
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE src_id = $1',
     [entityId]
   );
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
 
 /**
@@ -73,7 +97,7 @@ export async function getRelationsToEntity(entityId: string): Promise<Relation[]
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE dst_id = $1',
     [entityId]
   );
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
 
 /**
@@ -85,7 +109,7 @@ export async function getRelationsByEvidence(claimId: string): Promise<Relation[
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE evidence_claim_id = $1',
     [claimId]
   );
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
 
 /**
@@ -97,7 +121,7 @@ export async function findRelationsByType(type: string, limit: number = 100): Pr
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE type = $1 LIMIT $2',
     [type, limit]
   );
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
 
 /**
@@ -109,7 +133,7 @@ export async function findRelationById(id: string): Promise<Relation | undefined
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations WHERE id = $1',
     [id]
   );
-  const rows = reader.getRowObjects() as unknown as Relation[];
+  const rows = normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
   return rows[0];
 }
 
@@ -125,7 +149,7 @@ export async function listAllRelations(limit: number = 10000): Promise<Relation[
     'SELECT id, src_id, dst_id, type, props, evidence_claim_id, created_at FROM relations ORDER BY created_at DESC LIMIT $1',
     [limit]
   );
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
 
 /**
@@ -167,7 +191,7 @@ export async function listRelationsByFilter(
   params.push(limit);
 
   const reader = await conn.runAndReadAll(sql, params);
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
 
 /**
@@ -231,5 +255,5 @@ export async function queryRelations(filters: RelationQueryFilters): Promise<Rel
   params.push(limit);
 
   const reader = await conn.runAndReadAll(sql, params);
-  return reader.getRowObjects() as unknown as Relation[];
+  return normalizeRelationRows(reader.getRowObjects() as unknown as Relation[]);
 }
