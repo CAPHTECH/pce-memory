@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-03-25T06:17:21.169Z",
+  "generated_at": "2026-03-25T06:59:30.060Z",
   "environment": {
-    "repo_root": "/Users/rizumita/Workspace/pce-memory.worktrees/test-issue-72-v3-baseline-f78118",
+    "repo_root": "/Users/rizumita/Workspace/pce-memory.worktrees/feat-issue-76-claim-connectivity-966f3a",
     "node": "v24.12.0",
     "database": ":memory:",
     "embedding_service": "deterministic-bow-v1",
@@ -20,12 +20,12 @@
         {
           "label": "topic_0",
           "query": "service maple-0 API timeout rollout policy",
-          "expected_id": "clm_e2ca1d99",
+          "expected_id": "clm_9e1b2021",
           "actual_ids": [
-            "clm_e2ca1d99",
-            "clm_355eacd7",
-            "clm_6b492620",
-            "clm_1a06c618"
+            "clm_9e1b2021",
+            "clm_dc349daf",
+            "clm_b92cbafc",
+            "clm_a7440c8f"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=2"
@@ -33,12 +33,12 @@
         {
           "label": "topic_1",
           "query": "service maple-1 API timeout rollout policy",
-          "expected_id": "clm_d457fe29",
+          "expected_id": "clm_a132dbbe",
           "actual_ids": [
-            "clm_d457fe29",
-            "clm_e2ca1d99",
-            "clm_367b48b5",
-            "clm_355eacd7"
+            "clm_a132dbbe",
+            "clm_9e1b2021",
+            "clm_05669c26",
+            "clm_dc349daf"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=3"
@@ -46,12 +46,12 @@
         {
           "label": "topic_2",
           "query": "service maple-2 API timeout rollout policy",
-          "expected_id": "clm_f7c06432",
+          "expected_id": "clm_1ae541f3",
           "actual_ids": [
-            "clm_f7c06432",
-            "clm_e2ca1d99",
-            "clm_d457fe29",
-            "clm_7c9021b8"
+            "clm_1ae541f3",
+            "clm_9e1b2021",
+            "clm_a132dbbe",
+            "clm_25fe3018"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=4"
@@ -59,12 +59,12 @@
         {
           "label": "topic_3",
           "query": "service maple-3 API timeout rollout policy",
-          "expected_id": "clm_8c366cd0",
+          "expected_id": "clm_8c7ad0b3",
           "actual_ids": [
-            "clm_8c366cd0",
-            "clm_e2ca1d99",
-            "clm_d457fe29",
-            "clm_f7c06432"
+            "clm_8c7ad0b3",
+            "clm_9e1b2021",
+            "clm_a132dbbe",
+            "clm_1ae541f3"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
@@ -72,12 +72,12 @@
         {
           "label": "topic_4",
           "query": "service maple-4 API timeout rollout policy",
-          "expected_id": "clm_f2eb2426",
+          "expected_id": "clm_98e38391",
           "actual_ids": [
-            "clm_f2eb2426",
-            "clm_8c366cd0",
-            "clm_e2ca1d99",
-            "clm_d457fe29"
+            "clm_98e38391",
+            "clm_9e1b2021",
+            "clm_8c7ad0b3",
+            "clm_a132dbbe"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
@@ -85,12 +85,12 @@
         {
           "label": "topic_5",
           "query": "service maple-5 API timeout rollout policy",
-          "expected_id": "clm_e7c31e36",
+          "expected_id": "clm_714ea0e2",
           "actual_ids": [
-            "clm_e7c31e36",
-            "clm_8c366cd0",
-            "clm_e2ca1d99",
-            "clm_f2eb2426"
+            "clm_714ea0e2",
+            "clm_9e1b2021",
+            "clm_8c7ad0b3",
+            "clm_98e38391"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
@@ -98,12 +98,12 @@
         {
           "label": "topic_6",
           "query": "service maple-6 API timeout rollout policy",
-          "expected_id": "clm_dcd572de",
+          "expected_id": "clm_55b8745f",
           "actual_ids": [
-            "clm_dcd572de",
-            "clm_8c366cd0",
-            "clm_e2ca1d99",
-            "clm_f2eb2426"
+            "clm_55b8745f",
+            "clm_9e1b2021",
+            "clm_8c7ad0b3",
+            "clm_98e38391"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
@@ -111,12 +111,12 @@
         {
           "label": "topic_7",
           "query": "service maple-7 API timeout rollout policy",
-          "expected_id": "clm_69afdbc2",
+          "expected_id": "clm_c2c1e8f0",
           "actual_ids": [
-            "clm_69afdbc2",
-            "clm_e7c31e36",
-            "clm_e2ca1d99",
-            "clm_8c366cd0"
+            "clm_c2c1e8f0",
+            "clm_714ea0e2",
+            "clm_9e1b2021",
+            "clm_8c7ad0b3"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
@@ -124,12 +124,12 @@
         {
           "label": "topic_8",
           "query": "service maple-8 API timeout rollout policy",
-          "expected_id": "clm_ae3539e3",
+          "expected_id": "clm_517edc22",
           "actual_ids": [
-            "clm_ae3539e3",
-            "clm_e2ca1d99",
-            "clm_8c366cd0",
-            "clm_f2eb2426"
+            "clm_517edc22",
+            "clm_9e1b2021",
+            "clm_8c7ad0b3",
+            "clm_c2c1e8f0"
           ],
           "success": true,
           "notes": "latest_rank=1 stale_rank=miss"
@@ -137,12 +137,12 @@
         {
           "label": "topic_9",
           "query": "service maple-9 API timeout rollout policy",
-          "expected_id": "clm_09785a9e",
+          "expected_id": "clm_192249b5",
           "actual_ids": [
-            "clm_ae3539e3",
-            "clm_09785a9e",
-            "clm_e2ca1d99",
-            "clm_8c366cd0"
+            "clm_517edc22",
+            "clm_192249b5",
+            "clm_9e1b2021",
+            "clm_8c7ad0b3"
           ],
           "success": false,
           "notes": "latest_rank=2 stale_rank=miss"
@@ -158,61 +158,61 @@
       "final_query": "Usage learning corpus atlas shared-surface decision note workspace cedar",
       "tracked_claims": [
         {
-          "id": "clm_69c94b4e",
+          "id": "clm_d37451ec",
           "label": "alder",
           "retrieval_count": 5,
           "final_rank": 1
         },
         {
-          "id": "clm_d9e4c252",
+          "id": "clm_c2291063",
           "label": "birch",
           "retrieval_count": 0,
           "final_rank": 2
         },
         {
-          "id": "clm_eef09dea",
+          "id": "clm_1ee7af7a",
           "label": "cobalt",
           "retrieval_count": 2,
           "final_rank": 4
         },
         {
-          "id": "clm_59f2cf49",
+          "id": "clm_1882b5c4",
           "label": "dune",
           "retrieval_count": 1,
           "final_rank": 3
         },
         {
-          "id": "clm_a7673086",
+          "id": "clm_ff2423d3",
           "label": "ember",
           "retrieval_count": 20,
           "final_rank": 8
         },
         {
-          "id": "clm_63f58800",
+          "id": "clm_fe3f8dd3",
           "label": "fjord",
           "retrieval_count": 1,
           "final_rank": 5
         },
         {
-          "id": "clm_c6e087bf",
+          "id": "clm_2f4de5be",
           "label": "grove",
           "retrieval_count": 5,
           "final_rank": 6
         },
         {
-          "id": "clm_5672de0c",
+          "id": "clm_983e53b4",
           "label": "harbor",
           "retrieval_count": 0,
           "final_rank": 9
         },
         {
-          "id": "clm_145da2dc",
+          "id": "clm_3d99439c",
           "label": "isotope",
           "retrieval_count": 6,
           "final_rank": 7
         },
         {
-          "id": "clm_e9227ceb",
+          "id": "clm_c7cd8b27",
           "label": "juno",
           "retrieval_count": 0,
           "final_rank": 10
@@ -242,151 +242,151 @@
         "request_id",
         "trace_id"
       ],
-      "response_excerpt": "{\"active_context_id\":\"ac_1e5c4667\",\"claims\":[{\"claim\":{\"id\":\"clm_f44f471b\",\"text\":\"Maintenance catalog 6: release memo for module pine-6 keeps partition window at 12 hours.\",\"kind\":\"fact\",\"scope\":\"project\",\"boundary_class\":\"internal\",\"memory_type\":\"knowledge\",\"status\":\"active\",\"content_hash\":\"sha256:93c601190a2e17a9b21124e11d565de67dd154ccb608c8dfcd367e64ce07d562\",\"utility\":0,\"confidence\":0.5,\"cre"
+      "response_excerpt": "{\"active_context_id\":\"ac_4a5b62cf\",\"claims\":[{\"claim\":{\"id\":\"clm_67f581dd\",\"text\":\"Maintenance catalog 6: release memo for module pine-6 keeps partition window at 12 hours.\",\"kind\":\"fact\",\"scope\":\"project\",\"boundary_class\":\"internal\",\"memory_type\":\"knowledge\",\"status\":\"active\",\"content_hash\":\"sha256:93c601190a2e17a9b21124e11d565de67dd154ccb608c8dfcd367e64ce07d562\",\"utility\":0,\"confidence\":0.5,\"cre"
     },
     "B4": {
       "name": "CONNECTIVITY",
-      "score": 0.6,
+      "score": 0.9,
       "metric": "related_claim_recall_at_5",
-      "expected_baseline": "Low recall unless the related claim also overlaps lexically with the query",
-      "related_claim_recall_at_5": 0.6,
+      "expected_baseline": "High recall once suggested claim links are confirmed and activate traverses them",
+      "related_claim_recall_at_5": 0.9,
       "pair_count": 10,
       "cases": [
         {
           "label": "topic_0",
           "query": "maple-0 login tokens issuer validation",
-          "expected_id": "clm_6a2554c6",
+          "expected_id": "clm_28034a6d",
           "actual_ids": [
-            "clm_ba71bdf8",
-            "clm_6a2554c6"
+            "clm_1447e67e",
+            "clm_28034a6d"
           ],
           "success": true,
-          "notes": "anchor_id=clm_ba71bdf8"
+          "notes": "anchor_id=clm_1447e67e suggested_targets=clm_1447e67e"
         },
         {
           "label": "topic_1",
           "query": "maple-1 login tokens issuer validation",
-          "expected_id": "clm_d63d54a8",
+          "expected_id": "clm_a12cd57c",
           "actual_ids": [
-            "clm_91fc5604",
-            "clm_ba71bdf8",
-            "clm_d63d54a8",
-            "clm_6a2554c6"
+            "clm_04006736",
+            "clm_a12cd57c",
+            "clm_1447e67e",
+            "clm_28034a6d"
           ],
           "success": true,
-          "notes": "anchor_id=clm_91fc5604"
+          "notes": "anchor_id=clm_04006736 suggested_targets=clm_04006736"
         },
         {
           "label": "topic_2",
           "query": "maple-2 login tokens issuer validation",
-          "expected_id": "clm_5e2fe683",
+          "expected_id": "clm_4a3400df",
           "actual_ids": [
-            "clm_32654500",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_5e2fe683",
-            "clm_6a2554c6"
+            "clm_6cb159e1",
+            "clm_4a3400df",
+            "clm_1447e67e",
+            "clm_04006736",
+            "clm_28034a6d"
           ],
           "success": true,
-          "notes": "anchor_id=clm_32654500"
+          "notes": "anchor_id=clm_6cb159e1 suggested_targets=clm_6cb159e1,clm_1447e67e,clm_04006736"
         },
         {
           "label": "topic_3",
           "query": "maple-3 login tokens issuer validation",
-          "expected_id": "clm_e374fa0d",
+          "expected_id": "clm_4e31f850",
           "actual_ids": [
-            "clm_796320f5",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_e374fa0d",
-            "clm_32654500"
+            "clm_0938d768",
+            "clm_4e31f850",
+            "clm_1447e67e",
+            "clm_04006736",
+            "clm_28034a6d"
           ],
           "success": true,
-          "notes": "anchor_id=clm_796320f5"
+          "notes": "anchor_id=clm_0938d768 suggested_targets=clm_0938d768"
         },
         {
           "label": "topic_4",
           "query": "maple-4 login tokens issuer validation",
-          "expected_id": "clm_33d15309",
+          "expected_id": "clm_d9dc9244",
           "actual_ids": [
-            "clm_3ba56c4a",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_33d15309",
-            "clm_796320f5"
+            "clm_63de15c4",
+            "clm_d9dc9244",
+            "clm_1447e67e",
+            "clm_04006736",
+            "clm_0938d768"
           ],
           "success": true,
-          "notes": "anchor_id=clm_3ba56c4a"
+          "notes": "anchor_id=clm_63de15c4 suggested_targets=clm_63de15c4"
         },
         {
           "label": "topic_5",
           "query": "maple-5 login tokens issuer validation",
-          "expected_id": "clm_8fa8f60e",
+          "expected_id": "clm_1189c832",
           "actual_ids": [
-            "clm_c4f32233",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_796320f5",
-            "clm_3ba56c4a"
+            "clm_91e63d3c",
+            "clm_1189c832",
+            "clm_1447e67e",
+            "clm_04006736",
+            "clm_0938d768"
           ],
-          "success": false,
-          "notes": "anchor_id=clm_c4f32233"
+          "success": true,
+          "notes": "anchor_id=clm_91e63d3c suggested_targets=clm_91e63d3c,clm_63de15c4"
         },
         {
           "label": "topic_6",
           "query": "maple-6 login tokens issuer validation",
-          "expected_id": "clm_aa9f60f5",
+          "expected_id": "clm_d7cdc668",
           "actual_ids": [
-            "clm_b2e0a70c",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_796320f5",
-            "clm_3ba56c4a"
+            "clm_bc817e5d",
+            "clm_d7cdc668",
+            "clm_1447e67e",
+            "clm_04006736",
+            "clm_0938d768"
           ],
-          "success": false,
-          "notes": "anchor_id=clm_b2e0a70c"
+          "success": true,
+          "notes": "anchor_id=clm_bc817e5d suggested_targets=clm_bc817e5d,clm_63de15c4"
         },
         {
           "label": "topic_7",
           "query": "maple-7 login tokens issuer validation",
-          "expected_id": "clm_de739383",
+          "expected_id": "clm_2b0d8c2f",
           "actual_ids": [
-            "clm_19bee676",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_de739383",
-            "clm_796320f5"
+            "clm_fc6f42f2",
+            "clm_2b0d8c2f",
+            "clm_1447e67e",
+            "clm_04006736",
+            "clm_0938d768"
           ],
           "success": true,
-          "notes": "anchor_id=clm_19bee676"
+          "notes": "anchor_id=clm_fc6f42f2 suggested_targets=clm_fc6f42f2,clm_63de15c4,clm_1447e67e,clm_04006736,clm_0938d768"
         },
         {
           "label": "topic_8",
           "query": "maple-8 login tokens issuer validation",
-          "expected_id": "clm_cfb707e2",
+          "expected_id": "clm_382b3606",
           "actual_ids": [
-            "clm_00a9d050",
-            "clm_19bee676",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_796320f5"
+            "clm_8a9eed08",
+            "clm_fc6f42f2",
+            "clm_382b3606",
+            "clm_2b0d8c2f",
+            "clm_1447e67e"
           ],
-          "success": false,
-          "notes": "anchor_id=clm_00a9d050"
+          "success": true,
+          "notes": "anchor_id=clm_8a9eed08 suggested_targets=clm_8a9eed08,clm_63de15c4"
         },
         {
           "label": "topic_9",
           "query": "maple-9 login tokens issuer validation",
-          "expected_id": "clm_3acf30e0",
+          "expected_id": "clm_d46cf0ee",
           "actual_ids": [
-            "clm_19bee676",
-            "clm_db17cf3f",
-            "clm_ba71bdf8",
-            "clm_91fc5604",
-            "clm_796320f5"
+            "clm_fc6f42f2",
+            "clm_0a2562f3",
+            "clm_2b0d8c2f",
+            "clm_1447e67e",
+            "clm_04006736"
           ],
           "success": false,
-          "notes": "anchor_id=clm_db17cf3f"
+          "notes": "anchor_id=clm_0a2562f3 suggested_targets=clm_0a2562f3,clm_63de15c4,clm_1447e67e,clm_04006736,clm_0938d768"
         }
       ]
     },
@@ -399,22 +399,22 @@
       "relevance_precision_at_8": 0.75,
       "final_query": "cedar login token rotation issuer design review",
       "final_result_ids": [
-        "clm_a2c00f48",
-        "clm_cae69e9d",
-        "clm_dc0cb188",
-        "clm_90018d64",
-        "clm_dad7f7ec",
-        "clm_fea970b1",
-        "clm_cb0f4e1f",
-        "clm_8035a584"
+        "clm_2d3da165",
+        "clm_9deade3d",
+        "clm_d73686f6",
+        "clm_261bab9d",
+        "clm_ea714412",
+        "clm_a89bf064",
+        "clm_13cfa5bd",
+        "clm_fd5b8e65"
       ],
       "expected_relevant_ids": [
-        "clm_dc0cb188",
-        "clm_fea970b1",
-        "clm_dad7f7ec",
-        "clm_a2c00f48",
-        "clm_cae69e9d",
-        "clm_90018d64"
+        "clm_d73686f6",
+        "clm_a89bf064",
+        "clm_ea714412",
+        "clm_2d3da165",
+        "clm_9deade3d",
+        "clm_261bab9d"
       ]
     }
   }
