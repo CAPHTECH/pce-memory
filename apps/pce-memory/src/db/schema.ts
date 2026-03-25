@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS claims (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   -- recency計算の基準時刻（positive feedbackでのみ更新）
   recency_anchor TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- activateでの暗黙的使用シグナル
+  retrieval_count INTEGER DEFAULT 0,
+  last_retrieved_at TEXT,
   -- 由来情報（mcp-tools.md §1.y Provenance準拠）
   provenance JSON,
   tombstone BOOLEAN DEFAULT FALSE,

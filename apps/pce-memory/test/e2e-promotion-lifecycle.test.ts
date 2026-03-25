@@ -245,11 +245,11 @@ describe('promotion lifecycle e2e', () => {
   it('MULTI-SOURCE DISTILL: combines 3 observations, promotes, and activates the promoted claim', async () => {
     await applyPolicy();
 
-    const sources = await Promise.all([
-      observeRaw('multi-source lifecycle alpha detail'),
-      observeRaw('multi-source lifecycle beta detail'),
-      observeRaw('multi-source lifecycle gamma detail'),
-    ]);
+    const sources = [
+      await observeRaw('multi-source lifecycle alpha detail'),
+      await observeRaw('multi-source lifecycle beta detail'),
+      await observeRaw('multi-source lifecycle gamma detail'),
+    ];
 
     const distill = await distillFromObservations(sources.map((item) => item.observation_id));
     expect(distill.invariant_check_results?.source_counts?.observations).toBe(3);

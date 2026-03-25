@@ -77,6 +77,7 @@ const DEFAULT_TIMESTAMP_FIELDS = [
   'created_at',
   'updated_at',
   'recency_anchor',
+  'last_retrieved_at',
   'at',
   'ts',
   'ts_eff',

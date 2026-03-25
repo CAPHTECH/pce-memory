@@ -76,6 +76,16 @@ export interface FeedbackBoostBreakdown extends FeedbackSignalCounts {
   multiplier: number;
 }
 
+export interface UsageTermBreakdown {
+  retrieval_count: number;
+  usage_anchor_source: 'last_retrieved_at' | 'created_at';
+  usage_anchor_at: string;
+  days_since_anchor: number;
+  usage_decay: number;
+  retrieval_boost: number;
+  multiplier: number;
+}
+
 /** Hybrid Searchスコアの完全内訳 */
 export interface ScoreBreakdown {
   /** テキスト検索スコア */
@@ -92,7 +102,9 @@ export interface ScoreBreakdown {
   provenance_quality?: ProvenanceQualityBreakdown;
   /** feedback由来の品質補正 */
   feedback_boost?: FeedbackBoostBreakdown;
-  /** 最終スコア: score_final = S × g × intent_boost × provenance_quality × feedback_boost */
+  /** activate使用履歴由来の品質補正 */
+  usage_term?: UsageTermBreakdown;
+  /** 最終スコア: score_final = S × g × intent_boost × provenance_quality × feedback_boost × usage_term */
   score_final: number;
 }
 
@@ -116,6 +128,12 @@ const DEFAULT_FEEDBACK_BOOST_OPTIONS: Required<FeedbackBoostOptions> = {
   maxMultiplier: 1.65,
 };
 const POLICY_CHECK_ACTIVE_TASK_PENALTY = 0.1;
+export const USAGE_HALF_LIFE_DAYS = 30;
+export const USAGE_DECAY_FACTOR = 0.5;
+export const MIN_USAGE_DECAY = 0.5;
+export const RETRIEVAL_BOOST_WEIGHT = 0.05;
+export const MAX_RETRIEVAL_BOOST = 1.3;
+const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
 const INTENT_PROFILES: Record<ActivateIntent, IntentProfile> = {
   resume_task: {
@@ -216,6 +234,83 @@ export function calculateG(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function toTimestampMs(value: Date | string | null | undefined): number | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const timestamp = value instanceof Date ? value : new Date(value);
+  const timestampMs = timestamp.getTime();
+  return Number.isFinite(timestampMs) ? timestampMs : undefined;
+}
+
+export function calculateUsageTermBreakdown(input: {
+  retrievalCount: number;
+  lastRetrievedAt?: Date | string | null;
+  createdAt: Date | string;
+  nowMs?: number;
+  usageHalfLifeDays?: number;
+  decayFactor?: number;
+  minDecay?: number;
+  boostWeight?: number;
+  maxBoost?: number;
+}): UsageTermBreakdown {
+  const nowMs =
+    typeof input.nowMs === 'number' && Number.isFinite(input.nowMs) ? input.nowMs : Date.now();
+  const usageHalfLifeDays =
+    typeof input.usageHalfLifeDays === 'number' &&
+    Number.isFinite(input.usageHalfLifeDays) &&
+    input.usageHalfLifeDays > 0
+      ? input.usageHalfLifeDays
+      : USAGE_HALF_LIFE_DAYS;
+  const decayFactor =
+    typeof input.decayFactor === 'number' && Number.isFinite(input.decayFactor)
+      ? input.decayFactor
+      : USAGE_DECAY_FACTOR;
+  const minDecay =
+    typeof input.minDecay === 'number' && Number.isFinite(input.minDecay)
+      ? input.minDecay
+      : MIN_USAGE_DECAY;
+  const boostWeight =
+    typeof input.boostWeight === 'number' && Number.isFinite(input.boostWeight)
+      ? input.boostWeight
+      : RETRIEVAL_BOOST_WEIGHT;
+  const maxBoost =
+    typeof input.maxBoost === 'number' && Number.isFinite(input.maxBoost)
+      ? input.maxBoost
+      : MAX_RETRIEVAL_BOOST;
+  const retrievalCount =
+    Number.isFinite(input.retrievalCount) && input.retrievalCount > 0
+      ? Math.floor(input.retrievalCount)
+      : 0;
+
+  const lastRetrievedAtMs = toTimestampMs(input.lastRetrievedAt ?? null);
+  const createdAtMs = toTimestampMs(input.createdAt);
+  const usageAnchorMs = lastRetrievedAtMs ?? createdAtMs ?? nowMs;
+  const usage_anchor_source =
+    lastRetrievedAtMs !== undefined ? 'last_retrieved_at' : 'created_at';
+  const days_since_anchor = Math.max(0, (nowMs - usageAnchorMs) / DAY_IN_MS);
+  const usage_decay =
+    lastRetrievedAtMs !== undefined
+      ? clamp(1.0 - (days_since_anchor / usageHalfLifeDays) * decayFactor, minDecay, 1.0)
+      : 1.0;
+  const retrieval_boost = clamp(
+    1.0 + Math.log2(retrievalCount + 1) * boostWeight,
+    1.0,
+    maxBoost
+  );
+
+  return {
+    retrieval_count: retrievalCount,
+    usage_anchor_source,
+    usage_anchor_at: new Date(usageAnchorMs).toISOString(),
+    days_since_anchor,
+    usage_decay,
+    retrieval_boost,
+    multiplier: usage_decay * retrieval_boost,
+  };
 }
 
 function normalizedRecencyTerm(recencyTerm: number): number {
@@ -385,7 +480,8 @@ export function calculateScoreBreakdown(
   gFactor: GFactorBreakdown,
   intent?: IntentScoreBreakdown,
   provenanceQuality?: ProvenanceQualityBreakdown,
-  feedbackBoost?: FeedbackBoostBreakdown
+  feedbackBoost?: FeedbackBoostBreakdown,
+  usageTerm?: UsageTermBreakdown
 ): ScoreBreakdown {
   const S = alpha * vecScore + (1 - alpha) * textScore;
   return {
@@ -396,11 +492,13 @@ export function calculateScoreBreakdown(
     ...(intent ? { intent } : {}),
     ...(provenanceQuality ? { provenance_quality: provenanceQuality } : {}),
     ...(feedbackBoost ? { feedback_boost: feedbackBoost } : {}),
+    ...(usageTerm ? { usage_term: usageTerm } : {}),
     score_final:
       S *
       gFactor.g *
       (intent?.boost ?? 1.0) *
       (provenanceQuality?.multiplier ?? 1.0) *
-      (feedbackBoost?.multiplier ?? 1.0),
+      (feedbackBoost?.multiplier ?? 1.0) *
+      (usageTerm?.multiplier ?? 1.0),
   };
 }

@@ -55,6 +55,8 @@ export interface Claim {
   updated_at: Date | string;
   // recency計算の基準時刻（positive feedbackでのみ更新）
   recency_anchor: Date | string;
+  retrieval_count: number;
+  last_retrieved_at?: Date | string | null;
   tombstone?: boolean;
   tombstone_at?: Date | string | null;
   rollback_reason?: string | null;
@@ -102,6 +104,8 @@ export type ClaimInput = Omit<
   | 'created_at'
   | 'updated_at'
   | 'recency_anchor'
+  | 'retrieval_count'
+  | 'last_retrieved_at'
 > & {
   memory_type?: MemoryType;
   status?: ClaimStatus;
@@ -110,7 +114,7 @@ export type ClaimInput = Omit<
 
 /** 全カラムのSELECT句 */
 const CLAIM_COLUMNS =
-  'id, text, kind, scope, boundary_class, memory_type, status, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance, tombstone, tombstone_at, rollback_reason, superseded_by';
+  'id, text, kind, scope, boundary_class, memory_type, status, content_hash, utility, confidence, created_at, updated_at, recency_anchor, retrieval_count, last_retrieved_at, provenance, tombstone, tombstone_at, rollback_reason, superseded_by';
 
 /**
  * DBから取得したClaimのprovenanceフィールドをパース
@@ -133,6 +137,11 @@ function parseClaimProvenance(claim: ClaimRow): Claim {
     created_at: claim.created_at,
     updated_at: claim.updated_at,
     recency_anchor: claim.recency_anchor,
+    retrieval_count:
+      typeof claim.retrieval_count === 'number' && Number.isFinite(claim.retrieval_count)
+        ? claim.retrieval_count
+        : 0,
+    last_retrieved_at: claim.last_retrieved_at ?? null,
     tombstone: Boolean(claim.tombstone),
     tombstone_at: claim.tombstone_at ?? null,
     rollback_reason: claim.rollback_reason ?? null,
@@ -463,6 +472,26 @@ export async function updateClaimStatus(id: string, status: ClaimStatus): Promis
   await conn.run(
     'UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
     [status, id]
+  );
+}
+
+export async function recordClaimRetrievals(
+  ids: string[],
+  retrievedAt: string = new Date().toISOString()
+): Promise<void> {
+  const uniqueIds = [...new Set(ids.filter((id) => id.length > 0))];
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  const conn = await getConnection();
+  const placeholders = uniqueIds.map((_, index) => `$${index + 2}`).join(',');
+  await conn.run(
+    `UPDATE claims
+     SET retrieval_count = COALESCE(retrieval_count, 0) + 1,
+         last_retrieved_at = $1
+     WHERE id IN (${placeholders})`,
+    [retrievedAt, ...uniqueIds]
   );
 }
 
