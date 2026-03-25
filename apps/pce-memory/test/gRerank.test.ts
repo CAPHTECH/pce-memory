@@ -16,6 +16,7 @@ import {
   getHalfLife,
   KIND_HALF_LIVES,
   DEFAULT_HALF_LIFE,
+  calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
 } from '../src/store/rerank.js';
 
@@ -262,6 +263,30 @@ describe('calculateScoreBreakdown function', () => {
     expect(breakdown.s_text).toBe(0.3);
     expect(breakdown.s_vec).toBe(0.9);
     expect(breakdown.g).toBe(gFactor);
+  });
+
+  it('applies provenance quality multiplier to score_final', () => {
+    const gFactor = calculateG(0, 0.5, 0.5);
+    const provenanceQuality = calculateProvenanceQualityBreakdown({
+      evidenceCount: 2,
+      hasProvenanceActorNote: true,
+      hasPromotionLineage: true,
+    });
+    const breakdown = calculateScoreBreakdown(
+      0.4,
+      0.8,
+      0.65,
+      gFactor,
+      undefined,
+      provenanceQuality
+    );
+
+    expect(breakdown.provenance_quality).toEqual(provenanceQuality);
+    expect(provenanceQuality.multiplier).toBeCloseTo(1.1 * 1.05 * 1.05, 10);
+    expect(breakdown.score_final).toBeCloseTo(
+      breakdown.S * gFactor.g * provenanceQuality.multiplier,
+      10
+    );
   });
 });
 

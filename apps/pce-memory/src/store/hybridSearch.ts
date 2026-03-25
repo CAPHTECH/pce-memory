@@ -25,6 +25,7 @@ import {
   adjustRecencyTerm,
   calculateGFromClaim,
   calculateIntentScoreBreakdown,
+  calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
   type GFactorBreakdown,
   type ScoreBreakdown,
@@ -290,6 +291,9 @@ interface ClaimMetrics {
   /** 有効タイムスタンプ（updated_at or created_at） */
   ts_eff: Date | string;
   kind: string;
+  evidence_count: number;
+  has_provenance_actor_note: boolean;
+  has_promotion_lineage: boolean;
 }
 
 /**
@@ -298,6 +302,17 @@ interface ClaimMetrics {
 interface UtilityStats {
   mean: number;
   std: number;
+}
+
+interface ClaimMetricsRow {
+  id: string;
+  utility: number;
+  confidence: number;
+  ts_eff: Date | string;
+  kind: string;
+  evidence_count: number | bigint;
+  has_provenance_actor_note: number | bigint | boolean;
+  has_promotion_lineage: number | bigint | boolean;
 }
 
 /**
@@ -761,19 +776,50 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
   // recency計算にはrecency_anchorを使用（positive feedbackでのみ更新される）
   const sql = `
     SELECT
-      id, utility, confidence, kind,
-      COALESCE(recency_anchor, created_at) as ts_eff
+      c.id,
+      c.utility,
+      c.confidence,
+      c.kind,
+      COALESCE(c.recency_anchor, c.created_at) as ts_eff,
+      COUNT(DISTINCT e.id) as evidence_count,
+      CASE
+        WHEN COALESCE(json_extract_string(c.provenance, '$.actor'), '') <> ''
+         AND COALESCE(json_extract_string(c.provenance, '$.note'), '') <> ''
+        THEN 1
+        ELSE 0
+      END as has_provenance_actor_note,
+      MAX(CASE WHEN pq.id IS NOT NULL THEN 1 ELSE 0 END) as has_promotion_lineage
     FROM claims c
+    LEFT JOIN evidence e ON e.claim_id = c.id
+    LEFT JOIN promotion_queue pq
+      ON pq.accepted_claim_id = c.id
+     AND pq.status = 'accepted'
     WHERE c.id IN (${placeholders}) AND ${activeClaimFilter('c')}
+    GROUP BY
+      c.id,
+      c.utility,
+      c.confidence,
+      c.kind,
+      COALESCE(c.recency_anchor, c.created_at),
+      c.provenance
   `;
 
   const reader = await conn.runAndReadAll(sql, claimIds);
-  const rawRows = reader.getRowObjects() as unknown as ClaimMetrics[];
+  const rawRows = reader.getRowObjects() as unknown as ClaimMetricsRow[];
   const rows = normalizeRowsTimestamps(rawRows);
 
   const metricsMap = new Map<string, ClaimMetrics>();
   for (const row of rows) {
-    metricsMap.set(row.id, row);
+    metricsMap.set(row.id, {
+      id: row.id,
+      utility: row.utility,
+      confidence: row.confidence,
+      ts_eff: row.ts_eff,
+      kind: row.kind,
+      evidence_count: Number(row.evidence_count),
+      has_provenance_actor_note: Number(row.has_provenance_actor_note) > 0,
+      has_promotion_lineage: Number(row.has_promotion_lineage) > 0,
+    });
   }
 
   return metricsMap;
@@ -833,6 +879,7 @@ function mergeResultsWithRerank(
     const metrics = claimMetrics.get(id);
     let gFactor: GFactorBreakdown;
     let intentBreakdown: ReturnType<typeof calculateIntentScoreBreakdown> = undefined;
+    let provenanceQuality = undefined;
 
     if (metrics) {
       const baseGFactor = calculateGFromClaim(
@@ -856,6 +903,11 @@ function mergeResultsWithRerank(
         recency_term: adjustedRecencyTerm,
         g: baseGFactor.utility_term * baseGFactor.confidence_term * adjustedRecencyTerm,
       };
+      provenanceQuality = calculateProvenanceQualityBreakdown({
+        evidenceCount: metrics.evidence_count,
+        hasProvenanceActorNote: metrics.has_provenance_actor_note,
+        hasPromotionLineage: metrics.has_promotion_lineage,
+      });
     } else {
       // メトリクスがない場合: g = 1.0（影響なし）
       gFactor = {
@@ -866,7 +918,14 @@ function mergeResultsWithRerank(
       };
     }
 
-    const breakdown = calculateScoreBreakdown(textScore, vecScore, alpha, gFactor, intentBreakdown);
+    const breakdown = calculateScoreBreakdown(
+      textScore,
+      vecScore,
+      alpha,
+      gFactor,
+      intentBreakdown,
+      provenanceQuality
+    );
     const scoreFinal = breakdown.score_final;
 
     if (scoreFinal >= threshold) {

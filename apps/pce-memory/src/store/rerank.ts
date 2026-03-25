@@ -39,6 +39,17 @@ export interface IntentScoreBreakdown {
   boost: number;
 }
 
+/** Provenance/evidence由来の品質補正 */
+export interface ProvenanceQualityBreakdown {
+  evidence_count: number;
+  evidence_boost: number;
+  has_actor_note: boolean;
+  provenance_boost: number;
+  has_promotion_lineage: boolean;
+  promotion_lineage_boost: number;
+  multiplier: number;
+}
+
 /** Hybrid Searchスコアの完全内訳 */
 export interface ScoreBreakdown {
   /** テキスト検索スコア */
@@ -51,7 +62,9 @@ export interface ScoreBreakdown {
   g: GFactorBreakdown;
   /** intent-aware補正 */
   intent?: IntentScoreBreakdown;
-  /** 最終スコア: score_final = S × g */
+  /** provenance/evidence品質補正 */
+  provenance_quality?: ProvenanceQualityBreakdown;
+  /** 最終スコア: score_final = S × g × intent_boost × provenance_quality */
   score_final: number;
 }
 
@@ -202,6 +215,30 @@ export function calculateIntentScoreBreakdown(
   };
 }
 
+export function calculateProvenanceQualityBreakdown(input: {
+  evidenceCount: number;
+  hasProvenanceActorNote: boolean;
+  hasPromotionLineage: boolean;
+}): ProvenanceQualityBreakdown {
+  const evidence_count =
+    Number.isFinite(input.evidenceCount) && input.evidenceCount > 0 ? input.evidenceCount : 0;
+  const evidence_boost = evidence_count > 0 ? 1.1 : 1.0;
+  const has_actor_note = input.hasProvenanceActorNote;
+  const provenance_boost = has_actor_note ? 1.05 : 1.0;
+  const has_promotion_lineage = input.hasPromotionLineage;
+  const promotion_lineage_boost = has_promotion_lineage ? 1.05 : 1.0;
+
+  return {
+    evidence_count,
+    evidence_boost,
+    has_actor_note,
+    provenance_boost,
+    has_promotion_lineage,
+    promotion_lineage_boost,
+    multiplier: evidence_boost * provenance_boost * promotion_lineage_boost,
+  };
+}
+
 /**
  * Claimメトリクスからg()を計算
  *
@@ -247,7 +284,8 @@ export function calculateScoreBreakdown(
   vecScore: number,
   alpha: number,
   gFactor: GFactorBreakdown,
-  intent?: IntentScoreBreakdown
+  intent?: IntentScoreBreakdown,
+  provenanceQuality?: ProvenanceQualityBreakdown
 ): ScoreBreakdown {
   const S = alpha * vecScore + (1 - alpha) * textScore;
   return {
@@ -256,6 +294,7 @@ export function calculateScoreBreakdown(
     S,
     g: gFactor,
     ...(intent ? { intent } : {}),
-    score_final: S * gFactor.g * (intent?.boost ?? 1.0),
+    ...(provenanceQuality ? { provenance_quality: provenanceQuality } : {}),
+    score_final: S * gFactor.g * (intent?.boost ?? 1.0) * (provenanceQuality?.multiplier ?? 1.0),
   };
 }
