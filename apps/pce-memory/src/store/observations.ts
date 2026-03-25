@@ -88,8 +88,19 @@ export async function insertObservation(input: InsertObservationInput): Promise<
     [input.id]
   );
   const rawRows = reader.getRowObjects() as unknown as Observation[];
-  const rows = normalizeRowsTimestamps(rawRows);
+  const rows = normalizeObservationRows(rawRows);
   return rows[0]!;
+}
+
+/**
+ * Observationの tags フィールドをパースして正規化
+ * DuckDBはJSON列を文字列として返すため、配列に変換する
+ */
+function normalizeObservationRows(rawRows: Observation[]): Observation[] {
+  return normalizeRowsTimestamps(rawRows).map((obs) => ({
+    ...obs,
+    tags: parseObservationTags(obs.tags),
+  }));
 }
 
 export async function findObservationById(id: string): Promise<Observation | undefined> {
@@ -99,7 +110,7 @@ export async function findObservationById(id: string): Promise<Observation | und
     [id]
   );
   const rawRows = reader.getRowObjects() as unknown as Observation[];
-  const rows = normalizeRowsTimestamps(rawRows);
+  const rows = normalizeObservationRows(rawRows);
   return rows[0];
 }
 
@@ -117,7 +128,7 @@ export async function findObservationsByIds(ids: string[]): Promise<Observation[
     ids
   );
   const rawRows = reader.getRowObjects() as unknown as Observation[];
-  return normalizeRowsTimestamps(rawRows);
+  return normalizeObservationRows(rawRows);
 }
 
 function buildObservationBoundaryFilterCondition(
