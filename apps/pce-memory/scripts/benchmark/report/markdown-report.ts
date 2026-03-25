@@ -48,9 +48,16 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
     lines.push(
       `- **Hybrid search** achieves ${pct(baseline.avgRecall)} recall, outperforming text-only (${pct(textOnly.avgRecall)}) and vector-only (${pct(vectorOnly.avgRecall)})`,
     );
-    lines.push(
-      `- **g() reranking** improves nDCG by ${delta(baseline.avgNdcg - (ablation.configs.find((c) => c.config.name === 'hybrid-no-rerank')?.avgNdcg ?? 0))} over hybrid without reranking`,
-    );
+    if (ablation.rerankAblation) {
+      const ra = ablation.rerankAblation;
+      lines.push(
+        `- **g() reranking** (${ra.claimCount} claims): nDCG ${delta(ra.delta.deltaNdcg)}, Precision ${delta(ra.delta.deltaPrecision)}, Recall ${delta(ra.delta.deltaRecall)}`,
+      );
+    } else {
+      lines.push(
+        `- **g() reranking** improves nDCG by ${delta(baseline.avgNdcg - (ablation.configs.find((c) => c.config.name === 'hybrid-no-rerank')?.avgNdcg ?? 0))} over hybrid without reranking`,
+      );
+    }
   }
   if (scale5k && scale15) {
     lines.push(
@@ -87,16 +94,37 @@ export function generateMarkdownReport(report: BenchmarkReport): string {
   }
   lines.push('');
 
+  // Rerank Ablation (large corpus)
+  if (ablation.rerankAblation) {
+    const ra = ablation.rerankAblation;
+    lines.push('### Rerank Ablation (Large Corpus)');
+    lines.push('');
+    lines.push(`Measures g() reranking effect with ${ra.claimCount} claims (golden + synthetic noise) to detect score differentiation invisible at small corpus sizes.`);
+    lines.push('');
+    lines.push('| Config | Precision@10 | Recall@10 | MRR | nDCG | Latency |');
+    lines.push('|--------|-------------|-----------|-----|------|---------|');
+    lines.push(
+      `| hybrid-no-rerank | ${pct(ra.withoutRerank.avgPrecision)} | ${pct(ra.withoutRerank.avgRecall)} | ${pct(ra.withoutRerank.avgMrr)} | ${pct(ra.withoutRerank.avgNdcg)} | ${ms(ra.withoutRerank.avgLatencyMs)} |`,
+    );
+    lines.push(
+      `| **hybrid-baseline** | ${pct(ra.withRerank.avgPrecision)} | ${pct(ra.withRerank.avgRecall)} | ${pct(ra.withRerank.avgMrr)} | ${pct(ra.withRerank.avgNdcg)} | ${ms(ra.withRerank.avgLatencyMs)} |`,
+    );
+    lines.push(
+      `| **\u0394 rerank effect** | ${delta(ra.delta.deltaPrecision)} | ${delta(ra.delta.deltaRecall)} | ${delta(ra.delta.deltaMrr)} | ${delta(ra.delta.deltaNdcg)} | — |`,
+    );
+    lines.push('');
+  }
+
   // 2. Scalability
   lines.push('## 2. Scalability');
   lines.push('');
   lines.push('Measures search quality and latency as the knowledge base grows (baseline config: hybrid + rerank).');
   lines.push('');
-  lines.push('| Claims | Precision@10 | Recall@10 | MRR | nDCG | Latency p50 | Latency p95 |');
-  lines.push('|--------|-------------|-----------|-----|------|-------------|-------------|');
+  lines.push('| Claims | P@5 | R@5 | P@10 | R@10 | MRR | nDCG | Latency p50 | Latency p95 |');
+  lines.push('|--------|-----|-----|------|------|-----|------|-------------|-------------|');
   for (const dp of scalability.dataPoints) {
     lines.push(
-      `| ${dp.claimCount.toLocaleString()} | ${pct(dp.avgPrecision)} | ${pct(dp.avgRecall)} | ${pct(dp.avgMrr)} | ${pct(dp.avgNdcg)} | ${ms(dp.latency.p50)} | ${ms(dp.latency.p95)} |`,
+      `| ${dp.claimCount.toLocaleString()} | ${pct(dp.avgPrecisionAt5)} | ${pct(dp.avgRecallAt5)} | ${pct(dp.avgPrecision)} | ${pct(dp.avgRecall)} | ${pct(dp.avgMrr)} | ${pct(dp.avgNdcg)} | ${ms(dp.latency.p50)} | ${ms(dp.latency.p95)} |`,
     );
   }
   lines.push('');
