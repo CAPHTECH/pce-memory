@@ -292,24 +292,27 @@ describe('calculateScoreBreakdown function', () => {
 });
 
 describe('calculateIntentScoreBreakdown function', () => {
-  it('penalizes non-norm non-policy claims for policy_check intent', () => {
+  it('strongly penalizes active task claims for policy_check intent', () => {
     const breakdown = calculateIntentScoreBreakdown('policy_check', 'task', 'working_state');
 
     expect(breakdown).toBeDefined();
     expect(breakdown?.kind_boost).toBe(1);
     expect(breakdown?.memory_type_boost).toBe(1);
-    expect(breakdown?.penalty_multiplier).toBe(0.3);
-    expect(breakdown?.boost).toBe(0.3);
+    expect(breakdown?.penalty_multiplier).toBe(0.1);
+    expect(breakdown?.boost).toBe(0.1);
   });
 
-  it('does not penalize norm or policy_hint claims for policy_check intent', () => {
+  it('does not penalize norm, policy_hint, or knowledge fact claims for policy_check intent', () => {
     const normBreakdown = calculateIntentScoreBreakdown('policy_check', 'fact', 'norm');
     const policyBreakdown = calculateIntentScoreBreakdown('policy_check', 'policy_hint', 'knowledge');
+    const factBreakdown = calculateIntentScoreBreakdown('policy_check', 'fact', 'knowledge');
 
     expect(normBreakdown?.penalty_multiplier).toBe(1);
-    expect(normBreakdown?.boost).toBe(1.5);
+    expect(normBreakdown?.boost).toBe(1.4);
     expect(policyBreakdown?.penalty_multiplier).toBe(1);
-    expect(policyBreakdown?.boost).toBeCloseTo(1.45 * 1.05, 10);
+    expect(policyBreakdown?.boost).toBeCloseTo(1.2 * 1.05, 10);
+    expect(factBreakdown?.penalty_multiplier).toBe(1);
+    expect(factBreakdown?.boost).toBeCloseTo(1.05, 10);
   });
 });
 
