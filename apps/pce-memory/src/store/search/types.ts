@@ -16,11 +16,11 @@ export const ALPHA = 0.65;
 /** 採用閾値（TLA+ Threshold = 15 / 100） */
 export const THRESHOLD = 0.15;
 
-/** テキスト検索上限（3× of k_final） */
-export const K_TEXT = 48;
+/** テキスト検索上限（8× of k_final） */
+export const K_TEXT = 128;
 
-/** ベクトル検索上限（6× of k_final） */
-export const K_VEC = 96;
+/** ベクトル検索上限（16× of k_final） */
+export const K_VEC = 256;
 
 /** MMR関連デフォルト値 */
 export const DEFAULT_MMR_LAMBDA = 0.72;

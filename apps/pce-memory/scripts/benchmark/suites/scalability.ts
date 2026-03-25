@@ -15,7 +15,7 @@ import type { ClaimKind } from '../../../src/domain/types';
 import { generateClaims, type SyntheticClaim } from '../data/synthetic-claims';
 import { computeLatencyStats, type ScalabilityDataPoint, type ScalabilityResult } from '../types';
 
-const SCALE_POINTS = [15, 100, 500, 1000, 5000];
+const SCALE_POINTS = [15, 50, 100, 250, 500, 1000, 5000];
 const SEARCH_REPETITIONS = 3;
 const TOP_K = 10;
 
