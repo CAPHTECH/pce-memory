@@ -180,6 +180,7 @@ function buildActivatedObservationClaim(
     scope: 'session',
     boundary_class: observation.boundary_class,
     memory_type: null,
+    status: 'active',
     content_hash: observation.content_digest,
     utility: 0,
     confidence: 1,

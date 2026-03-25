@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS claims (
   scope TEXT NOT NULL,
   boundary_class TEXT NOT NULL,
   memory_type TEXT,
+  status TEXT DEFAULT 'active',
   content_hash TEXT UNIQUE NOT NULL,
   -- g()再ランキング用カラム（ADR-0004準拠）
   utility REAL DEFAULT 0.0,

@@ -1,8 +1,9 @@
 import { getConnection } from '../db/connection.js';
+import type { FeedbackSignal } from '../domain/types.js';
 
 export interface FeedbackInput {
   claim_id: string;
-  signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
+  signal: FeedbackSignal;
   score?: number;
   active_context_id?: string;
 }
@@ -26,6 +27,7 @@ export const FEEDBACK_DELTAS: Record<
   harmful: { utility: -0.2, confidence: -0.1 },
   outdated: { utility: 0.0, confidence: -0.2 },
   duplicate: { utility: -0.05, confidence: 0.0 },
+  completed: { utility: 0.0, confidence: 0.0 },
 };
 
 /**

@@ -14,6 +14,8 @@ import {
   findClaimById,
   findClaimsByIds,
   findClaimByContentHash,
+  markStaleWorkingStateClaims,
+  updateClaimStatus,
   ContentHashCollisionError,
 } from '../store/claims.js';
 import type { Claim, Provenance } from '../store/claims.js';
@@ -59,13 +61,21 @@ import {
   ACTIVATE_INTENTS,
   CLAIM_KINDS,
   ENTITY_TYPES,
+  FEEDBACK_SIGNALS,
   MEMORY_TYPES,
   isValidActivateIntent,
   isValidClaimKind,
   isValidEntityType,
+  isValidFeedbackSignal,
   isValidMemoryType,
 } from '../domain/types.js';
-import type { ActivateIntent, ClaimKind, MemoryType } from '../domain/types.js';
+import type {
+  ActivateIntent,
+  ClaimKind,
+  ClaimStatus,
+  FeedbackSignal,
+  MemoryType,
+} from '../domain/types.js';
 import * as E from 'fp-ts/Either';
 
 import {
@@ -381,6 +391,10 @@ function maxActivateItemScore(items: ActivateSearchItem[]): number {
   return items.reduce((maxScore, item) => {
     return Number.isFinite(item.score) ? Math.max(maxScore, item.score) : maxScore;
   }, Number.NEGATIVE_INFINITY);
+}
+
+function getActivateExcludedWorkingStateStatuses(includeStaleTasks: boolean): ClaimStatus[] {
+  return includeStaleTasks ? ['completed'] : ['completed', 'stale'];
 }
 
 function normalizeObservationScoresForActivate(
@@ -2368,6 +2382,7 @@ export async function handleActivate(args: Record<string, unknown>) {
     cursor,
     include_meta,
     include_observations,
+    include_stale_tasks,
     intent,
     kind_filter,
     memory_type_filter,
@@ -2379,6 +2394,7 @@ export async function handleActivate(args: Record<string, unknown>) {
     cursor?: string;
     include_meta?: boolean;
     include_observations?: unknown;
+    include_stale_tasks?: unknown;
     intent?: unknown;
     kind_filter?: unknown;
     memory_type_filter?: unknown;
@@ -2446,6 +2462,15 @@ export async function handleActivate(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+    if (include_stale_tasks !== undefined && typeof include_stale_tasks !== 'boolean') {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'include_stale_tasks must be boolean', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
     if (intent !== undefined && !isValidActivateIntent(intent)) {
       return createToolResult(
         {
@@ -2497,17 +2522,21 @@ export async function handleActivate(args: Record<string, unknown>) {
     const resolvedIntent = intent as ActivateIntent | undefined;
     const resolvedKindFilter = kind_filter as ClaimKind[] | undefined;
     const resolvedMemoryTypeFilter = memory_type_filter as MemoryType[] | undefined;
+    const includeStaleTasks = include_stale_tasks === true;
     const resolvedTopK =
       top_k ??
       (typeof hybridPolicy.k_final === 'number' && Number.isFinite(hybridPolicy.k_final)
         ? Math.max(1, Math.floor(hybridPolicy.k_final))
         : 12);
 
+    await markStaleWorkingStateClaims();
+
     const searchConfig = {
       boundaryClasses: allowedBoundaryClasses,
       ...(resolvedIntent ? { intent: resolvedIntent } : {}),
       ...(resolvedKindFilter ? { kindFilter: resolvedKindFilter } : {}),
       ...(resolvedMemoryTypeFilter ? { memoryTypeFilter: resolvedMemoryTypeFilter } : {}),
+      excludedWorkingStateStatuses: getActivateExcludedWorkingStateStatuses(includeStaleTasks),
       includeBreakdown: true,
       ...(typeof hybridPolicy.alpha === 'number' ? { alpha: hybridPolicy.alpha } : {}),
       ...(typeof hybridPolicy.threshold === 'number' ? { threshold: hybridPolicy.threshold } : {}),
@@ -2691,7 +2720,7 @@ export async function handleBoundaryValidate(args: Record<string, unknown>) {
 export async function handleFeedback(args: Record<string, unknown>) {
   const { claim_id, signal, score } = args as {
     claim_id?: string;
-    signal?: string;
+    signal?: unknown;
     score?: number;
   };
   const reqId = crypto.randomUUID();
@@ -2717,6 +2746,19 @@ export async function handleFeedback(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+    if (!isValidFeedbackSignal(signal)) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            `signal must be one of ${FEEDBACK_SIGNALS.join('|')}`,
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
     const exists = await findClaimById(claim_id);
     if (!exists) {
       return createToolResult(
@@ -2724,21 +2766,48 @@ export async function handleFeedback(args: Record<string, unknown>) {
         { isError: true }
       );
     }
+    const feedbackSignal = signal as FeedbackSignal;
+    if (feedbackSignal === 'completed' && exists.memory_type !== 'working_state') {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'signal=completed is only allowed for working_state claims',
+            reqId
+          ),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
     const activeContextId = getActiveContextId();
     const feedbackInput: {
       claim_id: string;
-      signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
+      signal: FeedbackSignal;
       score?: number;
       active_context_id?: string;
     } = {
       claim_id,
-      signal: signal as 'helpful' | 'harmful' | 'outdated' | 'duplicate',
+      signal: feedbackSignal,
       ...(score !== undefined && { score }),
       ...(activeContextId !== undefined && { active_context_id: activeContextId }),
     };
     const res = await recordFeedback(feedbackInput);
-    const delta = signal === 'helpful' ? 1 : signal === 'harmful' ? -1 : -0.5;
-    await updateCritic(claim_id, delta, 0, 5);
+    if (feedbackSignal === 'completed') {
+      await updateClaimStatus(claim_id, 'completed');
+    }
+
+    const criticDelta =
+      feedbackSignal === 'helpful'
+        ? 1
+        : feedbackSignal === 'harmful'
+          ? -1
+          : feedbackSignal === 'outdated' || feedbackSignal === 'duplicate'
+            ? -0.5
+            : undefined;
+    if (criticDelta !== undefined) {
+      await updateCritic(claim_id, criticDelta, 0, 5);
+    }
 
     await appendLog({
       id: `log_${reqId}`,
@@ -2750,6 +2819,8 @@ export async function handleFeedback(args: Record<string, unknown>) {
     });
     return createToolResult({
       ...res,
+      claim_id,
+      signal: feedbackSignal,
       policy_version: getPolicyVersion(),
       state: getStateType(),
       request_id: reqId,
@@ -4685,6 +4756,12 @@ export const TOOL_DEFINITIONS = [
             'Also search transient observations for short-term recall and return them as micro-layer items.',
           default: false,
         },
+        include_stale_tasks: {
+          type: 'boolean',
+          description:
+            'Include stale working_state claims in activate results. Completed items remain excluded.',
+          default: false,
+        },
       },
       required: ['scope', 'allow'],
     },
@@ -4789,12 +4866,15 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_feedback',
     description:
-      'Report knowledge quality after using activated claims. Send helpful when knowledge solved the problem, harmful if it caused errors, outdated if info was stale, duplicate if redundant.',
+      'Report knowledge quality after using activated claims. Send helpful when knowledge solved the problem, harmful if it caused errors, outdated if info was stale, duplicate if redundant, or completed to close a working_state claim.',
     inputSchema: {
       type: 'object',
       properties: {
         claim_id: { type: 'string' },
-        signal: { type: 'string', enum: ['helpful', 'harmful', 'outdated', 'duplicate'] },
+        signal: {
+          type: 'string',
+          enum: ['helpful', 'harmful', 'outdated', 'duplicate', 'completed'],
+        },
         score: { type: 'number', minimum: -1, maximum: 1 },
       },
       required: ['claim_id', 'signal'],
@@ -4806,7 +4886,7 @@ export const TOOL_DEFINITIONS = [
         claim_id: { type: 'string', description: 'Target claim ID' },
         signal: {
           type: 'string',
-          enum: ['helpful', 'harmful', 'outdated', 'duplicate'],
+          enum: ['helpful', 'harmful', 'outdated', 'duplicate', 'completed'],
           description: 'Feedback signal',
         },
         policy_version: { type: 'string', description: 'Policy version' },

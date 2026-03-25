@@ -30,6 +30,32 @@ export const MEMORY_TYPES = [
 export type MemoryType = (typeof MEMORY_TYPES)[number];
 
 /**
+ * Claim statusの有効な値
+ */
+export const CLAIM_STATUSES = ['active', 'completed', 'stale'] as const;
+
+/**
+ * Claim statusのユニオン型
+ */
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+
+/**
+ * Feedback signalの有効な値
+ */
+export const FEEDBACK_SIGNALS = [
+  'helpful',
+  'harmful',
+  'outdated',
+  'duplicate',
+  'completed',
+] as const;
+
+/**
+ * Feedback signalのユニオン型
+ */
+export type FeedbackSignal = (typeof FEEDBACK_SIGNALS)[number];
+
+/**
  * Activate intentの有効な値
  */
 export const ACTIVATE_INTENTS = [
@@ -67,6 +93,20 @@ export function isValidClaimKind(kind: unknown): kind is ClaimKind {
  */
 export function isValidMemoryType(type: unknown): type is MemoryType {
   return typeof type === 'string' && MEMORY_TYPES.includes(type as MemoryType);
+}
+
+/**
+ * Claim statusが有効かチェック
+ */
+export function isValidClaimStatus(status: unknown): status is ClaimStatus {
+  return typeof status === 'string' && CLAIM_STATUSES.includes(status as ClaimStatus);
+}
+
+/**
+ * Feedback signalが有効かチェック
+ */
+export function isValidFeedbackSignal(signal: unknown): signal is FeedbackSignal {
+  return typeof signal === 'string' && FEEDBACK_SIGNALS.includes(signal as FeedbackSignal);
 }
 
 /**

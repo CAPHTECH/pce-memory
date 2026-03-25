@@ -12,6 +12,7 @@ import * as E from 'fp-ts/Either';
 import { pipe } from 'fp-ts/function';
 import type { DomainError } from './errors.js';
 import { domainError } from './errors.js';
+import type { FeedbackSignal } from './types.js';
 
 // ========== Phantom Types（コンパイル時の状態表現）==========
 
@@ -75,6 +76,7 @@ export interface ActivateInput {
   allow: string[];
   top_k?: number;
   q?: string;
+  include_stale_tasks?: boolean;
 }
 
 export interface ActivateResult {
@@ -85,7 +87,7 @@ export interface ActivateResult {
 
 export interface FeedbackInput {
   claim_id: string;
-  signal: 'helpful' | 'harmful' | 'outdated' | 'duplicate';
+  signal: FeedbackSignal;
   score?: number;
 }
 
