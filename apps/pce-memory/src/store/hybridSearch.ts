@@ -21,7 +21,43 @@ import { getConnection } from '../db/connection.js';
 import type { Claim } from './claims.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
-import { validateEmbedding } from '../domain/validation.js';
+import type { DomainError } from '../domain/errors.js';
+import { embeddingValidationError } from '../domain/errors.js';
+
+/**
+ * Embedding vector validation (inlined from deleted domain/validation.ts).
+ */
+const MAX_EMBEDDING_DIM = 4096;
+const MAX_EMBEDDING_MAGNITUDE = 10.0;
+
+const validateEmbedding = (
+  embedding: readonly number[]
+): E.Either<DomainError, void> => {
+  if (embedding.length === 0) {
+    return E.left(embeddingValidationError('Embedding vector must not be empty'));
+  }
+  if (embedding.length > MAX_EMBEDDING_DIM) {
+    return E.left(
+      embeddingValidationError(
+        `Embedding dimension ${embedding.length} exceeds maximum ${MAX_EMBEDDING_DIM}`
+      )
+    );
+  }
+  for (let i = 0; i < embedding.length; i++) {
+    const v = embedding[i];
+    if (typeof v !== 'number' || !Number.isFinite(v)) {
+      return E.left(embeddingValidationError(`Invalid embedding value at index ${i}: ${v}`));
+    }
+    if (Math.abs(v) > MAX_EMBEDDING_MAGNITUDE) {
+      return E.left(
+        embeddingValidationError(
+          `Embedding value ${v} at index ${i} exceeds magnitude limit ${MAX_EMBEDDING_MAGNITUDE}`
+        )
+      );
+    }
+  }
+  return E.right(undefined);
+};
 import {
   adjustRecencyTerm,
   calculateFeedbackBoostBreakdown,
