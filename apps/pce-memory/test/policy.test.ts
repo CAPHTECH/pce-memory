@@ -85,6 +85,9 @@ describe('loadLatestPolicy', () => {
       expect(result.right.config_json.retrieval?.hybrid?.alpha).toBe(
         defaultPolicy.retrieval?.hybrid?.alpha
       );
+      expect(result.right.config_json.maintenance?.hints_enabled).toBe(
+        defaultPolicy.maintenance?.hints_enabled
+      );
       expect(result.right.config_json).not.toHaveProperty('extraction');
     }
   });
@@ -155,6 +158,25 @@ describe('Policy persistence integration', () => {
       expect(loadResult.right.version).toBe('custom-1.0');
       expect(loadResult.right.config_json.version).toBe('custom-1.0');
       expect(loadResult.right.config_json.boundary.version).toBe('custom-1.0');
+    }
+  });
+
+  it('persists maintenance policy settings', async () => {
+    const customPolicy = {
+      ...defaultPolicy,
+      maintenance: {
+        hints_enabled: false,
+        similarity_threshold: 0.97,
+        stale_days: 45,
+      },
+    };
+
+    await savePolicy('custom-maintenance', 'version: custom-maintenance', customPolicy)();
+
+    const result = await loadLatestPolicy()();
+    expect(E.isRight(result)).toBe(true);
+    if (E.isRight(result) && result.right) {
+      expect(result.right.config_json.maintenance).toEqual(customPolicy.maintenance);
     }
   });
 

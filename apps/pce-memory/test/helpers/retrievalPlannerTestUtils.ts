@@ -37,14 +37,23 @@ export async function resetRetrievalPlannerTestState(): Promise<void> {
 }
 
 export function buildPolicyYaml(
-  hybrid: Partial<{
-    alpha: number;
-    threshold: number;
-    k_txt: number;
-    k_vec: number;
-    k_final: number;
-  }> = {}
+  options: {
+    hybrid?: Partial<{
+      alpha: number;
+      threshold: number;
+      k_txt: number;
+      k_vec: number;
+      k_final: number;
+    }>;
+    maintenance?: Partial<{
+      hints_enabled: boolean;
+      similarity_threshold: number;
+      stale_days: number;
+    }>;
+  } = {}
 ): string {
+  const hybrid = options.hybrid ?? {};
+  const maintenance = options.maintenance ?? {};
   return `
 version: '0.1'
 boundary:
@@ -69,19 +78,30 @@ retrieval:
     k_vec: ${hybrid.k_vec ?? 96}
     k_final: ${hybrid.k_final ?? 12}
     recency_half_life_days: 30
+maintenance:
+  hints_enabled: ${maintenance.hints_enabled ?? true}
+  similarity_threshold: ${maintenance.similarity_threshold ?? 0.9}
+  stale_days: ${maintenance.stale_days ?? 30}
 `.trim();
 }
 
 export async function applyPolicy(
-  hybrid: Partial<{
-    alpha: number;
-    threshold: number;
-    k_txt: number;
-    k_vec: number;
-    k_final: number;
-  }> = {}
+  options: {
+    hybrid?: Partial<{
+      alpha: number;
+      threshold: number;
+      k_txt: number;
+      k_vec: number;
+      k_final: number;
+    }>;
+    maintenance?: Partial<{
+      hints_enabled: boolean;
+      similarity_threshold: number;
+      stale_days: number;
+    }>;
+  } = {}
 ): Promise<void> {
-  await dispatchTool('pce_memory_policy_apply', { yaml: buildPolicyYaml(hybrid) });
+  await dispatchTool('pce_memory_policy_apply', { yaml: buildPolicyYaml(options) });
 }
 
 export async function upsertClaimViaTool(input: {

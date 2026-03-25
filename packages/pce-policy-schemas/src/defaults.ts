@@ -50,6 +50,11 @@ export const defaultPolicy: PolicyDocument = {
       },
     },
   },
+  maintenance: {
+    hints_enabled: true,
+    similarity_threshold: 0.9,
+    stale_days: 30,
+  },
 };
 
 export function defaultBoundaryPolicy() {
@@ -58,4 +63,8 @@ export function defaultBoundaryPolicy() {
 
 export function defaultRetrievalPolicy() {
   return defaultPolicy.retrieval;
+}
+
+export function defaultMaintenancePolicy() {
+  return defaultPolicy.maintenance;
 }

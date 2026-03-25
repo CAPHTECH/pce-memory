@@ -42,17 +42,23 @@ function normalizePolicyDocument(
   config: PolicyDocument | BoundaryPolicy
 ): PolicyDocument {
   if (isPolicyDocument(config) && typeof config.boundary === 'object' && config.boundary !== null) {
+    const retrieval = config.retrieval ?? defaultPolicy.retrieval;
+    const maintenance = config.maintenance ?? defaultPolicy.maintenance;
     return {
       version: config.version ?? version,
       boundary: config.boundary,
-      ...(config.retrieval ? { retrieval: config.retrieval } : {}),
+      ...(retrieval ? { retrieval } : {}),
+      ...(maintenance ? { maintenance } : {}),
     };
   }
 
+  const retrieval = defaultPolicy.retrieval;
+  const maintenance = defaultPolicy.maintenance;
   return {
     version,
     boundary: config as BoundaryPolicy,
-    ...(defaultPolicy.retrieval ? { retrieval: defaultPolicy.retrieval } : {}),
+    ...(retrieval ? { retrieval } : {}),
+    ...(maintenance ? { maintenance } : {}),
   };
 }
 

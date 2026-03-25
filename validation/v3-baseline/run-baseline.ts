@@ -73,6 +73,16 @@ type ActivatePayload = {
   request_id: string;
   trace_id: string;
   next_cursor?: string;
+  maintenance_hints?: {
+    similar_pairs?: Array<{ a: string; b: string; similarity: number }>;
+    stale_candidates?: Array<{ id: string; last_retrieved_at: null; days_since_created: number }>;
+    unprocessed_observations?: number;
+    high_retrieval_no_feedback?: Array<{
+      id: string;
+      retrieval_count: number;
+      feedback_count: number;
+    }>;
+  };
 };
 
 type UpsertPayload = {
@@ -722,7 +732,6 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
     `Expected all maintenance duplicate pairs to exceed 0.9 similarity, got ${duplicateSimilarities.join(', ')}`
   );
 
-  const dormantIds: string[] = [];
   for (let index = 0; index < 40; index++) {
     const id = await seedClaim({
       text: `Maintenance catalog ${index}: release memo for module pine-${index} keeps partition window at ${6 + index} hours.`,
@@ -732,7 +741,6 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
       },
     });
     if (index < 5) {
-      dormantIds.push(id);
       await updateClaimTimestamps(id, {
         created_at: isoDaysAgo(95 + index),
         updated_at: isoDaysAgo(95 + index),
@@ -748,7 +756,20 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
     });
   }
 
-  void dormantIds;
+  const highRetrievalId = await seedClaim({
+    text: 'Hotspot memo quartz: recurring maintenance review for cedar relay handoff.',
+    provenance_at: isoDaysAgo(10),
+    timestamps: {
+      created_at: isoDaysAgo(10),
+    },
+  });
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await activate({
+      q: 'quartz cedar relay handoff',
+      top_k: 1,
+    });
+  }
 
   const rawResult = await handleActivate({
     q: 'release memo module partition window',
@@ -759,23 +780,38 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
   });
   const payload = asActivatePayload(rawResult);
   const responseText = JSON.stringify(rawResult.structuredContent ?? parseToolContent(rawResult));
-
-  const categoryMatchers: Record<string, RegExp> = {
-    duplicate: /\bduplicate\b|\bnear[- ]duplicate\b/i,
-    observation_backlog: /\bobservation\b|\bunprocessed\b|\bbacklog\b/i,
-    dormant_claims: /\bstale\b|\bdormant\b|\bunused\b|\bnever retrieved\b/i,
-  };
-
-  const detectedCategories = Object.entries(categoryMatchers)
-    .filter(([, pattern]) => pattern.test(responseText))
-    .map(([category]) => category);
-  const checkedCategories = Object.keys(categoryMatchers);
+  const maintenanceHints = payload.maintenance_hints;
+  const detectedCategories = [
+    Array.isArray(maintenanceHints?.similar_pairs) && maintenanceHints.similar_pairs.length > 0
+      ? 'duplicate'
+      : null,
+    typeof maintenanceHints?.unprocessed_observations === 'number' &&
+    maintenanceHints.unprocessed_observations > 0
+      ? 'observation_backlog'
+      : null,
+    Array.isArray(maintenanceHints?.stale_candidates) &&
+    maintenanceHints.stale_candidates.length > 0
+      ? 'dormant_claims'
+      : null,
+    Array.isArray(maintenanceHints?.high_retrieval_no_feedback) &&
+    maintenanceHints.high_retrieval_no_feedback.some(
+      (hint) => hint.id === highRetrievalId && hint.retrieval_count > 5 && hint.feedback_count === 0
+    )
+      ? 'high_retrieval_no_feedback'
+      : null,
+  ].filter((category): category is string => category !== null);
+  const checkedCategories = [
+    'duplicate',
+    'observation_backlog',
+    'dormant_claims',
+    'high_retrieval_no_feedback',
+  ];
 
   return {
     name: 'MAINTENANCE',
     score: round(detectedCategories.length / checkedCategories.length),
     metric: 'detected_hint_category_ratio',
-    expected_baseline: '0 because activate does not currently surface maintenance guidance',
+    expected_baseline: '0 because activate does not currently surface maintenance_hints',
     detected_hint_category_ratio: round(detectedCategories.length / checkedCategories.length),
     detected_categories: detectedCategories,
     checked_categories: checkedCategories,
@@ -987,7 +1023,7 @@ function buildReport(results: BenchmarkResults): string {
     '',
     '- B1 is the baseline for future freshness-aware retrieval. Higher post-v3 scores should mean newer claims displace stale variants more reliably.',
     '- B2 isolates usage learning without feedback writes. A post-v3 implementation should move the correlation positive only if plain retrieval history becomes a ranking signal.',
-    '- B3 checks whether activate currently surfaces maintenance guidance for duplicates, raw observations, or dormant claims. The current baseline is expected to stay at zero unless new hint fields are introduced.',
+    '- B3 checks whether activate surfaces maintenance_hints for duplicates, raw observations, dormant claims, and repeatedly retrieved claims lacking feedback. The current baseline is expected to stay at zero unless those hint fields are introduced.',
     '- B4 measures how often logically related claims appear without graph links. Improvements after connectivity work should raise recall without relying on lexical coincidence.',
     '- B5 gives a single regression-friendly number for a realistic multi-session flow.',
     '',

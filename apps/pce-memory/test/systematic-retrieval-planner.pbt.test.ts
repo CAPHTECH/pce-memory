@@ -65,7 +65,7 @@ describe('Property: retrieval planner invariants', () => {
         intentArb,
         async (claims, allowTag, topK, intent) => {
           await resetRetrievalPlannerTestState();
-          await applyPolicy({ threshold: 0.0 });
+          await applyPolicy({ hybrid: { threshold: 0.0 } });
 
           for (let index = 0; index < claims.length; index++) {
             const claim = claims[index]!;

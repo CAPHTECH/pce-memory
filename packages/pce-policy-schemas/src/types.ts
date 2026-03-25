@@ -48,10 +48,17 @@ export interface RetrievalPolicy {
   };
 }
 
+export interface MaintenancePolicy {
+  hints_enabled?: boolean;
+  similarity_threshold?: number;
+  stale_days?: number;
+}
+
 export interface PolicyDocument {
   version: string;
   boundary: BoundaryPolicy;
   retrieval?: RetrievalPolicy;
+  maintenance?: MaintenancePolicy;
 }
 
 export interface ValidationResult<T> {
