@@ -183,7 +183,8 @@ export function buildWordOrCondition(
  * @returns 正規化されたlimit値
  */
 function normalizeLimit(limit: number): number {
-  return Math.max(MIN_LIMIT, Math.floor(limit));
+  const floored = Math.floor(limit);
+  return Number.isFinite(floored) ? Math.max(MIN_LIMIT, floored) : MIN_LIMIT;
 }
 
 /**

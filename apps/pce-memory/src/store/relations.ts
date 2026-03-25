@@ -188,7 +188,8 @@ export interface RelationQueryFilters {
  */
 export async function queryRelations(filters: RelationQueryFilters): Promise<Relation[]> {
   const conn = await getConnection();
-  const limit = Math.min(filters.limit ?? 50, 100);
+  const rawLimit = filters.limit ?? 50;
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 100) : 50;
 
   const conditions: string[] = [];
   const params: (string | number)[] = [];

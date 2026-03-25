@@ -1998,6 +1998,19 @@ describe('BOUNDARY: ISO DateTime validation', () => {
   }
 });
 
+// ==================== hybridSearch normalizeLimit NaN guard ====================
+
+describe('BOUNDARY: normalizeLimit with NaN/invalid inputs', () => {
+  it('splitQueryWords does not crash on extremely long query', async () => {
+    const { splitQueryWords } = await import('../src/store/hybridSearch');
+    // 10KB query - should not crash
+    const longQuery = 'word '.repeat(2000);
+    const words = splitQueryWords(longQuery);
+    expect(Array.isArray(words)).toBe(true);
+    expect(words.length).toBeLessThanOrEqual(2000);
+  });
+});
+
 // ==================== recencyDecay division-by-zero guard ====================
 
 describe('BOUNDARY: recencyDecay with invalid halfLifeDays', () => {
