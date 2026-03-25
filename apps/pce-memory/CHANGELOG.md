@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-03-25
+
+### Added
+
+- **Knowledge Freshness Guard**: upsert/promote returns `similar_existing` when semantically similar claims exist; activate flags stale candidates with freshness metadata
+- **Usage-Based Retrieval Learning**: `retrieval_count` and `last_retrieved_at` tracking; implicit usage decay and retrieval boost in reranking — frequently retrieved claims rank higher over time without explicit feedback
+- **Knowledge Maintenance Signals**: `maintenance_hints` in activate response with `similar_pairs`, `stale_candidates`, `unprocessed_observations`, and `high_retrieval_no_feedback` categories; policy-configurable
+- **Claim-to-Claim Connectivity**: `claim_links` table with typed edges (`extends`, `supports`, `contradicts`, `related`); auto-suggested on promote/upsert; activate traverses 1-hop linked claims; `pce_memory_link_claims` tool
+- **Working State Lifecycle**: `status` column on claims (`active`/`completed`/`stale`); auto-stale detection for working_state claims >14 days; `feedback(signal=completed)` marks tasks done; stale/completed excluded from activate by default
+- **MMR Diversification**: Optional Maximal Marginal Relevance reranking to reduce result redundancy (policy-configurable)
+- **Entity Graph Query Expansion**: Activate traverses entity-relation graph to expand queries beyond lexical matches
+- **Feedback-Loop Scoring Boost**: helpful/harmful feedback directly impacts retrieval ranking via explicit multiplier
+- **Provenance Quality Scoring**: Evidence density, provenance completeness, and promotion lineage factor into rerank scoring
+- **Observation Slot Cap**: `include_observations=true` caps observation results to 30% of top_k
+- **Observation Score Cap**: Raw observation recency score capped at 0.8 to prevent dominating promoted claims
+- **Intent Penalty**: `policy_check` intent applies 0.1x penalty to non-norm task/working_state claims
+
+### Changed
+
+- **Plugin v0.4.0**: Stop hook converted from prompt to command type; hooks/skills updated for entity registration guidance
+- **Competitive landscape documented**: `docs/competitive-landscape.md` with 16+ products/papers analyzed
+
+### Removed
+
+- **Ollama LLM entity extractor**: Removed server-side LLM extraction (4.6s latency, limited query expansion effect); entity registration is now client-side via hooks/skills guidance
+- **Pattern NLP auto-extraction**: Removed automatic pattern-based entity extraction from upsert/promote (68% noise rate); `entityExtractor.ts` utility kept but not auto-called
+
 ## [0.11.0] - 2026-03-24
 
 ### Added

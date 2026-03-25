@@ -3113,7 +3113,11 @@ export async function handleActivate(args: Record<string, unknown>) {
     }
 
     const scoredItems = searchResults.map((r, index) => {
-      const claim = augmentClaimWithFreshness(r.claim, freshnessByClaimId);
+      const updatedClaim =
+        (r.claim as { source_record_type?: string }).source_record_type === 'observation'
+          ? r.claim
+          : { ...r.claim, retrieval_count: (r.claim.retrieval_count ?? 0) + 1, last_retrieved_at: retrievedAt };
+      const claim = augmentClaimWithFreshness(updatedClaim, freshnessByClaimId);
       const sourceLayer = r.source_layer ?? mapScopeToLayer(r.claim.scope);
       const rank = index + 1;
       const selectionReason = buildSelectionReason({
