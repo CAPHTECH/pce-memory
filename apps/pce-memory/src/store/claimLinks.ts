@@ -123,68 +123,84 @@ export async function upsertClaimLink(input: {
   created_by?: ClaimLinkCreatedBy;
 }): Promise<{ link: ClaimLink; isNew: boolean }> {
   const confidence = normalizeConfidence(input.confidence);
-  return withDedicatedConnection(async (conn) => {
-    const existingReader = await conn.runAndReadAll(
-      `SELECT id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
-       FROM claim_links
-       WHERE source_claim_id = $1
-         AND target_claim_id = $2
-         AND link_type = $3`,
-      [input.source_claim_id, input.target_claim_id, input.link_type]
-    );
-    const existingRows = existingReader.getRowObjects() as unknown as ClaimLinkRow[];
-    const existing = existingRows[0];
+  const createdBy = input.created_by ?? 'client';
 
-    if (existing) {
+  return withDedicatedConnection(async (conn) => {
+    try {
+      // Attempt INSERT first
+      const id = `clk_${crypto.randomUUID().slice(0, 8)}`;
+      const createdAt = new Date().toISOString();
       await conn.run(
-        `UPDATE claim_links
-         SET confidence = $1,
-             created_by = $2
-         WHERE id = $3`,
-        [confidence, input.created_by ?? 'client', existing.id]
+        `INSERT INTO claim_links (
+          id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          id,
+          input.source_claim_id,
+          input.target_claim_id,
+          input.link_type,
+          confidence,
+          createdAt,
+          createdBy,
+        ]
       );
-      const updatedReader = await conn.runAndReadAll(
-        `SELECT id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
-         FROM claim_links
-         WHERE id = $1`,
-        [existing.id]
-      );
-      const updatedRows = updatedReader.getRowObjects() as unknown as ClaimLinkRow[];
+
       return {
-        link: normalizeClaimLinkRow(updatedRows[0]!),
-        isNew: false,
+        link: {
+          id,
+          source_claim_id: input.source_claim_id,
+          target_claim_id: input.target_claim_id,
+          link_type: input.link_type,
+          confidence,
+          created_at: createdAt,
+          created_by: createdBy,
+        },
+        isNew: true,
       };
+    } catch (e: unknown) {
+      // UNIQUE constraint violation: link already exists (concurrent insert won).
+      // Fall through to SELECT + UPDATE on a fresh connection.
+      const isConstraintViolation =
+        e instanceof Error &&
+        (e.message.includes('UNIQUE constraint') ||
+          e.message.includes('unique constraint') ||
+          e.message.includes('Duplicate key') ||
+          e.message.includes('duplicate key') ||
+          e.message.includes('PRIMARY KEY'));
+      if (!isConstraintViolation) {
+        throw e;
+      }
     }
 
-    const id = `clk_${crypto.randomUUID().slice(0, 8)}`;
-    const createdAt = new Date().toISOString();
-    await conn.run(
-      `INSERT INTO claim_links (
-        id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        id,
-        input.source_claim_id,
-        input.target_claim_id,
-        input.link_type,
-        confidence,
-        createdAt,
-        input.created_by ?? 'client',
-      ]
-    );
-
-    return {
-      link: {
-        id,
-        source_claim_id: input.source_claim_id,
-        target_claim_id: input.target_claim_id,
-        link_type: input.link_type,
-        confidence,
-        created_at: createdAt,
-        created_by: input.created_by ?? 'client',
-      },
-      isNew: true,
-    };
+    // Re-read on a fresh connection to avoid poisoned transaction state
+    return withDedicatedConnection(async (freshConn) => {
+      await freshConn.run(
+        `UPDATE claim_links
+         SET confidence = $1, created_by = $2
+         WHERE source_claim_id = $3
+           AND target_claim_id = $4
+           AND link_type = $5`,
+        [confidence, createdBy, input.source_claim_id, input.target_claim_id, input.link_type]
+      );
+      const reader = await freshConn.runAndReadAll(
+        `SELECT id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
+         FROM claim_links
+         WHERE source_claim_id = $1
+           AND target_claim_id = $2
+           AND link_type = $3`,
+        [input.source_claim_id, input.target_claim_id, input.link_type]
+      );
+      const rows = reader.getRowObjects() as unknown as ClaimLinkRow[];
+      if (!rows[0]) {
+        throw new Error(
+          `claim_link not found after constraint conflict: ${input.source_claim_id} -> ${input.target_claim_id} (${input.link_type})`
+        );
+      }
+      return {
+        link: normalizeClaimLinkRow(rows[0]),
+        isNew: false,
+      };
+    });
   });
 }
 
