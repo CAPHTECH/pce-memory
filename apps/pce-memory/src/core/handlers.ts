@@ -17,7 +17,6 @@ import {
   markStaleWorkingStateClaims,
   recordClaimRetrievals,
   updateClaimStatus,
-  ContentHashCollisionError,
 } from '../store/claims.js';
 import type { Claim, Provenance } from '../store/claims.js';
 import {
@@ -72,6 +71,11 @@ import { checkAndConsume } from '../store/rate.js';
 import { updateCritic } from '../store/critic.js';
 import { stateError } from '../domain/stateMachine.js';
 import type { ErrorCode } from '../domain/errors.js';
+import { isDomainError } from '../domain/errors.js';
+import {
+  validateString as validateStringE,
+  validateStringFields,
+} from '../domain/validation.js';
 import {
   ACTIVATE_INTENTS,
   CLAIM_KINDS,
@@ -167,11 +171,7 @@ function createToolResult<T extends Record<string, unknown>>(
 
 // ========== Utility Functions ==========
 
-function validateString(field: string, val: unknown, max: number) {
-  if (typeof val !== 'string' || val.length === 0 || val.length > max) {
-    throw new Error(`INVALID_${field.toUpperCase()}`);
-  }
-}
+// validateString is imported from domain/validation.ts as validateStringE
 
 function getUnknownFields(
   args: Record<string, unknown>,
@@ -940,17 +940,17 @@ async function validateUpsertInput(
     };
   }
 
-  try {
-    validateString('text', text, 5000);
-    validateString('kind', kind, 128);
-    validateString('scope', scope, 128);
-    validateString('boundary_class', boundary_class, 128);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+  const fieldsResult = validateStringFields([
+    ['text', text, 5000],
+    ['kind', kind, 128],
+    ['scope', scope, 128],
+    ['boundary_class', boundary_class, 128],
+  ]);
+  if (E.isLeft(fieldsResult)) {
     return {
       isValid: false,
       errorResponse: createToolResult(
-        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { ...err('VALIDATION_ERROR', fieldsResult.left.message, reqId), trace_id: traceId },
         { isError: true }
       ),
     };
@@ -1066,11 +1066,16 @@ async function validateUpsertInput(
  * Graph Memory（Entity/Relation）の処理
  * 新規Claimに対してのみentities/relationsを登録
  */
+interface GraphMemoryError {
+  id: string;
+  message: string;
+}
+
 interface GraphMemoryResult {
   entityCount: number;
-  entityFailed: number;
+  entityErrors: GraphMemoryError[];
   relationCount: number;
-  relationFailed: number;
+  relationErrors: GraphMemoryError[];
 }
 
 async function processGraphMemory(
@@ -1080,9 +1085,9 @@ async function processGraphMemory(
   relations: RelationInput[] | undefined
 ): Promise<GraphMemoryResult> {
   let entityCount = 0;
-  let entityFailed = 0;
+  const entityErrors: GraphMemoryError[] = [];
   let relationCount = 0;
-  let relationFailed = 0;
+  const relationErrors: GraphMemoryError[] = [];
 
   if (isNew && entities && Array.isArray(entities)) {
     for (const entity of entities) {
@@ -1090,8 +1095,11 @@ async function processGraphMemory(
         await upsertEntity(entity);
         await linkClaimEntity(claimId, entity.id);
         entityCount++;
-      } catch {
-        entityFailed++;
+      } catch (e: unknown) {
+        entityErrors.push({
+          id: entity.id,
+          message: e instanceof Error ? e.message : String(e),
+        });
       }
     }
   }
@@ -1101,13 +1109,16 @@ async function processGraphMemory(
       try {
         await upsertRelation(relation);
         relationCount++;
-      } catch {
-        relationFailed++;
+      } catch (e: unknown) {
+        relationErrors.push({
+          id: relation.id,
+          message: e instanceof Error ? e.message : String(e),
+        });
       }
     }
   }
 
-  return { entityCount, entityFailed, relationCount, relationFailed };
+  return { entityCount, entityErrors, relationCount, relationErrors };
 }
 
 // ========== Handler Implementations ==========
@@ -1248,12 +1259,10 @@ export async function handleUpsert(args: Record<string, unknown>) {
     }
 
     if (memory_type !== undefined) {
-      try {
-        validateString('memory_type', memory_type, 128);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+      const mtResult = validateStringE('memory_type', memory_type, 128);
+      if (E.isLeft(mtResult)) {
         return createToolResult(
-          { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+          { ...err('VALIDATION_ERROR', mtResult.left.message, reqId), trace_id: traceId },
           { isError: true }
         );
       }
@@ -1306,13 +1315,21 @@ export async function handleUpsert(args: Record<string, unknown>) {
     });
 
     // レスポンス構築
-    const { entityCount, entityFailed, relationCount, relationFailed } = graphResult;
+    const { entityCount, entityErrors, relationCount, relationErrors } = graphResult;
     const graphMemoryResult =
-      entityCount > 0 || entityFailed > 0 || relationCount > 0 || relationFailed > 0
+      entityCount > 0 || entityErrors.length > 0 || relationCount > 0 || relationErrors.length > 0
         ? {
             graph_memory: {
-              entities: { success: entityCount, failed: entityFailed },
-              relations: { success: relationCount, failed: relationFailed },
+              entities: {
+                success: entityCount,
+                failed: entityErrors.length,
+                ...(entityErrors.length > 0 && { errors: entityErrors }),
+              },
+              relations: {
+                success: relationCount,
+                failed: relationErrors.length,
+                ...(relationErrors.length > 0 && { errors: relationErrors }),
+              },
             },
           }
         : {};
@@ -1342,7 +1359,9 @@ export async function handleUpsert(args: Record<string, unknown>) {
     return createToolResult(
       {
         ...err(
-          e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'UPSERT_FAILED',
+          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION'
+            ? 'VALIDATION_ERROR'
+            : 'UPSERT_FAILED',
           msg,
           reqId
         ),
@@ -1439,15 +1458,23 @@ export async function handleObserve(args: Record<string, unknown>) {
     }
 
     // サイズ制限（将来的にはpolicy/envで調整）
-    try {
-      if (source_id !== undefined) validateString('source_id', source_id, 2_048);
-      if (actor !== undefined) validateString('actor', actor, 512);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return createToolResult(
-        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
-        { isError: true }
-      );
+    if (source_id !== undefined) {
+      const sidResult = validateStringE('source_id', source_id, 2_048);
+      if (E.isLeft(sidResult)) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', sidResult.left.message, reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+    if (actor !== undefined) {
+      const actorResult = validateStringE('actor', actor, 512);
+      if (E.isLeft(actorResult)) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', actorResult.left.message, reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
     }
 
     if (typeof source_id === 'string' && hasPathTraversal(source_id)) {
@@ -2486,7 +2513,9 @@ export async function handlePromote(args: Record<string, unknown>) {
     return createToolResult(
       {
         ...err(
-          e instanceof ContentHashCollisionError ? 'VALIDATION_ERROR' : 'DB_ERROR',
+          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION'
+            ? 'VALIDATION_ERROR'
+            : 'DB_ERROR',
           msg,
           reqId
         ),
@@ -3465,13 +3494,13 @@ export async function handleUpsertEntity(args: Record<string, unknown>) {
     }
 
     // 文字列長バリデーション
-    try {
-      validateString('id', id, 256);
-      validateString('name', name, 1024);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+    const entityFieldsResult = validateStringFields([
+      ['id', id, 256],
+      ['name', name, 1024],
+    ]);
+    if (E.isLeft(entityFieldsResult)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { ...err('VALIDATION_ERROR', entityFieldsResult.left.message, reqId), trace_id: traceId },
         { isError: true }
       );
     }
@@ -3563,15 +3592,15 @@ export async function handleUpsertRelation(args: Record<string, unknown>) {
     }
 
     // 文字列長バリデーション
-    try {
-      validateString('id', id, 256);
-      validateString('src_id', src_id, 256);
-      validateString('dst_id', dst_id, 256);
-      validateString('type', type, 256);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+    const relationFieldsResult = validateStringFields([
+      ['id', id, 256],
+      ['src_id', src_id, 256],
+      ['dst_id', dst_id, 256],
+      ['type', type, 256],
+    ]);
+    if (E.isLeft(relationFieldsResult)) {
       return createToolResult(
-        { ...err('VALIDATION_ERROR', msg, reqId), trace_id: traceId },
+        { ...err('VALIDATION_ERROR', relationFieldsResult.left.message, reqId), trace_id: traceId },
         { isError: true }
       );
     }
