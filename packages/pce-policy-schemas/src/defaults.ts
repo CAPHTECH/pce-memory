@@ -56,15 +56,3 @@ export const defaultPolicy: PolicyDocument = {
     stale_days: 30,
   },
 };
-
-export function defaultBoundaryPolicy() {
-  return defaultPolicy.boundary;
-}
-
-export function defaultRetrievalPolicy() {
-  return defaultPolicy.retrieval;
-}
-
-export function defaultMaintenancePolicy() {
-  return defaultPolicy.maintenance;
-}

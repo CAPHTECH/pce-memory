@@ -14,5 +14,3 @@
 // TODO: Implement PCEClient class
 // TODO: Implement request/response codecs
 // TODO: Implement error mapping
-
-export const PLACEHOLDER = 'pce-sdk-ts';

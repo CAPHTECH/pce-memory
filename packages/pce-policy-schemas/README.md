@@ -23,7 +23,7 @@ pnpm add @pce/policy-schemas
 ## Usage
 
 ```typescript
-import { parsePolicy, defaultBoundaryPolicy } from '@pce/policy-schemas';
+import { parsePolicy, defaultPolicy } from '@pce/policy-schemas';
 import * as E from 'fp-ts/Either';
 
 // Parse YAML policy
@@ -35,7 +35,7 @@ if (E.isRight(result)) {
 }
 
 // Use default policy
-const policy = defaultBoundaryPolicy();
+const boundary = defaultPolicy.boundary;
 ```
 
 ## Policy Structure

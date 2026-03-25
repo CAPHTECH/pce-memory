@@ -27,12 +27,5 @@ export const computeContentHash = (text: string): string => {
  * - 連続する空白を単一スペースに
  * - 改行を統一（\r\n → \n）
  */
-export const normalizeText = (text: string): string =>
+const normalizeText = (text: string): string =>
   text.normalize('NFC').replace(/\r\n/g, '\n').trim().replace(/\s+/g, ' ');
-
-/**
- * ハッシュが有効な形式かチェック
- * @param hash チェック対象の文字列
- * @returns 64文字の16進数文字列ならtrue
- */
-export const isValidHash = (hash: string): boolean => /^[a-f0-9]{64}$/i.test(hash);
