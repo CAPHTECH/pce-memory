@@ -26,6 +26,7 @@ async function applyPolicy() {
 
 function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
   expect(result.isError).toBeUndefined();
+  expect(result.structuredContent).not.toBeNull();
   expect(result.structuredContent).toBeDefined();
   return result.structuredContent!;
 }
@@ -176,7 +177,7 @@ describe('promotion pipeline', () => {
     };
 
     expect(provenance.active_context_id).toBe(activate.active_context_id);
-    expect(upsert.id).toBeDefined();
+    expect(upsert.id).toMatch(/^clm_/);
   });
 
   it('promote accepts a pending candidate, creates a durable claim, and records claim lineage evidence', async () => {

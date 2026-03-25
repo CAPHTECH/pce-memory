@@ -47,6 +47,15 @@ export default defineConfig({
         '**/*.spec.ts',
         '**/types.ts',
         '**/index.ts',
+        // Infrastructure code: process management, socket servers, daemon lifecycle
+        // These require spawning processes and socket connections — not unit-testable
+        '**/client/proxy.ts',
+        '**/client/start-daemon.ts',
+        '**/daemon/daemon.ts',
+        '**/daemon/socket.ts',
+        // Embedding providers: require ONNX runtime or remote API
+        '**/providers/local.ts',
+        '**/providers/remote.ts',
       ],
       lines: 80,
       functions: 80,
