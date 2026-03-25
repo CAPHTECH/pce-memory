@@ -109,6 +109,16 @@ describe('retrieval precision experiment: MMR diversification', () => {
       diversifiedRun.avgLatencyMs
     );
 
+    if (process.env['PRINT_PRECISION_METRICS'] === '1') {
+      console.log(
+        JSON.stringify({
+          idea: 'mmr',
+          baseline: baselineMetrics,
+          variant: diversifiedMetrics,
+        })
+      );
+    }
+
     expect(baselineMetrics.top_ids.slice(0, 3)).toEqual([a1, a2, a3]);
     expect(diversifiedMetrics.precision).toBeGreaterThan(baselineMetrics.precision);
     expect(diversifiedMetrics.recall).toBeGreaterThan(baselineMetrics.recall);

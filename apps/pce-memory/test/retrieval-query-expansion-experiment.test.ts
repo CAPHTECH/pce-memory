@@ -143,6 +143,16 @@ describe('retrieval precision experiment: entity graph query expansion', () => {
       expandedRun.avgLatencyMs
     );
 
+    if (process.env['PRINT_PRECISION_METRICS'] === '1') {
+      console.log(
+        JSON.stringify({
+          idea: 'query_expansion',
+          baseline: baselineMetrics,
+          variant: expandedMetrics,
+        })
+      );
+    }
+
     expect(baselineMetrics.precision).toBe(0);
     expect(baselineMetrics.recall).toBe(0);
     expect(expandedMetrics.precision).toBeGreaterThan(baselineMetrics.precision);
