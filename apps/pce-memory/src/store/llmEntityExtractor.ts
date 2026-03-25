@@ -30,6 +30,7 @@ const EMPTY_RESULT = Object.freeze({
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://127.0.0.1:11434';
 export const DEFAULT_OLLAMA_MODEL = 'qwen3.5:9b';
 export const LLM_EXTRACTION_TIMEOUT_MS = 5_000;
+export const DEFAULT_REASONING_EFFORT = 'none';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -363,6 +364,7 @@ export async function extractEntitiesWithLLM(
         model: opts.model ?? DEFAULT_OLLAMA_MODEL,
         stream: false,
         temperature: 0,
+        reasoning_effort: DEFAULT_REASONING_EFFORT,
         messages: [
           {
             role: 'system',

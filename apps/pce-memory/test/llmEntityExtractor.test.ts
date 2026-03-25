@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import {
+  DEFAULT_REASONING_EFFORT,
   extractEntitiesWithLLM,
   LLM_EXTRACTION_TIMEOUT_MS,
 } from '../src/store/llmEntityExtractor.js';
@@ -98,6 +99,7 @@ describe('extractEntitiesWithLLM', () => {
       model: 'test-model',
       stream: false,
       temperature: 0,
+      reasoning_effort: DEFAULT_REASONING_EFFORT,
     });
     expect(result.entities).toEqual([
       {
