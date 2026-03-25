@@ -25,6 +25,26 @@ export interface RetrievalPolicy {
     k_vec?: number;
     k_final?: number;
     recency_half_life_days?: number;
+    mmr?: {
+      enabled?: boolean;
+      lambda?: number;
+      max_candidates?: number;
+    };
+    query_expansion?: {
+      enabled?: boolean;
+      max_seed_entities?: number;
+      max_related_entities?: number;
+      max_expansion_terms?: number;
+    };
+    feedback_boost?: {
+      enabled?: boolean;
+      helpful_weight?: number;
+      harmful_weight?: number;
+      outdated_weight?: number;
+      duplicate_weight?: number;
+      min_multiplier?: number;
+      max_multiplier?: number;
+    };
   };
 }
 

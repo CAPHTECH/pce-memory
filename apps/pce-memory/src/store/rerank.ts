@@ -51,6 +51,31 @@ export interface ProvenanceQualityBreakdown {
   multiplier: number;
 }
 
+export interface FeedbackSignalCounts {
+  helpful: number;
+  harmful: number;
+  outdated: number;
+  duplicate: number;
+}
+
+export interface FeedbackBoostOptions {
+  helpfulWeight?: number;
+  harmfulWeight?: number;
+  outdatedWeight?: number;
+  duplicateWeight?: number;
+  minMultiplier?: number;
+  maxMultiplier?: number;
+}
+
+export interface FeedbackBoostBreakdown extends FeedbackSignalCounts {
+  helpful_weight: number;
+  harmful_weight: number;
+  outdated_weight: number;
+  duplicate_weight: number;
+  signal_score: number;
+  multiplier: number;
+}
+
 /** Hybrid Searchスコアの完全内訳 */
 export interface ScoreBreakdown {
   /** テキスト検索スコア */
@@ -65,7 +90,9 @@ export interface ScoreBreakdown {
   intent?: IntentScoreBreakdown;
   /** provenance/evidence品質補正 */
   provenance_quality?: ProvenanceQualityBreakdown;
-  /** 最終スコア: score_final = S × g × intent_boost × provenance_quality */
+  /** feedback由来の品質補正 */
+  feedback_boost?: FeedbackBoostBreakdown;
+  /** 最終スコア: score_final = S × g × intent_boost × provenance_quality × feedback_boost */
   score_final: number;
 }
 
@@ -79,6 +106,14 @@ const DEFAULT_INTENT_PROFILE: IntentProfile = {
   recencyWeight: 1.0,
   kindBoosts: {},
   memoryTypeBoosts: {},
+};
+const DEFAULT_FEEDBACK_BOOST_OPTIONS: Required<FeedbackBoostOptions> = {
+  helpfulWeight: 0.25,
+  harmfulWeight: 0.35,
+  outdatedWeight: 0.18,
+  duplicateWeight: 0.12,
+  minMultiplier: 0.45,
+  maxMultiplier: 1.65,
 };
 const POLICY_CHECK_ACTIVE_TASK_PENALTY = 0.1;
 
@@ -246,6 +281,63 @@ export function calculateProvenanceQualityBreakdown(input: {
   };
 }
 
+export function calculateFeedbackBoostBreakdown(
+  counts: FeedbackSignalCounts,
+  options: FeedbackBoostOptions = {}
+): FeedbackBoostBreakdown {
+  const resolved: Required<FeedbackBoostOptions> = {
+    helpfulWeight:
+      typeof options.helpfulWeight === 'number' && Number.isFinite(options.helpfulWeight)
+        ? options.helpfulWeight
+        : DEFAULT_FEEDBACK_BOOST_OPTIONS.helpfulWeight,
+    harmfulWeight:
+      typeof options.harmfulWeight === 'number' && Number.isFinite(options.harmfulWeight)
+        ? options.harmfulWeight
+        : DEFAULT_FEEDBACK_BOOST_OPTIONS.harmfulWeight,
+    outdatedWeight:
+      typeof options.outdatedWeight === 'number' && Number.isFinite(options.outdatedWeight)
+        ? options.outdatedWeight
+        : DEFAULT_FEEDBACK_BOOST_OPTIONS.outdatedWeight,
+    duplicateWeight:
+      typeof options.duplicateWeight === 'number' && Number.isFinite(options.duplicateWeight)
+        ? options.duplicateWeight
+        : DEFAULT_FEEDBACK_BOOST_OPTIONS.duplicateWeight,
+    minMultiplier:
+      typeof options.minMultiplier === 'number' && Number.isFinite(options.minMultiplier)
+        ? options.minMultiplier
+        : DEFAULT_FEEDBACK_BOOST_OPTIONS.minMultiplier,
+    maxMultiplier:
+      typeof options.maxMultiplier === 'number' && Number.isFinite(options.maxMultiplier)
+        ? options.maxMultiplier
+        : DEFAULT_FEEDBACK_BOOST_OPTIONS.maxMultiplier,
+  };
+
+  const helpful = Number.isFinite(counts.helpful) && counts.helpful > 0 ? counts.helpful : 0;
+  const harmful = Number.isFinite(counts.harmful) && counts.harmful > 0 ? counts.harmful : 0;
+  const outdated = Number.isFinite(counts.outdated) && counts.outdated > 0 ? counts.outdated : 0;
+  const duplicate =
+    Number.isFinite(counts.duplicate) && counts.duplicate > 0 ? counts.duplicate : 0;
+
+  const signal_score =
+    resolved.helpfulWeight * Math.log1p(helpful) -
+    resolved.harmfulWeight * Math.log1p(harmful) -
+    resolved.outdatedWeight * Math.log1p(outdated) -
+    resolved.duplicateWeight * Math.log1p(duplicate);
+
+  return {
+    helpful,
+    harmful,
+    outdated,
+    duplicate,
+    helpful_weight: resolved.helpfulWeight,
+    harmful_weight: resolved.harmfulWeight,
+    outdated_weight: resolved.outdatedWeight,
+    duplicate_weight: resolved.duplicateWeight,
+    signal_score,
+    multiplier: clamp(Math.exp(signal_score), resolved.minMultiplier, resolved.maxMultiplier),
+  };
+}
+
 /**
  * Claimメトリクスからg()を計算
  *
@@ -292,7 +384,8 @@ export function calculateScoreBreakdown(
   alpha: number,
   gFactor: GFactorBreakdown,
   intent?: IntentScoreBreakdown,
-  provenanceQuality?: ProvenanceQualityBreakdown
+  provenanceQuality?: ProvenanceQualityBreakdown,
+  feedbackBoost?: FeedbackBoostBreakdown
 ): ScoreBreakdown {
   const S = alpha * vecScore + (1 - alpha) * textScore;
   return {
@@ -302,6 +395,12 @@ export function calculateScoreBreakdown(
     g: gFactor,
     ...(intent ? { intent } : {}),
     ...(provenanceQuality ? { provenance_quality: provenanceQuality } : {}),
-    score_final: S * gFactor.g * (intent?.boost ?? 1.0) * (provenanceQuality?.multiplier ?? 1.0),
+    ...(feedbackBoost ? { feedback_boost: feedbackBoost } : {}),
+    score_final:
+      S *
+      gFactor.g *
+      (intent?.boost ?? 1.0) *
+      (provenanceQuality?.multiplier ?? 1.0) *
+      (feedbackBoost?.multiplier ?? 1.0),
   };
 }

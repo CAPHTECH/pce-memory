@@ -17,6 +17,7 @@ import {
   getHalfLife,
   KIND_HALF_LIVES,
   DEFAULT_HALF_LIFE,
+  calculateFeedbackBoostBreakdown,
   calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
 } from '../src/store/rerank.js';
@@ -288,6 +289,53 @@ describe('calculateScoreBreakdown function', () => {
       breakdown.S * gFactor.g * provenanceQuality.multiplier,
       10
     );
+  });
+
+  it('applies feedback boost multiplier to score_final', () => {
+    const gFactor = calculateG(0, 0.5, 0.5);
+    const feedbackBoost = calculateFeedbackBoostBreakdown({
+      helpful: 2,
+      harmful: 0,
+      outdated: 0,
+      duplicate: 0,
+    });
+    const breakdown = calculateScoreBreakdown(
+      0.4,
+      0.8,
+      0.65,
+      gFactor,
+      undefined,
+      undefined,
+      feedbackBoost
+    );
+
+    expect(breakdown.feedback_boost).toEqual(feedbackBoost);
+    expect(feedbackBoost.multiplier).toBeGreaterThan(1);
+    expect(breakdown.score_final).toBeCloseTo(
+      breakdown.S * gFactor.g * feedbackBoost.multiplier,
+      10
+    );
+  });
+});
+
+describe('calculateFeedbackBoostBreakdown function', () => {
+  it('boosts helpful consensus and penalizes harmful consensus', () => {
+    const helpful = calculateFeedbackBoostBreakdown({
+      helpful: 3,
+      harmful: 0,
+      outdated: 0,
+      duplicate: 0,
+    });
+    const harmful = calculateFeedbackBoostBreakdown({
+      helpful: 0,
+      harmful: 3,
+      outdated: 0,
+      duplicate: 0,
+    });
+
+    expect(helpful.multiplier).toBeGreaterThan(1);
+    expect(harmful.multiplier).toBeLessThan(1);
+    expect(helpful.multiplier).toBeGreaterThan(harmful.multiplier);
   });
 });
 

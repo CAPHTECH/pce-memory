@@ -23,10 +23,12 @@ import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
 import {
   adjustRecencyTerm,
+  calculateFeedbackBoostBreakdown,
   calculateGFromClaim,
   calculateIntentScoreBreakdown,
   calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
+  type FeedbackBoostOptions,
   type GFactorBreakdown,
   type ScoreBreakdown,
 } from './rerank.js';
@@ -46,6 +48,15 @@ const K_TEXT = 48;
 
 /** ベクトル検索上限（6× of k_final） */
 const K_VEC = 96;
+
+/** MMR関連デフォルト値 */
+const DEFAULT_MMR_LAMBDA = 0.72;
+const DEFAULT_MMR_MAX_CANDIDATES = 48;
+
+/** Query expansion関連デフォルト値 */
+const DEFAULT_QUERY_EXPANSION_MAX_SEED_ENTITIES = 3;
+const DEFAULT_QUERY_EXPANSION_MAX_RELATED_ENTITIES = 8;
+const DEFAULT_QUERY_EXPANSION_MAX_TERMS = 6;
 
 /** criticスコアが存在しない場合のデフォルト値 */
 const DEFAULT_CRITIC_SCORE = 0.5;
@@ -299,6 +310,23 @@ interface ClaimSearchFilters {
   excludedWorkingStateStatuses?: ClaimStatus[];
 }
 
+export interface MmrConfig {
+  enabled?: boolean;
+  lambda?: number;
+  maxCandidates?: number;
+}
+
+export interface QueryExpansionConfig {
+  enabled?: boolean;
+  maxSeedEntities?: number;
+  maxRelatedEntities?: number;
+  maxExpansionTerms?: number;
+}
+
+export interface FeedbackBoostConfig extends FeedbackBoostOptions {
+  enabled?: boolean;
+}
+
 /**
  * g()再ランキング用メトリクス
  */
@@ -312,6 +340,10 @@ interface ClaimMetrics {
   evidence_count: number;
   has_provenance_actor_note: boolean;
   has_promotion_lineage: boolean;
+  helpful_feedback_count: number;
+  harmful_feedback_count: number;
+  outdated_feedback_count: number;
+  duplicate_feedback_count: number;
 }
 
 /**
@@ -331,6 +363,10 @@ interface ClaimMetricsRow {
   evidence_count: number | bigint;
   has_provenance_actor_note: number | bigint | boolean;
   has_promotion_lineage: number | bigint | boolean;
+  helpful_feedback_count: number | bigint;
+  harmful_feedback_count: number | bigint;
+  outdated_feedback_count: number | bigint;
+  duplicate_feedback_count: number | bigint;
 }
 
 /**
@@ -372,6 +408,12 @@ export interface HybridSearchConfig {
   excludedWorkingStateStatuses?: ClaimStatus[];
   /** activate intent */
   intent?: ActivateIntent;
+  /** 実験的なMMR多様化設定 */
+  mmr?: MmrConfig;
+  /** 実験的なエンティティグラフ拡張設定 */
+  queryExpansion?: QueryExpansionConfig;
+  /** 実験的なfeedback boost設定 */
+  feedbackBoost?: FeedbackBoostConfig;
 }
 
 /**
@@ -424,6 +466,393 @@ function resolveCandidateLimit(limit: number | undefined, fallback: number): num
   return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
     ? normalizeLimit(limit)
     : fallback;
+}
+
+function resolveMmrConfig(mmr: MmrConfig | undefined): Required<MmrConfig> | undefined {
+  if (!mmr?.enabled) {
+    return undefined;
+  }
+
+  const lambda =
+    typeof mmr.lambda === 'number' && Number.isFinite(mmr.lambda) && mmr.lambda > 0 && mmr.lambda < 1
+      ? mmr.lambda
+      : DEFAULT_MMR_LAMBDA;
+
+  const maxCandidates =
+    typeof mmr.maxCandidates === 'number' && Number.isFinite(mmr.maxCandidates) && mmr.maxCandidates > 0
+      ? normalizeLimit(mmr.maxCandidates)
+      : DEFAULT_MMR_MAX_CANDIDATES;
+
+  return {
+    enabled: true,
+    lambda,
+    maxCandidates,
+  };
+}
+
+function resolveQueryExpansionConfig(
+  queryExpansion: QueryExpansionConfig | undefined
+): Required<QueryExpansionConfig> | undefined {
+  if (!queryExpansion?.enabled) {
+    return undefined;
+  }
+
+  return {
+    enabled: true,
+    maxSeedEntities:
+      typeof queryExpansion.maxSeedEntities === 'number' &&
+      Number.isFinite(queryExpansion.maxSeedEntities) &&
+      queryExpansion.maxSeedEntities > 0
+        ? normalizeLimit(queryExpansion.maxSeedEntities)
+        : DEFAULT_QUERY_EXPANSION_MAX_SEED_ENTITIES,
+    maxRelatedEntities:
+      typeof queryExpansion.maxRelatedEntities === 'number' &&
+      Number.isFinite(queryExpansion.maxRelatedEntities) &&
+      queryExpansion.maxRelatedEntities > 0
+        ? normalizeLimit(queryExpansion.maxRelatedEntities)
+        : DEFAULT_QUERY_EXPANSION_MAX_RELATED_ENTITIES,
+    maxExpansionTerms:
+      typeof queryExpansion.maxExpansionTerms === 'number' &&
+      Number.isFinite(queryExpansion.maxExpansionTerms) &&
+      queryExpansion.maxExpansionTerms > 0
+        ? normalizeLimit(queryExpansion.maxExpansionTerms)
+        : DEFAULT_QUERY_EXPANSION_MAX_TERMS,
+  };
+}
+
+function resolveFeedbackBoostConfig(
+  feedbackBoost: FeedbackBoostConfig | undefined
+): FeedbackBoostOptions | undefined {
+  if (!feedbackBoost?.enabled) {
+    return undefined;
+  }
+
+  return {
+    ...(typeof feedbackBoost.helpfulWeight === 'number'
+      ? { helpfulWeight: feedbackBoost.helpfulWeight }
+      : {}),
+    ...(typeof feedbackBoost.harmfulWeight === 'number'
+      ? { harmfulWeight: feedbackBoost.harmfulWeight }
+      : {}),
+    ...(typeof feedbackBoost.outdatedWeight === 'number'
+      ? { outdatedWeight: feedbackBoost.outdatedWeight }
+      : {}),
+    ...(typeof feedbackBoost.duplicateWeight === 'number'
+      ? { duplicateWeight: feedbackBoost.duplicateWeight }
+      : {}),
+    ...(typeof feedbackBoost.minMultiplier === 'number'
+      ? { minMultiplier: feedbackBoost.minMultiplier }
+      : {}),
+    ...(typeof feedbackBoost.maxMultiplier === 'number'
+      ? { maxMultiplier: feedbackBoost.maxMultiplier }
+      : {}),
+  };
+}
+
+function buildSimilarityTokenSet(text: string): Set<string> {
+  const tokens = text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((token) => token.length >= 2);
+  return new Set(tokens);
+}
+
+function normalizeExpansionCandidate(value: string | null | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.replace(/[-_]+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+async function expandQueryWithEntityGraph(
+  query: string,
+  config: Required<QueryExpansionConfig>
+): Promise<string> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length === 0) {
+    return query;
+  }
+
+  const queryTokens = [...buildSimilarityTokenSet(query)].slice(0, 8);
+  if (queryTokens.length === 0) {
+    return query;
+  }
+
+  const conn = await getConnection();
+  const params: Array<string | number> = [];
+  const scoreClauses: string[] = [];
+  const whereClauses: string[] = [];
+
+  const pushScoredMatch = (expression: string, value: string, weight: number): void => {
+    const paramIndex = params.push(value);
+    scoreClauses.push(`CASE WHEN ${expression.replaceAll('?', `$${paramIndex}`)} THEN ${weight} ELSE 0 END`);
+    whereClauses.push(expression.replaceAll('?', `$${paramIndex}`));
+  };
+
+  pushScoredMatch('LOWER(e.name) = ?', normalizedQuery, 8);
+  pushScoredMatch("LOWER(COALESCE(e.canonical_key, '')) = ?", normalizedQuery, 10);
+  const escapedFullQuery = `%${escapeLikePattern(normalizedQuery)}%`;
+  pushScoredMatch("LOWER(e.name) LIKE ? ESCAPE '\\'", escapedFullQuery, 4);
+  pushScoredMatch("LOWER(COALESCE(e.canonical_key, '')) LIKE ? ESCAPE '\\'", escapedFullQuery, 5);
+
+  for (const token of queryTokens) {
+    const escapedToken = `%${escapeLikePattern(token)}%`;
+    pushScoredMatch("LOWER(e.name) LIKE ? ESCAPE '\\'", escapedToken, 2);
+    pushScoredMatch("LOWER(COALESCE(e.canonical_key, '')) LIKE ? ESCAPE '\\'", escapedToken, 3);
+  }
+
+  if (whereClauses.length === 0) {
+    return query;
+  }
+
+  const seedLimitParam = params.push(config.maxSeedEntities);
+  const seedReader = await conn.runAndReadAll(
+    `SELECT
+       e.id,
+       e.name,
+       e.canonical_key,
+       (${scoreClauses.join(' + ')}) AS match_score
+     FROM entities e
+     WHERE ${whereClauses.join(' OR ')}
+     ORDER BY match_score DESC, e.created_at DESC
+     LIMIT $${seedLimitParam}::INTEGER`,
+    params
+  );
+  const seedRows = seedReader.getRowObjects() as unknown as Array<{
+    id: string;
+    name: string;
+    canonical_key: string | null;
+    match_score: number | bigint;
+  }>;
+
+  const seedIds = seedRows
+    .filter((row) => Number(row.match_score) > 0)
+    .map((row) => row.id)
+    .slice(0, config.maxSeedEntities);
+  if (seedIds.length === 0) {
+    return query;
+  }
+
+  const seedPlaceholders = seedIds.map((_, index) => `$${index + 1}`).join(',');
+  const relatedLimitParam = seedIds.length + 1;
+  const relationReader = await conn.runAndReadAll(
+    `SELECT DISTINCT e.id, e.name, e.canonical_key
+     FROM relations r
+     INNER JOIN entities e
+       ON (
+         (r.src_id IN (${seedPlaceholders}) AND e.id = r.dst_id)
+         OR
+         (r.dst_id IN (${seedPlaceholders}) AND e.id = r.src_id)
+       )
+     WHERE e.id NOT IN (${seedPlaceholders})
+     ORDER BY e.created_at DESC
+     LIMIT $${relatedLimitParam}::INTEGER`,
+    [...seedIds, config.maxRelatedEntities]
+  );
+  const relationRows = relationReader.getRowObjects() as unknown as Array<{
+    id: string;
+    name: string;
+    canonical_key: string | null;
+  }>;
+
+  const coClaimReader = await conn.runAndReadAll(
+    `SELECT DISTINCT e.id, e.name, e.canonical_key
+     FROM claim_entities seed
+     INNER JOIN claim_entities sibling ON sibling.claim_id = seed.claim_id
+     INNER JOIN entities e ON e.id = sibling.entity_id
+     WHERE seed.entity_id IN (${seedPlaceholders})
+       AND sibling.entity_id NOT IN (${seedPlaceholders})
+     ORDER BY e.created_at DESC
+     LIMIT $${relatedLimitParam}::INTEGER`,
+    [...seedIds, config.maxRelatedEntities]
+  );
+  const coClaimRows = coClaimReader.getRowObjects() as unknown as Array<{
+    id: string;
+    name: string;
+    canonical_key: string | null;
+  }>;
+
+  const originalTerms = buildSimilarityTokenSet(query);
+  const expansionTerms: string[] = [];
+  const seenTerms = new Set<string>();
+
+  for (const row of [...relationRows, ...coClaimRows]) {
+    for (const candidate of [
+      normalizeExpansionCandidate(row.name),
+      normalizeExpansionCandidate(row.canonical_key),
+    ]) {
+      if (!candidate) {
+        continue;
+      }
+
+      const candidateTokens = buildSimilarityTokenSet(candidate);
+      const introducesNewTerm = [...candidateTokens].some((token) => !originalTerms.has(token));
+      const candidateKey = candidate.toLowerCase();
+
+      if (!introducesNewTerm || seenTerms.has(candidateKey)) {
+        continue;
+      }
+
+      seenTerms.add(candidateKey);
+      expansionTerms.push(candidate);
+
+      if (expansionTerms.length >= config.maxExpansionTerms) {
+        return `${query} ${expansionTerms.join(' ')}`.trim();
+      }
+    }
+  }
+
+  return expansionTerms.length > 0 ? `${query} ${expansionTerms.join(' ')}`.trim() : query;
+}
+
+function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
+  if (a.length === 0 || b.length === 0 || a.length !== b.length) {
+    return 0;
+  }
+
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    const av = a[i]!;
+    const bv = b[i]!;
+    dot += av * bv;
+    normA += av * av;
+    normB += bv * bv;
+  }
+
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
+
+  const similarity = dot / Math.sqrt(normA * normB);
+  return Math.max(0, Math.min(1, (similarity + 1) / 2));
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) {
+    return 0;
+  }
+
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) {
+      intersection++;
+    }
+  }
+
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+async function fetchClaimEmbeddings(
+  claimIds: readonly string[]
+): Promise<Map<string, readonly number[]>> {
+  if (claimIds.length === 0) {
+    return new Map();
+  }
+
+  const conn = await getConnection();
+  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
+  const reader = await conn.runAndReadAll(
+    `SELECT claim_id, embedding FROM claim_vectors WHERE claim_id IN (${placeholders})`,
+    [...claimIds]
+  );
+  const rows = reader.getRowObjects() as unknown as Array<{
+    claim_id: string;
+    embedding: number[];
+  }>;
+
+  return new Map(
+    rows.map((row) => [
+      row.claim_id,
+      Array.isArray(row.embedding) ? row.embedding.map((value) => Number(value)) : [],
+    ])
+  );
+}
+
+function candidateSimilarity(
+  candidate: RankedSearchResult,
+  selected: RankedSearchResult,
+  embeddings: Map<string, readonly number[]>,
+  tokenSets: Map<string, Set<string>>
+): number {
+  const candidateEmbedding = embeddings.get(candidate.claim.id);
+  const selectedEmbedding = embeddings.get(selected.claim.id);
+  const vectorSimilarity =
+    candidateEmbedding && selectedEmbedding
+      ? cosineSimilarity(candidateEmbedding, selectedEmbedding)
+      : 0;
+
+  const candidateTokens =
+    tokenSets.get(candidate.claim.id) ?? buildSimilarityTokenSet(candidate.claim.text);
+  const selectedTokens =
+    tokenSets.get(selected.claim.id) ?? buildSimilarityTokenSet(selected.claim.text);
+
+  tokenSets.set(candidate.claim.id, candidateTokens);
+  tokenSets.set(selected.claim.id, selectedTokens);
+
+  return Math.max(vectorSimilarity, jaccardSimilarity(candidateTokens, selectedTokens));
+}
+
+function rerankWithMmr(
+  results: RankedSearchResult[],
+  mmrConfig: Required<MmrConfig>,
+  limit: number,
+  embeddings: Map<string, readonly number[]>
+): RankedSearchResult[] {
+  if (results.length <= 1) {
+    return results;
+  }
+
+  const headSize = Math.min(results.length, Math.max(limit, mmrConfig.maxCandidates));
+  const head = results.slice(0, headSize);
+  const tail = results.slice(headSize);
+
+  const minScore = Math.min(...head.map((result) => result.fusedScore));
+  const maxScore = Math.max(...head.map((result) => result.fusedScore));
+  const scoreSpan = Math.max(maxScore - minScore, 0.000001);
+  const relevance = new Map(
+    head.map((result) => [result.claim.id, (result.fusedScore - minScore) / scoreSpan])
+  );
+  const tokenSets = new Map<string, Set<string>>();
+  const selected: RankedSearchResult[] = [];
+  const remaining = [...head];
+
+  while (remaining.length > 0) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i]!;
+      const relevanceScore = relevance.get(candidate.claim.id) ?? 0;
+      const redundancyPenalty =
+        selected.length === 0
+          ? 0
+          : Math.max(
+              ...selected.map((chosen) =>
+                candidateSimilarity(candidate, chosen, embeddings, tokenSets)
+              )
+            );
+      const mmrScore =
+        mmrConfig.lambda * relevanceScore - (1 - mmrConfig.lambda) * redundancyPenalty;
+
+      if (
+        mmrScore > bestScore ||
+        (mmrScore === bestScore &&
+          candidate.fusedScore > (remaining[bestIndex]?.fusedScore ?? Number.NEGATIVE_INFINITY))
+      ) {
+        bestIndex = i;
+        bestScore = mmrScore;
+      }
+    }
+
+    selected.push(remaining.splice(bestIndex, 1)[0]!);
+  }
+
+  return [...selected, ...tail];
 }
 
 /**
@@ -811,12 +1240,26 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
         THEN 1
         ELSE 0
       END as has_provenance_actor_note,
-      MAX(CASE WHEN pq.id IS NOT NULL THEN 1 ELSE 0 END) as has_promotion_lineage
+      MAX(CASE WHEN pq.id IS NOT NULL THEN 1 ELSE 0 END) as has_promotion_lineage,
+      COALESCE(fb.helpful_feedback_count, 0) as helpful_feedback_count,
+      COALESCE(fb.harmful_feedback_count, 0) as harmful_feedback_count,
+      COALESCE(fb.outdated_feedback_count, 0) as outdated_feedback_count,
+      COALESCE(fb.duplicate_feedback_count, 0) as duplicate_feedback_count
     FROM claims c
     LEFT JOIN evidence e ON e.claim_id = c.id
     LEFT JOIN promotion_queue pq
       ON pq.accepted_claim_id = c.id
      AND pq.status = 'accepted'
+    LEFT JOIN (
+      SELECT
+        claim_id,
+        SUM(CASE WHEN signal = 'helpful' THEN 1 ELSE 0 END) as helpful_feedback_count,
+        SUM(CASE WHEN signal = 'harmful' THEN 1 ELSE 0 END) as harmful_feedback_count,
+        SUM(CASE WHEN signal = 'outdated' THEN 1 ELSE 0 END) as outdated_feedback_count,
+        SUM(CASE WHEN signal = 'duplicate' THEN 1 ELSE 0 END) as duplicate_feedback_count
+      FROM feedback
+      GROUP BY claim_id
+    ) fb ON fb.claim_id = c.id
     WHERE c.id IN (${placeholders}) AND ${activeClaimFilter('c')}
     GROUP BY
       c.id,
@@ -824,7 +1267,11 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
       c.confidence,
       c.kind,
       COALESCE(c.recency_anchor, c.created_at),
-      c.provenance
+      c.provenance,
+      fb.helpful_feedback_count,
+      fb.harmful_feedback_count,
+      fb.outdated_feedback_count,
+      fb.duplicate_feedback_count
   `;
 
   const reader = await conn.runAndReadAll(sql, claimIds);
@@ -842,6 +1289,10 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
       evidence_count: Number(row.evidence_count),
       has_provenance_actor_note: Number(row.has_provenance_actor_note) > 0,
       has_promotion_lineage: Number(row.has_promotion_lineage) > 0,
+      helpful_feedback_count: Number(row.helpful_feedback_count),
+      harmful_feedback_count: Number(row.harmful_feedback_count),
+      outdated_feedback_count: Number(row.outdated_feedback_count),
+      duplicate_feedback_count: Number(row.duplicate_feedback_count),
     });
   }
 
@@ -869,7 +1320,8 @@ function mergeResultsWithRerank(
   alpha: number,
   threshold: number,
   includeBreakdown: boolean = false,
-  intent?: ActivateIntent
+  intent?: ActivateIntent,
+  feedbackBoostConfig?: FeedbackBoostOptions
 ): RankedSearchResult[] {
   // ClaimIdでマップ化
   const textMap = new Map<string, SearchResult>();
@@ -903,6 +1355,7 @@ function mergeResultsWithRerank(
     let gFactor: GFactorBreakdown;
     let intentBreakdown: ReturnType<typeof calculateIntentScoreBreakdown> = undefined;
     let provenanceQuality = undefined;
+    let feedbackBoost = undefined;
 
     if (metrics) {
       const baseGFactor = calculateGFromClaim(
@@ -931,6 +1384,17 @@ function mergeResultsWithRerank(
         hasProvenanceActorNote: metrics.has_provenance_actor_note,
         hasPromotionLineage: metrics.has_promotion_lineage,
       });
+      feedbackBoost = feedbackBoostConfig
+        ? calculateFeedbackBoostBreakdown(
+            {
+              helpful: metrics.helpful_feedback_count,
+              harmful: metrics.harmful_feedback_count,
+              outdated: metrics.outdated_feedback_count,
+              duplicate: metrics.duplicate_feedback_count,
+            },
+            feedbackBoostConfig
+          )
+        : undefined;
     } else {
       // メトリクスがない場合: g = 1.0（影響なし）
       gFactor = {
@@ -947,7 +1411,8 @@ function mergeResultsWithRerank(
       alpha,
       gFactor,
       intentBreakdown,
-      provenanceQuality
+      provenanceQuality,
+      feedbackBoost
     );
     const scoreFinal = breakdown.score_final;
 
@@ -1028,6 +1493,9 @@ export async function hybridSearchWithScores(
   const threshold = resolveThreshold(config?.threshold);
   const kText = resolveCandidateLimit(config?.kText, K_TEXT);
   const kVec = resolveCandidateLimit(config?.kVec, K_VEC);
+  const mmrConfig = resolveMmrConfig(config?.mmr);
+  const queryExpansionConfig = resolveQueryExpansionConfig(config?.queryExpansion);
+  const feedbackBoostConfig = resolveFeedbackBoostConfig(config?.feedbackBoost);
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
   const includeBreakdown = config?.includeBreakdown ?? false;
   const enableRerank = config?.enableRerank ?? true;
@@ -1039,7 +1507,10 @@ export async function hybridSearchWithScores(
       ? { excludedWorkingStateStatuses: config.excludedWorkingStateStatuses }
       : {}),
   };
-  const hasQuery = Boolean(query && query.trim().length > 0);
+  const rawQuery = query?.trim() ?? '';
+  const hasQuery = rawQuery.length > 0;
+  const effectiveQuery =
+    hasQuery && queryExpansionConfig ? await expandQueryWithEntityGraph(rawQuery, queryExpansionConfig) : rawQuery;
   const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;
   const querylessUnlimited = !hasQuery && limit >= Number.MAX_SAFE_INTEGER / 2;
 
@@ -1048,7 +1519,7 @@ export async function hybridSearchWithScores(
 
   if (hasQuery && embeddingService) {
     const embedResult = await embeddingService.embed({
-      text: query!,
+      text: effectiveQuery,
       sensitivity: 'internal',
     })();
 
@@ -1060,7 +1531,7 @@ export async function hybridSearchWithScores(
   // Step 2: 並列検索実行
   if (queryEmbedding) {
     const [textResults, vecResults] = await Promise.all([
-      textSearch(query!, scopes, kText, filters),
+      textSearch(effectiveQuery, scopes, kText, filters),
       vectorSearch(queryEmbedding, scopes, kVec, filters),
     ]);
 
@@ -1087,10 +1558,19 @@ export async function hybridSearchWithScores(
         alpha,
         threshold,
         includeBreakdown,
-        config?.intent
+        config?.intent,
+        feedbackBoostConfig
       );
     } else {
       merged = mergeResults(textResults, vecResults, alpha, threshold);
+    }
+
+    if (mmrConfig && hasQuery) {
+      const mmrCandidateIds = merged
+        .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+        .map((result) => result.claim.id);
+      const embeddings = await fetchClaimEmbeddings(mmrCandidateIds);
+      merged = rerankWithMmr(merged, mmrConfig, normalizedLimit, embeddings);
     }
 
     // Step 6: 上位k件を返却（スコア付き）
@@ -1103,15 +1583,16 @@ export async function hybridSearchWithScores(
   }
 
   const textResults = hasQuery
-    ? await textSearch(query!, scopes, kText, filters)
+    ? await textSearch(effectiveQuery, scopes, kText, filters)
     : await fallbackToTextOnlyResults(
         scopes,
         querylessUnlimited ? undefined : normalizedLimit,
         filters
       );
 
-  const shouldIntentRerank = enableRerank && Boolean(config?.intent);
-  if (shouldIntentRerank) {
+  const shouldTextOnlyRerank =
+    enableRerank && (Boolean(config?.intent) || feedbackBoostConfig !== undefined);
+  if (shouldTextOnlyRerank) {
     const uniqueIds = [...new Set(textResults.map((result) => result.claim.id))];
     const [stats, claimMetrics] = await Promise.all([
       getClaimStats(scopes, filters),
@@ -1126,10 +1607,24 @@ export async function hybridSearchWithScores(
       0,
       textOnlyThreshold,
       includeBreakdown,
-      config?.intent
+      config?.intent,
+      feedbackBoostConfig
     );
 
-    return merged.slice(0, normalizedLimit).map((r) => ({
+    const reranked = mmrConfig && hasQuery
+      ? rerankWithMmr(
+          merged,
+          mmrConfig,
+          normalizedLimit,
+          await fetchClaimEmbeddings(
+            merged
+              .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+              .map((result) => result.claim.id)
+          )
+        )
+      : merged;
+
+    return reranked.slice(0, normalizedLimit).map((r) => ({
       claim: r.claim,
       score: r.fusedScore,
       source_layer: mapScopeToLayer(r.claim.scope),
@@ -1137,15 +1632,34 @@ export async function hybridSearchWithScores(
     }));
   }
 
-  return textResults
+  const textOnlyRanked: RankedSearchResult[] = textResults
     .filter((result) => result.score >= textOnlyThreshold)
-    .slice(0, normalizedLimit)
     .map((result) => ({
       claim: result.claim,
-      score: result.score,
-      source_layer: mapScopeToLayer(result.claim.scope),
-      ...(includeBreakdown ? { score_breakdown: buildTextOnlyScoreBreakdown(result.score) } : {}),
+      fusedScore: result.score,
+      ...(includeBreakdown ? { breakdown: buildTextOnlyScoreBreakdown(result.score) } : {}),
     }));
+
+  const diversifiedTextOnly =
+    mmrConfig && hasQuery
+      ? rerankWithMmr(
+          textOnlyRanked,
+          mmrConfig,
+          normalizedLimit,
+          await fetchClaimEmbeddings(
+            textOnlyRanked
+              .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+              .map((result) => result.claim.id)
+          )
+        )
+      : textOnlyRanked;
+
+  return diversifiedTextOnly.slice(0, normalizedLimit).map((result) => ({
+    claim: result.claim,
+    score: result.fusedScore,
+    source_layer: mapScopeToLayer(result.claim.scope),
+    ...(result.breakdown ? { score_breakdown: result.breakdown } : {}),
+  }));
 }
 
 /**

@@ -2542,6 +2542,60 @@ export async function handleActivate(args: Record<string, unknown>) {
       ...(typeof hybridPolicy.threshold === 'number' ? { threshold: hybridPolicy.threshold } : {}),
       ...(typeof hybridPolicy.k_txt === 'number' ? { kText: hybridPolicy.k_txt } : {}),
       ...(typeof hybridPolicy.k_vec === 'number' ? { kVec: hybridPolicy.k_vec } : {}),
+      ...(hybridPolicy.mmr
+        ? {
+            mmr: {
+              enabled: hybridPolicy.mmr.enabled === true,
+              ...(typeof hybridPolicy.mmr.lambda === 'number'
+                ? { lambda: hybridPolicy.mmr.lambda }
+                : {}),
+              ...(typeof hybridPolicy.mmr.max_candidates === 'number'
+                ? { maxCandidates: hybridPolicy.mmr.max_candidates }
+                : {}),
+            },
+          }
+        : {}),
+      ...(hybridPolicy.query_expansion
+        ? {
+            queryExpansion: {
+              enabled: hybridPolicy.query_expansion.enabled === true,
+              ...(typeof hybridPolicy.query_expansion.max_seed_entities === 'number'
+                ? { maxSeedEntities: hybridPolicy.query_expansion.max_seed_entities }
+                : {}),
+              ...(typeof hybridPolicy.query_expansion.max_related_entities === 'number'
+                ? { maxRelatedEntities: hybridPolicy.query_expansion.max_related_entities }
+                : {}),
+              ...(typeof hybridPolicy.query_expansion.max_expansion_terms === 'number'
+                ? { maxExpansionTerms: hybridPolicy.query_expansion.max_expansion_terms }
+                : {}),
+            },
+          }
+        : {}),
+      ...(hybridPolicy.feedback_boost
+        ? {
+            feedbackBoost: {
+              enabled: hybridPolicy.feedback_boost.enabled === true,
+              ...(typeof hybridPolicy.feedback_boost.helpful_weight === 'number'
+                ? { helpfulWeight: hybridPolicy.feedback_boost.helpful_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.harmful_weight === 'number'
+                ? { harmfulWeight: hybridPolicy.feedback_boost.harmful_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.outdated_weight === 'number'
+                ? { outdatedWeight: hybridPolicy.feedback_boost.outdated_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.duplicate_weight === 'number'
+                ? { duplicateWeight: hybridPolicy.feedback_boost.duplicate_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.min_multiplier === 'number'
+                ? { minMultiplier: hybridPolicy.feedback_boost.min_multiplier }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.max_multiplier === 'number'
+                ? { maxMultiplier: hybridPolicy.feedback_boost.max_multiplier }
+                : {}),
+            },
+          }
+        : {}),
     };
 
     let searchResults: ActivateSearchItem[];

@@ -28,6 +28,26 @@ export const defaultPolicy: PolicyDocument = {
       k_vec: 96,
       k_final: 12,
       recency_half_life_days: 30,
+      mmr: {
+        enabled: false,
+        lambda: 0.72,
+        max_candidates: 48,
+      },
+      query_expansion: {
+        enabled: false,
+        max_seed_entities: 3,
+        max_related_entities: 8,
+        max_expansion_terms: 6,
+      },
+      feedback_boost: {
+        enabled: false,
+        helpful_weight: 0.25,
+        harmful_weight: 0.35,
+        outdated_weight: 0.18,
+        duplicate_weight: 0.12,
+        min_multiplier: 0.45,
+        max_multiplier: 1.65,
+      },
     },
   },
 };
