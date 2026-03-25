@@ -25,6 +25,11 @@ export interface RetrievalPolicy {
     k_vec?: number;
     k_final?: number;
     recency_half_life_days?: number;
+    mmr?: {
+      enabled?: boolean;
+      lambda?: number;
+      max_candidates?: number;
+    };
   };
 }
 

@@ -2542,6 +2542,19 @@ export async function handleActivate(args: Record<string, unknown>) {
       ...(typeof hybridPolicy.threshold === 'number' ? { threshold: hybridPolicy.threshold } : {}),
       ...(typeof hybridPolicy.k_txt === 'number' ? { kText: hybridPolicy.k_txt } : {}),
       ...(typeof hybridPolicy.k_vec === 'number' ? { kVec: hybridPolicy.k_vec } : {}),
+      ...(hybridPolicy.mmr
+        ? {
+            mmr: {
+              enabled: hybridPolicy.mmr.enabled === true,
+              ...(typeof hybridPolicy.mmr.lambda === 'number'
+                ? { lambda: hybridPolicy.mmr.lambda }
+                : {}),
+              ...(typeof hybridPolicy.mmr.max_candidates === 'number'
+                ? { maxCandidates: hybridPolicy.mmr.max_candidates }
+                : {}),
+            },
+          }
+        : {}),
     };
 
     let searchResults: ActivateSearchItem[];

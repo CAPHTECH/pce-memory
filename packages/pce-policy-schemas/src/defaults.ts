@@ -28,6 +28,11 @@ export const defaultPolicy: PolicyDocument = {
       k_vec: 96,
       k_final: 12,
       recency_half_life_days: 30,
+      mmr: {
+        enabled: false,
+        lambda: 0.72,
+        max_candidates: 48,
+      },
     },
   },
 };

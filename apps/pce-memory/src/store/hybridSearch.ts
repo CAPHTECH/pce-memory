@@ -47,6 +47,10 @@ const K_TEXT = 48;
 /** ベクトル検索上限（6× of k_final） */
 const K_VEC = 96;
 
+/** MMR関連デフォルト値 */
+const DEFAULT_MMR_LAMBDA = 0.72;
+const DEFAULT_MMR_MAX_CANDIDATES = 48;
+
 /** criticスコアが存在しない場合のデフォルト値 */
 const DEFAULT_CRITIC_SCORE = 0.5;
 
@@ -299,6 +303,12 @@ interface ClaimSearchFilters {
   excludedWorkingStateStatuses?: ClaimStatus[];
 }
 
+export interface MmrConfig {
+  enabled?: boolean;
+  lambda?: number;
+  maxCandidates?: number;
+}
+
 /**
  * g()再ランキング用メトリクス
  */
@@ -372,6 +382,8 @@ export interface HybridSearchConfig {
   excludedWorkingStateStatuses?: ClaimStatus[];
   /** activate intent */
   intent?: ActivateIntent;
+  /** 実験的なMMR多様化設定 */
+  mmr?: MmrConfig;
 }
 
 /**
@@ -424,6 +436,184 @@ function resolveCandidateLimit(limit: number | undefined, fallback: number): num
   return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
     ? normalizeLimit(limit)
     : fallback;
+}
+
+function resolveMmrConfig(mmr: MmrConfig | undefined): Required<MmrConfig> | undefined {
+  if (!mmr?.enabled) {
+    return undefined;
+  }
+
+  const lambda =
+    typeof mmr.lambda === 'number' && Number.isFinite(mmr.lambda) && mmr.lambda > 0 && mmr.lambda < 1
+      ? mmr.lambda
+      : DEFAULT_MMR_LAMBDA;
+
+  const maxCandidates =
+    typeof mmr.maxCandidates === 'number' && Number.isFinite(mmr.maxCandidates) && mmr.maxCandidates > 0
+      ? normalizeLimit(mmr.maxCandidates)
+      : DEFAULT_MMR_MAX_CANDIDATES;
+
+  return {
+    enabled: true,
+    lambda,
+    maxCandidates,
+  };
+}
+
+function buildSimilarityTokenSet(text: string): Set<string> {
+  const tokens = text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((token) => token.length >= 2);
+  return new Set(tokens);
+}
+
+function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
+  if (a.length === 0 || b.length === 0 || a.length !== b.length) {
+    return 0;
+  }
+
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    const av = a[i]!;
+    const bv = b[i]!;
+    dot += av * bv;
+    normA += av * av;
+    normB += bv * bv;
+  }
+
+  if (normA === 0 || normB === 0) {
+    return 0;
+  }
+
+  const similarity = dot / Math.sqrt(normA * normB);
+  return Math.max(0, Math.min(1, (similarity + 1) / 2));
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) {
+    return 0;
+  }
+
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) {
+      intersection++;
+    }
+  }
+
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+async function fetchClaimEmbeddings(
+  claimIds: readonly string[]
+): Promise<Map<string, readonly number[]>> {
+  if (claimIds.length === 0) {
+    return new Map();
+  }
+
+  const conn = await getConnection();
+  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
+  const reader = await conn.runAndReadAll(
+    `SELECT claim_id, embedding FROM claim_vectors WHERE claim_id IN (${placeholders})`,
+    [...claimIds]
+  );
+  const rows = reader.getRowObjects() as unknown as Array<{
+    claim_id: string;
+    embedding: number[];
+  }>;
+
+  return new Map(
+    rows.map((row) => [
+      row.claim_id,
+      Array.isArray(row.embedding) ? row.embedding.map((value) => Number(value)) : [],
+    ])
+  );
+}
+
+function candidateSimilarity(
+  candidate: RankedSearchResult,
+  selected: RankedSearchResult,
+  embeddings: Map<string, readonly number[]>,
+  tokenSets: Map<string, Set<string>>
+): number {
+  const candidateEmbedding = embeddings.get(candidate.claim.id);
+  const selectedEmbedding = embeddings.get(selected.claim.id);
+  const vectorSimilarity =
+    candidateEmbedding && selectedEmbedding
+      ? cosineSimilarity(candidateEmbedding, selectedEmbedding)
+      : 0;
+
+  const candidateTokens =
+    tokenSets.get(candidate.claim.id) ?? buildSimilarityTokenSet(candidate.claim.text);
+  const selectedTokens =
+    tokenSets.get(selected.claim.id) ?? buildSimilarityTokenSet(selected.claim.text);
+
+  tokenSets.set(candidate.claim.id, candidateTokens);
+  tokenSets.set(selected.claim.id, selectedTokens);
+
+  return Math.max(vectorSimilarity, jaccardSimilarity(candidateTokens, selectedTokens));
+}
+
+function rerankWithMmr(
+  results: RankedSearchResult[],
+  mmrConfig: Required<MmrConfig>,
+  limit: number,
+  embeddings: Map<string, readonly number[]>
+): RankedSearchResult[] {
+  if (results.length <= 1) {
+    return results;
+  }
+
+  const headSize = Math.min(results.length, Math.max(limit, mmrConfig.maxCandidates));
+  const head = results.slice(0, headSize);
+  const tail = results.slice(headSize);
+
+  const minScore = Math.min(...head.map((result) => result.fusedScore));
+  const maxScore = Math.max(...head.map((result) => result.fusedScore));
+  const scoreSpan = Math.max(maxScore - minScore, 0.000001);
+  const relevance = new Map(
+    head.map((result) => [result.claim.id, (result.fusedScore - minScore) / scoreSpan])
+  );
+  const tokenSets = new Map<string, Set<string>>();
+  const selected: RankedSearchResult[] = [];
+  const remaining = [...head];
+
+  while (remaining.length > 0) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i]!;
+      const relevanceScore = relevance.get(candidate.claim.id) ?? 0;
+      const redundancyPenalty =
+        selected.length === 0
+          ? 0
+          : Math.max(
+              ...selected.map((chosen) =>
+                candidateSimilarity(candidate, chosen, embeddings, tokenSets)
+              )
+            );
+      const mmrScore =
+        mmrConfig.lambda * relevanceScore - (1 - mmrConfig.lambda) * redundancyPenalty;
+
+      if (
+        mmrScore > bestScore ||
+        (mmrScore === bestScore &&
+          candidate.fusedScore > (remaining[bestIndex]?.fusedScore ?? Number.NEGATIVE_INFINITY))
+      ) {
+        bestIndex = i;
+        bestScore = mmrScore;
+      }
+    }
+
+    selected.push(remaining.splice(bestIndex, 1)[0]!);
+  }
+
+  return [...selected, ...tail];
 }
 
 /**
@@ -1028,6 +1218,7 @@ export async function hybridSearchWithScores(
   const threshold = resolveThreshold(config?.threshold);
   const kText = resolveCandidateLimit(config?.kText, K_TEXT);
   const kVec = resolveCandidateLimit(config?.kVec, K_VEC);
+  const mmrConfig = resolveMmrConfig(config?.mmr);
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
   const includeBreakdown = config?.includeBreakdown ?? false;
   const enableRerank = config?.enableRerank ?? true;
@@ -1093,6 +1284,14 @@ export async function hybridSearchWithScores(
       merged = mergeResults(textResults, vecResults, alpha, threshold);
     }
 
+    if (mmrConfig && hasQuery) {
+      const mmrCandidateIds = merged
+        .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+        .map((result) => result.claim.id);
+      const embeddings = await fetchClaimEmbeddings(mmrCandidateIds);
+      merged = rerankWithMmr(merged, mmrConfig, normalizedLimit, embeddings);
+    }
+
     // Step 6: 上位k件を返却（スコア付き）
     return merged.slice(0, normalizedLimit).map((r) => ({
       claim: r.claim,
@@ -1129,7 +1328,20 @@ export async function hybridSearchWithScores(
       config?.intent
     );
 
-    return merged.slice(0, normalizedLimit).map((r) => ({
+    const reranked = mmrConfig && hasQuery
+      ? rerankWithMmr(
+          merged,
+          mmrConfig,
+          normalizedLimit,
+          await fetchClaimEmbeddings(
+            merged
+              .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+              .map((result) => result.claim.id)
+          )
+        )
+      : merged;
+
+    return reranked.slice(0, normalizedLimit).map((r) => ({
       claim: r.claim,
       score: r.fusedScore,
       source_layer: mapScopeToLayer(r.claim.scope),
@@ -1137,15 +1349,34 @@ export async function hybridSearchWithScores(
     }));
   }
 
-  return textResults
+  const textOnlyRanked: RankedSearchResult[] = textResults
     .filter((result) => result.score >= textOnlyThreshold)
-    .slice(0, normalizedLimit)
     .map((result) => ({
       claim: result.claim,
-      score: result.score,
-      source_layer: mapScopeToLayer(result.claim.scope),
-      ...(includeBreakdown ? { score_breakdown: buildTextOnlyScoreBreakdown(result.score) } : {}),
+      fusedScore: result.score,
+      ...(includeBreakdown ? { breakdown: buildTextOnlyScoreBreakdown(result.score) } : {}),
     }));
+
+  const diversifiedTextOnly =
+    mmrConfig && hasQuery
+      ? rerankWithMmr(
+          textOnlyRanked,
+          mmrConfig,
+          normalizedLimit,
+          await fetchClaimEmbeddings(
+            textOnlyRanked
+              .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+              .map((result) => result.claim.id)
+          )
+        )
+      : textOnlyRanked;
+
+  return diversifiedTextOnly.slice(0, normalizedLimit).map((result) => ({
+    claim: result.claim,
+    score: result.fusedScore,
+    source_layer: mapScopeToLayer(result.claim.scope),
+    ...(result.breakdown ? { score_breakdown: result.breakdown } : {}),
+  }));
 }
 
 /**
