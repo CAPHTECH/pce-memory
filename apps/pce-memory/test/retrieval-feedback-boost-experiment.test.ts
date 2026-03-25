@@ -8,7 +8,7 @@ import {
   resetPrecisionBenchmarkDb,
   runMeasuredSearch,
   seedBenchmarkClaim,
-} from '../../../validation/precision-experiments/harness';
+} from './helpers/precisionBenchmarkTestUtils';
 
 describe('retrieval precision experiment: feedback-aware boost', () => {
   let dbPath = '';

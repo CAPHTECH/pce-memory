@@ -4,11 +4,12 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { performance } from 'perf_hooks';
 import type { EmbeddingService } from '@pce/embeddings';
-import { initDb, initSchema, resetDbAsync, getConnection } from '../../apps/pce-memory/src/db/connection.js';
-import type { ScoredClaim } from '../../apps/pce-memory/src/store/hybridSearch.js';
-import { saveClaimVector, setEmbeddingService } from '../../apps/pce-memory/src/store/hybridSearch.js';
-import { upsertClaim } from '../../apps/pce-memory/src/store/claims.js';
-import { updateCritic } from '../../apps/pce-memory/src/store/critic.js';
+import * as E from 'fp-ts/Either';
+import { getConnection, initDb, initSchema, resetDbAsync } from '../../src/db/connection';
+import type { ScoredClaim } from '../../src/store/hybridSearch';
+import { saveClaimVector, setEmbeddingService } from '../../src/store/hybridSearch';
+import { upsertClaim } from '../../src/store/claims';
+import { updateCritic } from '../../src/store/critic';
 
 export interface BenchmarkClaimInput {
   text: string;
@@ -37,13 +38,10 @@ export function createLookupEmbeddingService(
   return {
     embed: (input: { text: string; sensitivity: string }) => () =>
       Promise.resolve(
-        ({
-          _tag: 'Right',
-          right: {
-            embedding: lookup[input.text] ?? fallback,
-            modelVersion: 'precision-benchmark-v1',
-          },
-        }) as Awaited<ReturnType<ReturnType<EmbeddingService['embed']>>>
+        E.right({
+          embedding: lookup[input.text] ?? fallback,
+          modelVersion: 'precision-benchmark-v1',
+        })
       ),
   };
 }
