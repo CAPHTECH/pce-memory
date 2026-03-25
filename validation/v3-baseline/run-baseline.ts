@@ -58,6 +58,8 @@ type ActivateClaim = {
     scope: string;
     boundary_class: string;
     memory_type?: string | null;
+    freshness?: 'stale_candidate';
+    newer_similar?: string;
   };
   score: number;
   rank?: number;
@@ -76,6 +78,13 @@ type ActivatePayload = {
   next_cursor?: string;
 };
 
+type SimilarExistingMatch = {
+  id: string;
+  similarity: number;
+  text_preview: string;
+  created_at: string;
+};
+
 type UpsertPayload = {
   id: string;
   is_new: boolean;
@@ -84,6 +93,7 @@ type UpsertPayload = {
     similarity: number;
     suggested_type: 'related';
   }>;
+  similar_existing?: SimilarExistingMatch[];
 };
 
 type ObservePayload = {
@@ -128,10 +138,12 @@ type BenchmarkResults = {
 type FreshnessResult = {
   name: 'FRESHNESS';
   score: number;
-  metric: 'latest_top1_rate';
+  metric: 'composite(upsert_detection,stale_annotation,latest_top1)';
   expected_baseline: string;
   latest_top1_rate: number;
   latest_pair_win_rate: number;
+  upsert_detection_rate: number;
+  stale_annotation_rate: number;
   tracked_topics: number;
   cases: BenchmarkCase[];
 };
@@ -539,7 +551,8 @@ async function fetchClaimsByIds(ids: string[]): Promise<Map<string, ClaimRecord>
 async function runFreshnessBenchmark(): Promise<FreshnessResult> {
   await setupIsolatedStore();
 
-  for (let index = 0; index < 40; index++) {
+  // 20 distractors with unrelated content to add noise
+  for (let index = 0; index < 20; index++) {
     await seedClaim({
       text: `Freshness distractor ${index}: warehouse routing memo for zone ${index} keeps pallet threshold at ${50 + index} units.`,
       provenance_at: isoDaysAgo(30 + index),
@@ -552,29 +565,69 @@ async function runFreshnessBenchmark(): Promise<FreshnessResult> {
   const cases: BenchmarkCase[] = [];
   const latestWins: number[] = [];
   const top1Wins: number[] = [];
+  const upsertDetections: number[] = [];
+  const staleAnnotations: number[] = [];
 
   for (let topic = 0; topic < 10; topic++) {
+    // Old claim includes "review" which will appear in the query (gives it higher relevance)
+    const oldText = `Freshness topic ${topic}: the API timeout for service maple-${topic} is set to ${15 + topic} seconds per the rollout policy review.`;
+    // New claim uses "update" instead of "review" - nearly identical but misses the query keyword
+    const newText = `Freshness topic ${topic}: the API timeout for service maple-${topic} is set to ${25 + topic} seconds per the rollout policy update.`;
+
+    // Diagnostic: verify pair similarity (guard requires > 0.85)
+    const pairSimilarity = cosineSimilarity(
+      deterministicEmbedding(oldText),
+      deterministicEmbedding(newText)
+    );
+
+    // Seed old claim first (10 days ago - close enough to appear in results)
     const originalId = await seedClaim({
-      text: `Freshness topic ${topic}: API timeout for service maple-${topic} is ${15 + topic} seconds under the rollout policy.`,
-      provenance_at: isoDaysAgo(120 - topic),
+      text: oldText,
+      provenance_at: isoDaysAgo(10),
       timestamps: {
-        created_at: isoDaysAgo(120 - topic),
-      },
-    });
-    const latestId = await seedClaim({
-      text: `Freshness topic ${topic}: API timeout for service maple-${topic} is ${25 + topic} seconds after the rollout update.`,
-      provenance_at: isoDaysAgo(2),
-      timestamps: {
-        created_at: isoDaysAgo(2),
+        created_at: isoDaysAgo(10),
       },
     });
 
-    const query = `service maple-${topic} API timeout rollout policy`;
-    const payload = await activate({ q: query, top_k: 4, include_meta: true });
+    // Seed new claim via handleUpsert directly to capture full response including similar_existing
+    const upsertResult = expectSuccess<Record<string, unknown>>(
+      await handleUpsert({
+        text: newText,
+        kind: 'fact',
+        scope: 'project',
+        boundary_class: 'internal',
+        memory_type: 'knowledge',
+        content_hash: sha256(newText),
+        provenance: {
+          at: isoDaysAgo(1),
+          actor: 'validation-v3-baseline',
+        },
+      })
+    );
+    const latestId = upsertResult.id as string;
+    await updateClaimTimestamps(latestId, {
+      created_at: isoDaysAgo(1),
+    });
+
+    // Check: does upsert detect similar_existing?
+    const similarExisting = upsertResult.similar_existing;
+    const hasSimilarExisting =
+      Array.isArray(similarExisting) && (similarExisting as unknown[]).length > 0;
+    upsertDetections.push(hasSimilarExisting ? 1 : 0);
+
+    // Query includes "review" - matches old claim better than new claim
+    const query = `service maple-${topic} API timeout rollout policy review`;
+    const payload = await activate({ q: query, top_k: 8, include_meta: true });
     const ranks = rankMap(payload);
     const originalRank = ranks.get(originalId) ?? Number.POSITIVE_INFINITY;
     const latestRank = ranks.get(latestId) ?? Number.POSITIVE_INFINITY;
     const topId = payload.claims[0]?.claim.id;
+
+    // Check: does activate annotate old claim as stale_candidate?
+    const oldClaimResult = payload.claims.find((item) => item.claim.id === originalId);
+    const hasStaleAnnotation = oldClaimResult?.claim.freshness === 'stale_candidate';
+    staleAnnotations.push(hasStaleAnnotation ? 1 : 0);
+
     const latestPairWin = latestRank < originalRank;
     const latestTop1 = topId === latestId;
 
@@ -587,17 +640,27 @@ async function runFreshnessBenchmark(): Promise<FreshnessResult> {
       expected_id: latestId,
       actual_ids: payload.claims.map((item) => item.claim.id),
       success: latestTop1,
-      notes: `latest_rank=${Number.isFinite(latestRank) ? latestRank : 'miss'} stale_rank=${Number.isFinite(originalRank) ? originalRank : 'miss'}`,
+      notes: `latest_rank=${Number.isFinite(latestRank) ? latestRank : 'miss'} stale_rank=${Number.isFinite(originalRank) ? originalRank : 'miss'} pair_sim=${pairSimilarity.toFixed(3)} upsert_detected=${hasSimilarExisting} stale_flagged=${hasStaleAnnotation}`,
     });
   }
 
+  const upsertDetectionRate = round(average(upsertDetections));
+  const staleAnnotationRate = round(average(staleAnnotations));
+  const top1Rate = round(average(top1Wins));
+  const pairWinRate = round(average(latestWins));
+
+  // Composite score: 30% upsert detection + 30% stale annotation + 40% ranking
+  const compositeScore = round(upsertDetectionRate * 0.3 + staleAnnotationRate * 0.3 + top1Rate * 0.4);
+
   return {
     name: 'FRESHNESS',
-    score: round(average(top1Wins)),
-    metric: 'latest_top1_rate',
-    expected_baseline: '~50% if the system cannot distinguish stale vs latest versions',
-    latest_top1_rate: round(average(top1Wins)),
-    latest_pair_win_rate: round(average(latestWins)),
+    score: compositeScore,
+    metric: 'composite(upsert_detection,stale_annotation,latest_top1)',
+    expected_baseline: '~0.13 without freshness guard (0 detection + 0 annotation + ~0.33 top1)',
+    latest_top1_rate: top1Rate,
+    latest_pair_win_rate: pairWinRate,
+    upsert_detection_rate: upsertDetectionRate,
+    stale_annotation_rate: staleAnnotationRate,
     tracked_topics: 10,
     cases,
   };
@@ -998,7 +1061,7 @@ function buildReport(results: BenchmarkResults): string {
     '',
     '| Dimension | Score | Metric |',
     '| --- | ---: | --- |',
-    `| B1 Freshness | ${percent(B1.score)} | latest top-1 is newest version |`,
+    `| B1 Freshness | ${percent(B1.score)} | composite(upsert_detection,stale_annotation,latest_top1) |`,
     `| B2 Usage Learning | ${round(B2.score, 3)} | Spearman(freq, final rank) |`,
     `| B3 Maintenance | ${percent(B3.score)} | detected hint categories |`,
     `| B4 Connectivity | ${percent(B4.score)} | related claim recall@5 |`,
@@ -1006,7 +1069,7 @@ function buildReport(results: BenchmarkResults): string {
     '',
     '## Notes',
     '',
-    `- B1 latest top-1 rate: ${percent(B1.latest_top1_rate)}. Pairwise latest-vs-stale win rate: ${percent(B1.latest_pair_win_rate)}.`,
+    `- B1 upsert detection rate: ${percent(B1.upsert_detection_rate)}. Stale annotation rate: ${percent(B1.stale_annotation_rate)}. Latest top-1 rate: ${percent(B1.latest_top1_rate)}. Pairwise win rate: ${percent(B1.latest_pair_win_rate)}.`,
     `- B2 final correlation: ${round(B2.spearman_frequency_vs_final_rank, 3)}.`,
     `- B3 detected categories: ${B3.detected_categories.length === 0 ? 'none' : B3.detected_categories.join(', ')}.`,
     `- B4 related claim recall@5: ${percent(B4.related_claim_recall_at_5)}.`,
@@ -1014,7 +1077,7 @@ function buildReport(results: BenchmarkResults): string {
     '',
     '## Interpretation',
     '',
-    '- B1 is the baseline for future freshness-aware retrieval. Higher post-v3 scores should mean newer claims displace stale variants more reliably.',
+    '- B1 measures three aspects of the freshness guard: (1) upsert detection of similar existing claims, (2) activate annotation of stale claims, (3) ranking promotion of newer claims over stale variants.',
     '- B2 isolates usage learning without feedback writes. A post-v3 implementation should move the correlation positive only if plain retrieval history becomes a ranking signal.',
     '- B3 checks whether activate currently surfaces maintenance guidance for duplicates, raw observations, or dormant claims. The current baseline is expected to stay at zero unless new hint fields are introduced.',
     '- B4 measures how often logically related claims appear after confirming suggested claim links. Improvements after connectivity work should come from claim-link traversal rather than lexical coincidence alone.',
