@@ -190,6 +190,11 @@ export function recencyDecay(ts: Date | string, halfLifeDays: number): number {
   // 未来日付クランプ（ageDays < 0 → recency > 1 防止）
   const clampedAge = Math.max(0, ageDays);
 
+  // halfLifeDaysが0以下やNaNの場合は安全側に倒す
+  if (!Number.isFinite(halfLifeDays) || halfLifeDays <= 0) {
+    return 0;
+  }
+
   // ln(2) ≈ 0.693147
   return Math.exp((-0.693147 * clampedAge) / halfLifeDays);
 }

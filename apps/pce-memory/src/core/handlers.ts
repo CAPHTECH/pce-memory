@@ -3678,6 +3678,19 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
       );
     }
 
+    // limitのバリデーション
+    if (limit !== undefined) {
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+        return createToolResult(
+          {
+            ...err('VALIDATION_ERROR', 'limit must be a positive integer', reqId),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
+    }
+
     // クエリ実行
     const filters: EntityQueryFilters = {
       ...(id !== undefined && { id }),
@@ -3775,6 +3788,19 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
         },
         { isError: true }
       );
+    }
+
+    // limitのバリデーション
+    if (limit !== undefined) {
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+        return createToolResult(
+          {
+            ...err('VALIDATION_ERROR', 'limit must be a positive integer', reqId),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
     }
 
     // クエリ実行
@@ -3946,6 +3972,24 @@ export async function handleSyncPush(args: Record<string, unknown>) {
       include_relations?: boolean;
     };
 
+    // target_dirのパストラバーサル検証
+    if (typeof target_dir === 'string' && hasPathTraversal(target_dir)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'target_dir contains path traversal segments', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // sinceの日時バリデーション
+    if (since !== undefined) {
+      if (typeof since !== 'string' || !Number.isFinite(Date.parse(since))) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
     // Push実行オプションの構築
     const options: PushOptions = {
       basePath: process.cwd(),
@@ -4044,6 +4088,24 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       since?: string; // Phase 2: 増分インポート用ISO8601日時
     };
 
+    // source_dirのパストラバーサル検証
+    if (typeof source_dir === 'string' && hasPathTraversal(source_dir)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'source_dir contains path traversal segments', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // sinceの日時バリデーション
+    if (since !== undefined) {
+      if (typeof since !== 'string' || !Number.isFinite(Date.parse(since))) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
     // Pull実行オプションの構築
     const options: PullOptions = {
       basePath: process.cwd(),
@@ -4051,7 +4113,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       ...(scope_filter && { scopeFilter: scope_filter as Scope[] }),
       ...(boundary_filter && { boundaryFilter: boundary_filter as BoundaryClass[] }),
       ...(dry_run !== undefined && { dryRun: dry_run }),
-      ...(since && { since: new Date(since) }), // Phase 2: since追加
+      ...(since && { since: new Date(since) }),
     };
 
     // Pull実行
@@ -4825,7 +4887,8 @@ export async function handleListPrompts(args: Record<string, unknown>): Promise<
 
   // ページネーション処理
   const PAGE_SIZE = 10;
-  const startIdx = cursor ? parseInt(cursor, 10) : 0;
+  const parsedCursor = cursor ? parseInt(cursor, 10) : 0;
+  const startIdx = Number.isFinite(parsedCursor) && parsedCursor >= 0 ? parsedCursor : 0;
   const prompts = PROMPTS_DEFINITIONS.slice(startIdx, startIdx + PAGE_SIZE);
 
   return { prompts };
