@@ -152,6 +152,7 @@ export async function computeHealthReport(): Promise<HealthReport> {
     harmful: 0,
     outdated: 0,
     duplicate: 0,
+    completed: 0,
     total: 0,
   };
   for (const row of fbSummaryResult.getRowObjects() as { signal: string; cnt: number }[]) {

@@ -4,6 +4,7 @@ import { computeContentHash } from '@pce/embeddings';
 
 let instance: DuckDBInstance | null = null;
 let cachedConnection: DuckDBConnection | null = null;
+const WORKING_STATE_STALE_AFTER_DAYS = 14;
 
 async function getTableColumns(
   conn: DuckDBConnection,
@@ -217,6 +218,48 @@ async function migrateClaimsMemoryType(conn: DuckDBConnection): Promise<void> {
   await conn.run('ALTER TABLE claims ADD COLUMN memory_type TEXT');
 }
 
+async function backfillWorkingStateStatuses(
+  conn: DuckDBConnection,
+  staleAfterDays: number = WORKING_STATE_STALE_AFTER_DAYS
+): Promise<void> {
+  if (!(await tableExists(conn, 'claims'))) return;
+
+  const normalizedDays =
+    Number.isFinite(staleAfterDays) && staleAfterDays > 0 ? Math.floor(staleAfterDays) : 14;
+  const feedbackExists = await tableExists(conn, 'feedback');
+  const recentFeedbackGuard = feedbackExists
+    ? `AND NOT EXISTS (
+         SELECT 1
+         FROM feedback f
+         WHERE f.claim_id = claims.id
+           AND f.ts >= CURRENT_TIMESTAMP - INTERVAL '${normalizedDays} days'
+       )`
+    : '';
+
+  await conn.run("UPDATE claims SET status = 'active' WHERE status IS NULL");
+  await conn.run(`
+    UPDATE claims
+    SET status = 'stale',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE memory_type = 'working_state'
+      AND COALESCE(status, 'active') = 'active'
+      AND COALESCE(recency_anchor, created_at) < CURRENT_TIMESTAMP - INTERVAL '${normalizedDays} days'
+      ${recentFeedbackGuard}
+  `);
+}
+
+async function migrateClaimsStatus(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'claims'))) return;
+
+  const cols = await getTableColumns(conn, 'claims');
+  if (!cols.has('status')) {
+    console.error('[DB] Migrating claims: adding status column...');
+    await conn.run("ALTER TABLE claims ADD COLUMN status TEXT DEFAULT 'active'");
+  }
+
+  await backfillWorkingStateStatuses(conn);
+}
+
 async function migrateClaimsRollbackColumns(conn: DuckDBConnection): Promise<void> {
   if (!(await tableExists(conn, 'claims'))) return;
 
@@ -394,6 +437,7 @@ export async function initSchema() {
   await migrateClaimVectorsDropFK(conn); // PR #32: DuckDB FK制約バグ対策
   await migrateFeedbackActiveContextId(conn); // feedback表にactive_context_idカラム追加
   await migrateClaimsMemoryType(conn); // Issue #60: claims表にmemory_typeカラム追加
+  await migrateClaimsStatus(conn); // Issue #71: claims表にstatus列を追加しworking_stateをbackfill
   await migrateClaimsRollbackColumns(conn); // Issue #61: claims表にrollback列を追加
   await migrateActiveContextsV2(conn); // Issue #60: active_contexts表をv2列で拡張
   await migrateObservationsBoundaryClass(conn); // Issue #61: observations表にboundary_class追加

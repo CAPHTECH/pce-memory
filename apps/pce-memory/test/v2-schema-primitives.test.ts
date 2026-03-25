@@ -70,6 +70,7 @@ describe('v2 schema primitives', () => {
     }
 
     expect(columnsByTable.get('claims')?.has('memory_type')).toBe(true);
+    expect(columnsByTable.get('claims')?.has('status')).toBe(true);
     expect(columnsByTable.get('active_contexts')?.has('intent')).toBe(true);
     expect(columnsByTable.get('active_contexts')?.has('expires_at')).toBe(true);
     expect(columnsByTable.get('active_contexts')?.has('policy_version')).toBe(true);

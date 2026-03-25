@@ -3,7 +3,10 @@ import type { EmbeddingService, SensitivityLevel } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
 import { saveClaimVector, splitQueryWords, buildWordOrCondition } from './hybridSearch.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
-import type { MemoryType } from '../domain/types.js';
+import type { ClaimStatus, MemoryType } from '../domain/types.js';
+import { isValidClaimStatus } from '../domain/types.js';
+
+export const WORKING_STATE_STALE_AFTER_DAYS = 14;
 
 function activeClaimFilter(alias: string): string {
   return `COALESCE(${alias}.tombstone, FALSE) = FALSE
@@ -43,6 +46,7 @@ export interface Claim {
   scope: string;
   boundary_class: string;
   memory_type?: MemoryType | null;
+  status: ClaimStatus;
   content_hash: string;
   // g()再ランキング用フィールド（ADR-0004準拠）
   utility: number;
@@ -60,7 +64,8 @@ export interface Claim {
   provenance?: Provenance;
 }
 
-export interface ClaimRow extends Omit<Claim, 'provenance' | 'has_rollback_record'> {
+export interface ClaimRow extends Omit<Claim, 'provenance' | 'has_rollback_record' | 'status'> {
+  status?: ClaimStatus | string | null;
   provenance?: Provenance | string | null;
   has_rollback_record?: unknown;
 }
@@ -89,15 +94,23 @@ export class ContentHashCollisionError extends Error {
 /** g()再ランキング用フィールドを含むClaim入力型 */
 export type ClaimInput = Omit<
   Claim,
-  'id' | 'memory_type' | 'utility' | 'confidence' | 'created_at' | 'updated_at' | 'recency_anchor'
+  | 'id'
+  | 'memory_type'
+  | 'status'
+  | 'utility'
+  | 'confidence'
+  | 'created_at'
+  | 'updated_at'
+  | 'recency_anchor'
 > & {
   memory_type?: MemoryType;
+  status?: ClaimStatus;
   provenance?: Provenance;
 };
 
 /** 全カラムのSELECT句 */
 const CLAIM_COLUMNS =
-  'id, text, kind, scope, boundary_class, memory_type, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance, tombstone, tombstone_at, rollback_reason, superseded_by';
+  'id, text, kind, scope, boundary_class, memory_type, status, content_hash, utility, confidence, created_at, updated_at, recency_anchor, provenance, tombstone, tombstone_at, rollback_reason, superseded_by';
 
 /**
  * DBから取得したClaimのprovenanceフィールドをパース
@@ -113,6 +126,7 @@ function parseClaimProvenance(claim: ClaimRow): Claim {
     scope: claim.scope,
     boundary_class: claim.boundary_class,
     memory_type: claim.memory_type ?? null,
+    status: isValidClaimStatus(claim.status) ? claim.status : 'active',
     content_hash: claim.content_hash,
     utility: claim.utility,
     confidence: claim.confidence,
@@ -170,9 +184,20 @@ export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
     const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
     const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
     const memoryType = c.memory_type ?? null;
+    const status = c.status ?? 'active';
     await conn.run(
-      'INSERT INTO claims (id, text, kind, scope, boundary_class, memory_type, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [id, c.text, c.kind, c.scope, c.boundary_class, memoryType, c.content_hash, provenanceJson]
+      'INSERT INTO claims (id, text, kind, scope, boundary_class, memory_type, status, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [
+        id,
+        c.text,
+        c.kind,
+        c.scope,
+        c.boundary_class,
+        memoryType,
+        status,
+        c.content_hash,
+        provenanceJson,
+      ]
     );
     // 挿入後のレコードを取得（DEFAULT値を含む）
     const insertedReader = await conn.runAndReadAll(
@@ -416,6 +441,73 @@ export async function updateClaimSyncMetadata(
     ...values,
     id,
   ]);
+}
+
+async function feedbackTableExists(): Promise<boolean> {
+  const conn = await getConnection();
+  const reader = await conn.runAndReadAll(
+    "SELECT COUNT(*)::INTEGER AS cnt FROM information_schema.tables WHERE table_name = 'feedback'"
+  );
+  const rows = reader.getRowObjects() as Array<{ cnt: number | bigint }>;
+  return Number(rows[0]?.cnt ?? 0) > 0;
+}
+
+function resolveStaleAfterDays(staleAfterDays: number | undefined): number {
+  return typeof staleAfterDays === 'number' && Number.isFinite(staleAfterDays) && staleAfterDays > 0
+    ? Math.floor(staleAfterDays)
+    : WORKING_STATE_STALE_AFTER_DAYS;
+}
+
+export async function updateClaimStatus(id: string, status: ClaimStatus): Promise<void> {
+  const conn = await getConnection();
+  await conn.run(
+    'UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+    [status, id]
+  );
+}
+
+export async function markStaleWorkingStateClaims(options: {
+  staleAfterDays?: number;
+} = {}): Promise<string[]> {
+  const conn = await getConnection();
+  const staleAfterDays = resolveStaleAfterDays(options.staleAfterDays);
+  const feedbackExists = await feedbackTableExists();
+  const recentFeedbackGuard = feedbackExists
+    ? `AND NOT EXISTS (
+         SELECT 1
+         FROM feedback f
+         WHERE f.claim_id = c.id
+           AND f.ts >= CURRENT_TIMESTAMP - INTERVAL '${staleAfterDays} days'
+       )`
+    : '';
+
+  const reader = await conn.runAndReadAll(
+    `
+      SELECT c.id
+      FROM claims c
+      WHERE c.memory_type = 'working_state'
+        AND COALESCE(c.status, 'active') = 'active'
+        AND COALESCE(c.recency_anchor, c.created_at) < CURRENT_TIMESTAMP - INTERVAL '${staleAfterDays} days'
+        ${recentFeedbackGuard}
+    `
+  );
+  const rows = reader.getRowObjects() as Array<{ id: string }>;
+  const claimIds = rows.map((row) => row.id);
+
+  if (claimIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
+  await conn.run(
+    `UPDATE claims
+     SET status = 'stale',
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id IN (${placeholders})`,
+    claimIds
+  );
+
+  return claimIds;
 }
 
 export interface RollbackClaimInput {

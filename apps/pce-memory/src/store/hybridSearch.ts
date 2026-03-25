@@ -31,7 +31,7 @@ import {
   type ScoreBreakdown,
 } from './rerank.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
-import type { ActivateIntent, ClaimKind, MemoryType } from '../domain/types.js';
+import type { ActivateIntent, ClaimKind, ClaimStatus, MemoryType } from '../domain/types.js';
 
 // ========== ADR-0004 パラメータ ==========
 
@@ -256,6 +256,23 @@ function buildClaimFilterConditions(
   if (memoryType.sql) {
     clauses.push(memoryType.sql);
     params.push(...memoryType.params);
+    nextParamIndex += memoryType.params.length;
+  }
+
+  const excludedStatuses = filters.excludedWorkingStateStatuses;
+  if (excludedStatuses !== undefined) {
+    const normalizedStatuses = [...new Set(excludedStatuses.filter((value) => value.length > 0))];
+    if (normalizedStatuses.length === 0) {
+      clauses.push('1 = 0');
+    } else {
+      const placeholders = normalizedStatuses
+        .map((_, index) => `$${nextParamIndex + index}`)
+        .join(',');
+      clauses.push(
+        `(${alias}.memory_type IS NULL OR ${alias}.memory_type <> 'working_state' OR COALESCE(${alias}.status, 'active') NOT IN (${placeholders}))`
+      );
+      params.push(...normalizedStatuses);
+    }
   }
 
   return {
@@ -279,6 +296,7 @@ interface ClaimSearchFilters {
   boundaryClasses?: string[];
   kindFilter?: ClaimKind[];
   memoryTypeFilter?: MemoryType[];
+  excludedWorkingStateStatuses?: ClaimStatus[];
 }
 
 /**
@@ -350,6 +368,8 @@ export interface HybridSearchConfig {
   kindFilter?: ClaimKind[];
   /** memory_typeフィルタ */
   memoryTypeFilter?: MemoryType[];
+  /** activate時に除外するworking_state status */
+  excludedWorkingStateStatuses?: ClaimStatus[];
   /** activate intent */
   intent?: ActivateIntent;
 }
@@ -480,7 +500,7 @@ export async function textSearch(
     const filterConditions = buildClaimFilterConditions('c', filters, scopes.length + 1);
     const sql = `
       SELECT
-        c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
+        c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
         c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
         COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
       FROM claims c
@@ -507,6 +527,7 @@ export async function textSearch(
         scope: row.scope,
         boundary_class: row.boundary_class,
         memory_type: row.memory_type ?? null,
+        status: row.status ?? 'active',
         content_hash: row.content_hash,
         utility: row.utility,
         confidence: row.confidence,
@@ -530,7 +551,7 @@ export async function textSearch(
   // TLA+ claimTextRelevant: いずれかの単語に対して LIKE '%word%' でマッチ
   const sql = `
     SELECT
-      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
+      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
       COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
     FROM claims c
@@ -560,6 +581,7 @@ export async function textSearch(
       scope: row.scope,
       boundary_class: row.boundary_class,
       memory_type: row.memory_type ?? null,
+      status: row.status ?? 'active',
       content_hash: row.content_hash,
       utility: row.utility,
       confidence: row.confidence,
@@ -619,7 +641,7 @@ export async function vectorSearch(
   // norm_cosで[-1,1]を[0,1]に正規化
   const sql = `
     SELECT
-      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
+      c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
       norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score
     FROM claims c
@@ -647,6 +669,7 @@ export async function vectorSearch(
       scope: row.scope,
       boundary_class: row.boundary_class,
       memory_type: row.memory_type ?? null,
+      status: row.status ?? 'active',
       content_hash: row.content_hash,
       utility: row.utility,
       confidence: row.confidence,
@@ -1012,6 +1035,9 @@ export async function hybridSearchWithScores(
     ...(config?.boundaryClasses ? { boundaryClasses: config.boundaryClasses } : {}),
     ...(config?.kindFilter ? { kindFilter: config.kindFilter } : {}),
     ...(config?.memoryTypeFilter ? { memoryTypeFilter: config.memoryTypeFilter } : {}),
+    ...(config?.excludedWorkingStateStatuses
+      ? { excludedWorkingStateStatuses: config.excludedWorkingStateStatuses }
+      : {}),
   };
   const hasQuery = Boolean(query && query.trim().length > 0);
   const textOnlyThreshold = hasQuery ? threshold : Number.NEGATIVE_INFINITY;
@@ -1198,7 +1224,7 @@ async function fallbackToTextOnlyResults(
   const limitClause =
     limit !== undefined ? `LIMIT $${scopes.length + filterConditions.params.length + 1}` : '';
   const sql = `
-    SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.content_hash,
+    SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
            COALESCE(cr.score, 0) as score
     FROM claims c
@@ -1225,6 +1251,7 @@ async function fallbackToTextOnlyResults(
       scope: row.scope,
       boundary_class: row.boundary_class,
       memory_type: row.memory_type ?? null,
+      status: row.status ?? 'active',
       content_hash: row.content_hash,
       utility: row.utility,
       confidence: row.confidence,
