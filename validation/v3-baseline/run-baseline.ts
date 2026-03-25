@@ -706,23 +706,23 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
 
   const duplicateSimilarities: number[] = [];
   for (let pair = 0; pair < 5; pair++) {
-    const baseText = `Operations ledger for maple-${pair} shows certificate renewal every 30 days for cluster north.`;
-    const nearDuplicateText = `Operations ledger for maple-${pair} shows certificate renewal every 30 days for cluster south.`;
+    const baseText = `Release memo for module pine-dup-${pair}: partition window keeps renewal at 24 hours for cluster north region.`;
+    const nearDuplicateText = `Release memo for module pine-dup-${pair}: partition window keeps renewal at 24 hours for cluster south region.`;
     duplicateSimilarities.push(
       cosineSimilarity(deterministicEmbedding(baseText), deterministicEmbedding(nearDuplicateText))
     );
     await seedClaim({
       text: baseText,
-      provenance_at: isoDaysAgo(40 + pair),
+      provenance_at: isoDaysAgo(10 + pair),
       timestamps: {
-        created_at: isoDaysAgo(40 + pair),
+        created_at: isoDaysAgo(10 + pair),
       },
     });
     await seedClaim({
       text: nearDuplicateText,
-      provenance_at: isoDaysAgo(39 + pair),
+      provenance_at: isoDaysAgo(9 + pair),
       timestamps: {
-        created_at: isoDaysAgo(39 + pair),
+        created_at: isoDaysAgo(9 + pair),
       },
     });
   }
@@ -811,7 +811,7 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
     name: 'MAINTENANCE',
     score: round(detectedCategories.length / checkedCategories.length),
     metric: 'detected_hint_category_ratio',
-    expected_baseline: '0 because activate does not currently surface maintenance_hints',
+    expected_baseline: '1.0 when maintenance_hints surfaces all four hint categories',
     detected_hint_category_ratio: round(detectedCategories.length / checkedCategories.length),
     detected_categories: detectedCategories,
     checked_categories: checkedCategories,
@@ -1023,7 +1023,7 @@ function buildReport(results: BenchmarkResults): string {
     '',
     '- B1 is the baseline for future freshness-aware retrieval. Higher post-v3 scores should mean newer claims displace stale variants more reliably.',
     '- B2 isolates usage learning without feedback writes. A post-v3 implementation should move the correlation positive only if plain retrieval history becomes a ranking signal.',
-    '- B3 checks whether activate surfaces maintenance_hints for duplicates, raw observations, dormant claims, and repeatedly retrieved claims lacking feedback. The current baseline is expected to stay at zero unless those hint fields are introduced.',
+    '- B3 checks whether activate surfaces maintenance_hints for duplicates, raw observations, dormant claims, and repeatedly retrieved claims lacking feedback. Score reflects the fraction of hint categories detected.',
     '- B4 measures how often logically related claims appear without graph links. Improvements after connectivity work should raise recall without relying on lexical coincidence.',
     '- B5 gives a single regression-friendly number for a realistic multi-session flow.',
     '',
