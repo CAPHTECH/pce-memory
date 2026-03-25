@@ -3972,6 +3972,24 @@ export async function handleSyncPush(args: Record<string, unknown>) {
       include_relations?: boolean;
     };
 
+    // target_dirのパストラバーサル検証
+    if (typeof target_dir === 'string' && hasPathTraversal(target_dir)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'target_dir contains path traversal segments', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // sinceの日時バリデーション
+    if (since !== undefined) {
+      if (typeof since !== 'string' || !Number.isFinite(Date.parse(since))) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
     // Push実行オプションの構築
     const options: PushOptions = {
       basePath: process.cwd(),
@@ -4070,6 +4088,24 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       since?: string; // Phase 2: 増分インポート用ISO8601日時
     };
 
+    // source_dirのパストラバーサル検証
+    if (typeof source_dir === 'string' && hasPathTraversal(source_dir)) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', 'source_dir contains path traversal segments', reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
+
+    // sinceの日時バリデーション
+    if (since !== undefined) {
+      if (typeof since !== 'string' || !Number.isFinite(Date.parse(since))) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', 'since must be a valid ISO 8601 datetime string', reqId), trace_id: traceId },
+          { isError: true }
+        );
+      }
+    }
+
     // Pull実行オプションの構築
     const options: PullOptions = {
       basePath: process.cwd(),
@@ -4077,7 +4113,7 @@ export async function handleSyncPull(args: Record<string, unknown>) {
       ...(scope_filter && { scopeFilter: scope_filter as Scope[] }),
       ...(boundary_filter && { boundaryFilter: boundary_filter as BoundaryClass[] }),
       ...(dry_run !== undefined && { dryRun: dry_run }),
-      ...(since && { since: new Date(since) }), // Phase 2: since追加
+      ...(since && { since: new Date(since) }),
     };
 
     // Pull実行

@@ -2083,3 +2083,62 @@ describe('BOUNDARY: handleListPrompts cursor pagination', () => {
     expect(result.prompts.length).toBeGreaterThan(0);
   });
 });
+
+// ==================== Sync handler input validation ====================
+
+describe('FUZZ: pce_memory_sync_push', () => {
+  beforeEach(async () => {
+    await applyPolicy();
+  });
+
+  it('rejects path traversal in target_dir', async () => {
+    expectError(
+      await dispatchTool('pce_memory_sync_push', {
+        target_dir: '../../../etc/malicious',
+      }),
+      'VALIDATION_ERROR'
+    );
+  });
+
+  it('rejects invalid since date', async () => {
+    expectError(
+      await dispatchTool('pce_memory_sync_push', {
+        since: 'not-a-date',
+      }),
+      'VALIDATION_ERROR'
+    );
+  });
+
+  it('rejects numeric since', async () => {
+    expectError(
+      await dispatchTool('pce_memory_sync_push', {
+        since: 12345,
+      }),
+      'VALIDATION_ERROR'
+    );
+  });
+});
+
+describe('FUZZ: pce_memory_sync_pull', () => {
+  beforeEach(async () => {
+    await applyPolicy();
+  });
+
+  it('rejects path traversal in source_dir', async () => {
+    expectError(
+      await dispatchTool('pce_memory_sync_pull', {
+        source_dir: '../../../etc/malicious',
+      }),
+      'VALIDATION_ERROR'
+    );
+  });
+
+  it('rejects invalid since date', async () => {
+    expectError(
+      await dispatchTool('pce_memory_sync_pull', {
+        since: 'not-a-date',
+      }),
+      'VALIDATION_ERROR'
+    );
+  });
+});
