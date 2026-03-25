@@ -355,6 +355,8 @@ type ActivateSearchItem = {
   score_breakdown?: ScoreBreakdown;
 };
 
+const OBSERVATION_SCORE_MERGE_HEADROOM = 0.98;
+
 function getActivateItemTimestamp(item: ActivateSearchItem): number {
   const candidate = item.claim.updated_at ?? item.claim.created_at;
   const timestamp = new Date(candidate).getTime();
@@ -372,6 +374,37 @@ function compareActivateSearchItems(left: ActivateSearchItem, right: ActivateSea
   }
 
   return right.claim.id.localeCompare(left.claim.id);
+}
+
+function maxActivateItemScore(items: ActivateSearchItem[]): number {
+  return items.reduce((maxScore, item) => {
+    return Number.isFinite(item.score) ? Math.max(maxScore, item.score) : maxScore;
+  }, Number.NEGATIVE_INFINITY);
+}
+
+function normalizeObservationScoresForActivate(
+  durableResults: ActivateSearchItem[],
+  observationResults: ActivateSearchItem[]
+): ActivateSearchItem[] {
+  if (durableResults.length === 0 || observationResults.length === 0) {
+    return observationResults;
+  }
+
+  const maxDurableScore = maxActivateItemScore(durableResults);
+  const maxObservationScore = maxActivateItemScore(observationResults);
+  if (!(maxDurableScore > 0) || !(maxObservationScore > 0)) {
+    return observationResults;
+  }
+
+  const scale = (maxDurableScore * OBSERVATION_SCORE_MERGE_HEADROOM) / maxObservationScore;
+  if (!Number.isFinite(scale) || scale >= 1) {
+    return observationResults;
+  }
+
+  return observationResults.map((item) => ({
+    ...item,
+    score: item.score * scale,
+  }));
 }
 
 function mapDurableScopeToTargetLayer(scope: DurableScope): 'meso' | 'macro' {
@@ -2433,8 +2466,12 @@ export async function handleActivate(args: Record<string, unknown>) {
           limit: candidateLimit,
         }),
       ]);
+      const normalizedObservationResults = normalizeObservationScoresForActivate(
+        durableResults,
+        observationResults
+      );
 
-      const combinedResults = [...durableResults, ...observationResults].sort(
+      const combinedResults = [...durableResults, ...normalizedObservationResults].sort(
         compareActivateSearchItems
       );
       const cursorIndex =

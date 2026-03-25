@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { dispatchTool, TOOL_DEFINITIONS } from '../src/core/handlers';
 import { getConnection } from '../src/db/connection';
-import { gcExpiredObservations } from '../src/store/observations';
+import {
+  gcExpiredObservations,
+  OBSERVATION_MAX_SCORE,
+  searchObservationsWithScores,
+} from '../src/store/observations';
 import {
   applyPolicy,
   resetRetrievalPlannerTestState,
@@ -52,6 +56,39 @@ async function createObservation(content: string, boundary_class?: 'public' | 'i
   ) as {
     observation_id: string;
     effective_boundary_class: 'public' | 'internal' | 'pii' | 'secret';
+  };
+}
+
+async function promoteObservationToClaim(content: string): Promise<{
+  claim_id: string;
+  observation_id: string;
+}> {
+  const observation = await createObservation(content, 'internal');
+  const distill = expectSuccess(
+    await dispatchTool('pce_memory_distill', {
+      source_observation_ids: [observation.observation_id],
+      proposed_kind: 'fact',
+      proposed_scope: 'project',
+      proposed_memory_type: 'knowledge',
+    })
+  ) as { candidate_id: string };
+
+  const promote = expectSuccess(
+    await dispatchTool('pce_memory_promote', {
+      candidate_id: distill.candidate_id,
+      provenance: {
+        at: new Date().toISOString(),
+        actor: 'codex',
+        note: 'observation ranking regression',
+      },
+      reviewers: ['codex'],
+      review_note: 'ensure promoted claim outranks raw observation',
+    })
+  ) as { claim_id: string };
+
+  return {
+    claim_id: promote.claim_id,
+    observation_id: observation.observation_id,
   };
 }
 
@@ -158,6 +195,18 @@ describe('observation search via activate', () => {
     ]);
   });
 
+  it('caps a fresh observation score below 1.0', async () => {
+    await createObservation('fresh observation score cap check', 'internal');
+
+    const results = await searchObservationsWithScores('fresh observation score cap check', {
+      boundaryClasses: ['internal'],
+      limit: 1,
+    });
+
+    expect(results[0]?.score).toBeCloseTo(OBSERVATION_MAX_SCORE, 2);
+    expect(results[0]?.score).toBeLessThan(1);
+  });
+
   it('observation recall still works when activate intent is provided', async () => {
     const observation = await createObservation(
       'resume task baton handoff next action',
@@ -191,5 +240,23 @@ describe('observation search via activate', () => {
     expect(activate.claims_count).toBe(1);
     expect(activate.claims[0]?.claim.id).toBe(claim.id);
     expect(activate.claims[0]?.claim.observation_id).toBeUndefined();
+  });
+
+  it('promoted claim outranks raw observation of the same content', async () => {
+    const content = 'promoted claim ranking regression fixture';
+    const promoted = await promoteObservationToClaim(content);
+
+    const activate = await activateWithObservations({
+      q: content,
+      intent: 'design_decision',
+      include_observations: true,
+    });
+
+    expect(activate.claims.slice(0, 2).map((item) => item.claim.id)).toEqual([
+      promoted.claim_id,
+      promoted.observation_id,
+    ]);
+    expect(activate.claims[0]?.claim.observation_id).toBeUndefined();
+    expect(activate.claims[1]?.claim.observation_id).toBe(promoted.observation_id);
   });
 });
