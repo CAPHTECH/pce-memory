@@ -36,6 +36,15 @@ export interface RetrievalPolicy {
       max_related_entities?: number;
       max_expansion_terms?: number;
     };
+    feedback_boost?: {
+      enabled?: boolean;
+      helpful_weight?: number;
+      harmful_weight?: number;
+      outdated_weight?: number;
+      duplicate_weight?: number;
+      min_multiplier?: number;
+      max_multiplier?: number;
+    };
   };
 }
 

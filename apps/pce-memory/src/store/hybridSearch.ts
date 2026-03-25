@@ -23,10 +23,12 @@ import type { EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
 import {
   adjustRecencyTerm,
+  calculateFeedbackBoostBreakdown,
   calculateGFromClaim,
   calculateIntentScoreBreakdown,
   calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
+  type FeedbackBoostOptions,
   type GFactorBreakdown,
   type ScoreBreakdown,
 } from './rerank.js';
@@ -321,6 +323,10 @@ export interface QueryExpansionConfig {
   maxExpansionTerms?: number;
 }
 
+export interface FeedbackBoostConfig extends FeedbackBoostOptions {
+  enabled?: boolean;
+}
+
 /**
  * g()再ランキング用メトリクス
  */
@@ -334,6 +340,10 @@ interface ClaimMetrics {
   evidence_count: number;
   has_provenance_actor_note: boolean;
   has_promotion_lineage: boolean;
+  helpful_feedback_count: number;
+  harmful_feedback_count: number;
+  outdated_feedback_count: number;
+  duplicate_feedback_count: number;
 }
 
 /**
@@ -353,6 +363,10 @@ interface ClaimMetricsRow {
   evidence_count: number | bigint;
   has_provenance_actor_note: number | bigint | boolean;
   has_promotion_lineage: number | bigint | boolean;
+  helpful_feedback_count: number | bigint;
+  harmful_feedback_count: number | bigint;
+  outdated_feedback_count: number | bigint;
+  duplicate_feedback_count: number | bigint;
 }
 
 /**
@@ -398,6 +412,8 @@ export interface HybridSearchConfig {
   mmr?: MmrConfig;
   /** 実験的なエンティティグラフ拡張設定 */
   queryExpansion?: QueryExpansionConfig;
+  /** 実験的なfeedback boost設定 */
+  feedbackBoost?: FeedbackBoostConfig;
 }
 
 /**
@@ -501,6 +517,35 @@ function resolveQueryExpansionConfig(
       queryExpansion.maxExpansionTerms > 0
         ? normalizeLimit(queryExpansion.maxExpansionTerms)
         : DEFAULT_QUERY_EXPANSION_MAX_TERMS,
+  };
+}
+
+function resolveFeedbackBoostConfig(
+  feedbackBoost: FeedbackBoostConfig | undefined
+): FeedbackBoostOptions | undefined {
+  if (!feedbackBoost?.enabled) {
+    return undefined;
+  }
+
+  return {
+    ...(typeof feedbackBoost.helpfulWeight === 'number'
+      ? { helpfulWeight: feedbackBoost.helpfulWeight }
+      : {}),
+    ...(typeof feedbackBoost.harmfulWeight === 'number'
+      ? { harmfulWeight: feedbackBoost.harmfulWeight }
+      : {}),
+    ...(typeof feedbackBoost.outdatedWeight === 'number'
+      ? { outdatedWeight: feedbackBoost.outdatedWeight }
+      : {}),
+    ...(typeof feedbackBoost.duplicateWeight === 'number'
+      ? { duplicateWeight: feedbackBoost.duplicateWeight }
+      : {}),
+    ...(typeof feedbackBoost.minMultiplier === 'number'
+      ? { minMultiplier: feedbackBoost.minMultiplier }
+      : {}),
+    ...(typeof feedbackBoost.maxMultiplier === 'number'
+      ? { maxMultiplier: feedbackBoost.maxMultiplier }
+      : {}),
   };
 }
 
@@ -1195,12 +1240,26 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
         THEN 1
         ELSE 0
       END as has_provenance_actor_note,
-      MAX(CASE WHEN pq.id IS NOT NULL THEN 1 ELSE 0 END) as has_promotion_lineage
+      MAX(CASE WHEN pq.id IS NOT NULL THEN 1 ELSE 0 END) as has_promotion_lineage,
+      COALESCE(fb.helpful_feedback_count, 0) as helpful_feedback_count,
+      COALESCE(fb.harmful_feedback_count, 0) as harmful_feedback_count,
+      COALESCE(fb.outdated_feedback_count, 0) as outdated_feedback_count,
+      COALESCE(fb.duplicate_feedback_count, 0) as duplicate_feedback_count
     FROM claims c
     LEFT JOIN evidence e ON e.claim_id = c.id
     LEFT JOIN promotion_queue pq
       ON pq.accepted_claim_id = c.id
      AND pq.status = 'accepted'
+    LEFT JOIN (
+      SELECT
+        claim_id,
+        SUM(CASE WHEN signal = 'helpful' THEN 1 ELSE 0 END) as helpful_feedback_count,
+        SUM(CASE WHEN signal = 'harmful' THEN 1 ELSE 0 END) as harmful_feedback_count,
+        SUM(CASE WHEN signal = 'outdated' THEN 1 ELSE 0 END) as outdated_feedback_count,
+        SUM(CASE WHEN signal = 'duplicate' THEN 1 ELSE 0 END) as duplicate_feedback_count
+      FROM feedback
+      GROUP BY claim_id
+    ) fb ON fb.claim_id = c.id
     WHERE c.id IN (${placeholders}) AND ${activeClaimFilter('c')}
     GROUP BY
       c.id,
@@ -1208,7 +1267,11 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
       c.confidence,
       c.kind,
       COALESCE(c.recency_anchor, c.created_at),
-      c.provenance
+      c.provenance,
+      fb.helpful_feedback_count,
+      fb.harmful_feedback_count,
+      fb.outdated_feedback_count,
+      fb.duplicate_feedback_count
   `;
 
   const reader = await conn.runAndReadAll(sql, claimIds);
@@ -1226,6 +1289,10 @@ async function fetchClaimMetrics(claimIds: string[]): Promise<Map<string, ClaimM
       evidence_count: Number(row.evidence_count),
       has_provenance_actor_note: Number(row.has_provenance_actor_note) > 0,
       has_promotion_lineage: Number(row.has_promotion_lineage) > 0,
+      helpful_feedback_count: Number(row.helpful_feedback_count),
+      harmful_feedback_count: Number(row.harmful_feedback_count),
+      outdated_feedback_count: Number(row.outdated_feedback_count),
+      duplicate_feedback_count: Number(row.duplicate_feedback_count),
     });
   }
 
@@ -1253,7 +1320,8 @@ function mergeResultsWithRerank(
   alpha: number,
   threshold: number,
   includeBreakdown: boolean = false,
-  intent?: ActivateIntent
+  intent?: ActivateIntent,
+  feedbackBoostConfig?: FeedbackBoostOptions
 ): RankedSearchResult[] {
   // ClaimIdでマップ化
   const textMap = new Map<string, SearchResult>();
@@ -1287,6 +1355,7 @@ function mergeResultsWithRerank(
     let gFactor: GFactorBreakdown;
     let intentBreakdown: ReturnType<typeof calculateIntentScoreBreakdown> = undefined;
     let provenanceQuality = undefined;
+    let feedbackBoost = undefined;
 
     if (metrics) {
       const baseGFactor = calculateGFromClaim(
@@ -1315,6 +1384,17 @@ function mergeResultsWithRerank(
         hasProvenanceActorNote: metrics.has_provenance_actor_note,
         hasPromotionLineage: metrics.has_promotion_lineage,
       });
+      feedbackBoost = feedbackBoostConfig
+        ? calculateFeedbackBoostBreakdown(
+            {
+              helpful: metrics.helpful_feedback_count,
+              harmful: metrics.harmful_feedback_count,
+              outdated: metrics.outdated_feedback_count,
+              duplicate: metrics.duplicate_feedback_count,
+            },
+            feedbackBoostConfig
+          )
+        : undefined;
     } else {
       // メトリクスがない場合: g = 1.0（影響なし）
       gFactor = {
@@ -1331,7 +1411,8 @@ function mergeResultsWithRerank(
       alpha,
       gFactor,
       intentBreakdown,
-      provenanceQuality
+      provenanceQuality,
+      feedbackBoost
     );
     const scoreFinal = breakdown.score_final;
 
@@ -1414,6 +1495,7 @@ export async function hybridSearchWithScores(
   const kVec = resolveCandidateLimit(config?.kVec, K_VEC);
   const mmrConfig = resolveMmrConfig(config?.mmr);
   const queryExpansionConfig = resolveQueryExpansionConfig(config?.queryExpansion);
+  const feedbackBoostConfig = resolveFeedbackBoostConfig(config?.feedbackBoost);
   const embeddingService = config?.embeddingService ?? globalEmbeddingService;
   const includeBreakdown = config?.includeBreakdown ?? false;
   const enableRerank = config?.enableRerank ?? true;
@@ -1476,7 +1558,8 @@ export async function hybridSearchWithScores(
         alpha,
         threshold,
         includeBreakdown,
-        config?.intent
+        config?.intent,
+        feedbackBoostConfig
       );
     } else {
       merged = mergeResults(textResults, vecResults, alpha, threshold);
@@ -1507,8 +1590,9 @@ export async function hybridSearchWithScores(
         filters
       );
 
-  const shouldIntentRerank = enableRerank && Boolean(config?.intent);
-  if (shouldIntentRerank) {
+  const shouldTextOnlyRerank =
+    enableRerank && (Boolean(config?.intent) || feedbackBoostConfig !== undefined);
+  if (shouldTextOnlyRerank) {
     const uniqueIds = [...new Set(textResults.map((result) => result.claim.id))];
     const [stats, claimMetrics] = await Promise.all([
       getClaimStats(scopes, filters),
@@ -1523,7 +1607,8 @@ export async function hybridSearchWithScores(
       0,
       textOnlyThreshold,
       includeBreakdown,
-      config?.intent
+      config?.intent,
+      feedbackBoostConfig
     );
 
     const reranked = mmrConfig && hasQuery

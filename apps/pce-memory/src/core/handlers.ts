@@ -2571,6 +2571,31 @@ export async function handleActivate(args: Record<string, unknown>) {
             },
           }
         : {}),
+      ...(hybridPolicy.feedback_boost
+        ? {
+            feedbackBoost: {
+              enabled: hybridPolicy.feedback_boost.enabled === true,
+              ...(typeof hybridPolicy.feedback_boost.helpful_weight === 'number'
+                ? { helpfulWeight: hybridPolicy.feedback_boost.helpful_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.harmful_weight === 'number'
+                ? { harmfulWeight: hybridPolicy.feedback_boost.harmful_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.outdated_weight === 'number'
+                ? { outdatedWeight: hybridPolicy.feedback_boost.outdated_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.duplicate_weight === 'number'
+                ? { duplicateWeight: hybridPolicy.feedback_boost.duplicate_weight }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.min_multiplier === 'number'
+                ? { minMultiplier: hybridPolicy.feedback_boost.min_multiplier }
+                : {}),
+              ...(typeof hybridPolicy.feedback_boost.max_multiplier === 'number'
+                ? { maxMultiplier: hybridPolicy.feedback_boost.max_multiplier }
+                : {}),
+            },
+          }
+        : {}),
     };
 
     let searchResults: ActivateSearchItem[];

@@ -39,6 +39,15 @@ export const defaultPolicy: PolicyDocument = {
         max_related_entities: 8,
         max_expansion_terms: 6,
       },
+      feedback_boost: {
+        enabled: false,
+        helpful_weight: 0.25,
+        harmful_weight: 0.35,
+        outdated_weight: 0.18,
+        duplicate_weight: 0.12,
+        min_multiplier: 0.45,
+        max_multiplier: 1.65,
+      },
     },
   },
 };
