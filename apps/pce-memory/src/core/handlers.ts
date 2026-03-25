@@ -3678,6 +3678,19 @@ export async function handleQueryEntity(args: Record<string, unknown>) {
       );
     }
 
+    // limitのバリデーション
+    if (limit !== undefined) {
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+        return createToolResult(
+          {
+            ...err('VALIDATION_ERROR', 'limit must be a positive integer', reqId),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
+    }
+
     // クエリ実行
     const filters: EntityQueryFilters = {
       ...(id !== undefined && { id }),
@@ -3775,6 +3788,19 @@ export async function handleQueryRelation(args: Record<string, unknown>) {
         },
         { isError: true }
       );
+    }
+
+    // limitのバリデーション
+    if (limit !== undefined) {
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || !Number.isInteger(limit) || limit < 1) {
+        return createToolResult(
+          {
+            ...err('VALIDATION_ERROR', 'limit must be a positive integer', reqId),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
     }
 
     // クエリ実行
