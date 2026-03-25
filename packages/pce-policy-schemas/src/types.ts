@@ -48,17 +48,10 @@ export interface RetrievalPolicy {
   };
 }
 
-export interface ExtractionPolicy {
-  llm_enabled?: boolean;
-  ollama_endpoint?: string;
-  model?: string;
-}
-
 export interface PolicyDocument {
   version: string;
   boundary: BoundaryPolicy;
   retrieval?: RetrievalPolicy;
-  extraction?: ExtractionPolicy;
 }
 
 export interface ValidationResult<T> {
