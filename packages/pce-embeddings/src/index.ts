@@ -61,7 +61,7 @@ export {
 } from './errors.js';
 
 // ========== Hash ==========
-export { computeContentHash, normalizeText, isValidHash } from './hash.js';
+export { computeContentHash } from './hash.js';
 
 // ========== Redact ==========
 export type { PreparedText, RedactError } from './redact.js';
