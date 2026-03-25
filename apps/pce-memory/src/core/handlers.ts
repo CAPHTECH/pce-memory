@@ -355,6 +355,8 @@ type ActivateSearchItem = {
   score_breakdown?: ScoreBreakdown;
 };
 
+const ACTIVATE_OBSERVATION_SLOT_FRACTION = 0.3;
+
 function getActivateItemTimestamp(item: ActivateSearchItem): number {
   const candidate = item.claim.updated_at ?? item.claim.created_at;
   const timestamp = new Date(candidate).getTime();
@@ -372,6 +374,67 @@ function compareActivateSearchItems(left: ActivateSearchItem, right: ActivateSea
   }
 
   return right.claim.id.localeCompare(left.claim.id);
+}
+
+function getActivateObservationSlotCap(topK: number): number {
+  return Math.max(0, Math.floor(topK * ACTIVATE_OBSERVATION_SLOT_FRACTION));
+}
+
+function pageActivateResultsWithObservationCap(input: {
+  durableResults: ActivateSearchItem[];
+  observationResults: ActivateSearchItem[];
+  topK: number;
+  cursor?: string;
+}): {
+  searchResults: ActivateSearchItem[];
+  nextCursor: string | undefined;
+  hasMore: boolean;
+} {
+  const durableResults = [...input.durableResults].sort(compareActivateSearchItems);
+  const observationResults = [...input.observationResults].sort(compareActivateSearchItems);
+  const observationSlotCap = getActivateObservationSlotCap(input.topK);
+
+  let durableIndex = 0;
+  let observationIndex = 0;
+
+  if (input.cursor !== undefined) {
+    const durableCursorIndex = durableResults.findIndex((item) => item.claim.id === input.cursor);
+    if (durableCursorIndex >= 0) {
+      durableIndex = durableCursorIndex + 1;
+    } else {
+      const observationCursorIndex = observationResults.findIndex(
+        (item) => item.claim.id === input.cursor
+      );
+      if (observationCursorIndex >= 0) {
+        durableIndex = durableResults.length;
+        observationIndex = observationCursorIndex + 1;
+      }
+    }
+  }
+
+  const durablePage = durableResults.slice(durableIndex, durableIndex + input.topK);
+  const remainingSlots = Math.max(0, input.topK - durablePage.length);
+  const observationPage = observationResults.slice(
+    observationIndex,
+    observationIndex + Math.min(observationSlotCap, remainingSlots)
+  );
+
+  const searchResults = [...durablePage, ...observationPage];
+  const nextDurableIndex = durableIndex + durablePage.length;
+  const nextObservationIndex = observationIndex + observationPage.length;
+  const hasMore =
+    nextDurableIndex < durableResults.length ||
+    (observationSlotCap > 0 && nextObservationIndex < observationResults.length);
+  const nextCursor =
+    hasMore && searchResults.length > 0
+      ? searchResults[searchResults.length - 1]!.claim.id
+      : undefined;
+
+  return {
+    searchResults,
+    nextCursor,
+    hasMore,
+  };
 }
 
 function mapDurableScopeToTargetLayer(scope: DurableScope): 'meso' | 'macro' {
@@ -2434,20 +2497,16 @@ export async function handleActivate(args: Record<string, unknown>) {
         }),
       ]);
 
-      const combinedResults = [...durableResults, ...observationResults].sort(
-        compareActivateSearchItems
-      );
-      const cursorIndex =
-        cursor !== undefined ? combinedResults.findIndex((item) => item.claim.id === cursor) : -1;
-      const pagedResults =
-        cursorIndex >= 0 ? combinedResults.slice(cursorIndex + 1) : combinedResults;
+      const pagedResults = pageActivateResultsWithObservationCap({
+        durableResults,
+        observationResults,
+        topK: resolvedTopK,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
 
-      hasMore = pagedResults.length > resolvedTopK;
-      searchResults = pagedResults.slice(0, resolvedTopK);
-      nextCursor =
-        hasMore && searchResults.length > 0
-          ? searchResults[searchResults.length - 1]!.claim.id
-          : undefined;
+      searchResults = pagedResults.searchResults;
+      nextCursor = pagedResults.nextCursor;
+      hasMore = pagedResults.hasMore;
     } else {
       const searchResult = await hybridSearchPaginated(scope, resolvedTopK, q, {
         ...(cursor !== undefined ? { cursor } : {}),
