@@ -1,0 +1,1754 @@
+{
+  "generated_at": "2026-03-25T04:41:23.344Z",
+  "environment": {
+    "cwd": "/Users/rizumita/Workspace/pce-memory.worktrees/test-llm-entity-extraction-validation-6af580",
+    "node": "v24.12.0",
+    "ollama_endpoint": "http://127.0.0.1:11434",
+    "ollama_model": "qwen3.5:9b"
+  },
+  "assumptions": [
+    "Entity precision/recall uses a manually curated gold set with alias matching so hyphenation and snake_case variants are treated as the same concept.",
+    "Relation quality scores unordered meaningful pairs; relation type histograms are reported separately to show whether the LLM emits typed edges instead of only generic co-occurrence.",
+    "Query expansion compares three retrieval conditions: no linked entities, only LLM-extracted entities/relations, and an oracle manual-entity upper bound with shared topical seeds."
+  ],
+  "dataset": [
+    {
+      "claim_id": "claim_1",
+      "topic": "authentication",
+      "text": "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+      "expected_entities": [
+        "jwt",
+        "access-token",
+        "mobile-sign-in-recovery",
+        "rs256"
+      ],
+      "expected_relations": [
+        "jwt->access-token",
+        "jwt->rs256"
+      ]
+    },
+    {
+      "claim_id": "claim_2",
+      "topic": "retrieval",
+      "text": "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+      "expected_entities": [
+        "duckdb",
+        "hybrid-search",
+        "cosine-similarity",
+        "hnsw",
+        "vector-retrieval"
+      ],
+      "expected_relations": [
+        "hybrid-search->duckdb",
+        "hybrid-search->cosine-similarity",
+        "hybrid-search->hnsw",
+        "hnsw->vector-retrieval"
+      ]
+    },
+    {
+      "claim_id": "claim_3",
+      "topic": "policy",
+      "text": "The pce_memory_activate handler validates scope and boundary before ranking",
+      "expected_entities": [
+        "pce-memory-activate",
+        "scope",
+        "boundary",
+        "ranking"
+      ],
+      "expected_relations": [
+        "pce-memory-activate->scope",
+        "pce-memory-activate->boundary",
+        "pce-memory-activate->ranking"
+      ]
+    },
+    {
+      "claim_id": "claim_4",
+      "topic": "synchronization",
+      "text": "Git-based CRDT sync merges claims by content_hash with monotonic boundary upgrade",
+      "expected_entities": [
+        "crdt-sync",
+        "claims",
+        "content-hash",
+        "boundary-upgrade"
+      ],
+      "expected_relations": [
+        "crdt-sync->claims",
+        "crdt-sync->content-hash",
+        "crdt-sync->boundary-upgrade"
+      ]
+    },
+    {
+      "claim_id": "claim_5",
+      "topic": "caching",
+      "text": "Redis cache stores rendered dashboard fragments with TTL-based eviction",
+      "expected_entities": [
+        "redis",
+        "cache",
+        "dashboard-fragments",
+        "ttl-based-eviction"
+      ],
+      "expected_relations": [
+        "redis->cache",
+        "cache->dashboard-fragments",
+        "cache->ttl-based-eviction"
+      ]
+    },
+    {
+      "claim_id": "claim_6",
+      "topic": "authentication",
+      "text": "OAuth device flow pins PKCE verifier state before token exchange with rotating refresh grants",
+      "expected_entities": [
+        "oauth-device-flow",
+        "pkce",
+        "verifier-state",
+        "token-exchange",
+        "refresh-grants"
+      ],
+      "expected_relations": [
+        "oauth-device-flow->pkce",
+        "oauth-device-flow->token-exchange",
+        "token-exchange->refresh-grants"
+      ]
+    },
+    {
+      "claim_id": "claim_7",
+      "topic": "retrieval",
+      "text": "pgvector semantic search blends BM25 reranking with approximate nearest-neighbor recall",
+      "expected_entities": [
+        "pgvector",
+        "semantic-search",
+        "bm25",
+        "reranking",
+        "ann-recall"
+      ],
+      "expected_relations": [
+        "semantic-search->pgvector",
+        "semantic-search->bm25",
+        "semantic-search->ann-recall"
+      ]
+    },
+    {
+      "claim_id": "claim_8",
+      "topic": "policy",
+      "text": "SchemaDriftGuard blocks tenant rollout when policy-bound migration steps violate boundary rules",
+      "expected_entities": [
+        "schemadriftguard",
+        "tenant-rollout",
+        "policy-bound-migration",
+        "boundary-rules"
+      ],
+      "expected_relations": [
+        "schemadriftguard->tenant-rollout",
+        "schemadriftguard->policy-bound-migration",
+        "policy-bound-migration->boundary-rules"
+      ]
+    },
+    {
+      "claim_id": "claim_9",
+      "topic": "synchronization",
+      "text": "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync",
+      "expected_entities": [
+        "replica-repair",
+        "vector-clocks",
+        "conflict-resolution",
+        "offline-sync"
+      ],
+      "expected_relations": [
+        "replica-repair->vector-clocks",
+        "replica-repair->conflict-resolution",
+        "offline-sync->conflict-resolution"
+      ]
+    },
+    {
+      "claim_id": "claim_10",
+      "topic": "caching",
+      "text": "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+      "expected_entities": [
+        "cdn-edge-cache",
+        "persisted-graphql-responses",
+        "shard-rebalancing"
+      ],
+      "expected_relations": [
+        "cdn-edge-cache->persisted-graphql-responses",
+        "cdn-edge-cache->shard-rebalancing"
+      ]
+    }
+  ],
+  "tests": {
+    "extraction_quality": {
+      "pattern": {
+        "extractor": "pattern-nlp",
+        "total_entities": 11,
+        "matched_entities": 9,
+        "noise_entities": 2,
+        "expected_entities": 42,
+        "matched_expected_entities": 9,
+        "precision": 0.818,
+        "recall": 0.214,
+        "per_claim": [
+          {
+            "claim_id": "claim_1",
+            "extracted_entities": [
+              "jwt",
+              "rs256"
+            ],
+            "expected_entities": [
+              "jwt",
+              "access-token",
+              "mobile-sign-in-recovery",
+              "rs256"
+            ],
+            "missing_entities": [
+              "access-token",
+              "mobile-sign-in-recovery"
+            ],
+            "matched_entities": 2,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 0.5
+          },
+          {
+            "claim_id": "claim_2",
+            "extracted_entities": [
+              "duckdb",
+              "hnsw"
+            ],
+            "expected_entities": [
+              "duckdb",
+              "hybrid-search",
+              "cosine-similarity",
+              "hnsw",
+              "vector-retrieval"
+            ],
+            "missing_entities": [
+              "hybrid-search",
+              "cosine-similarity",
+              "vector-retrieval"
+            ],
+            "matched_entities": 2,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 0.4
+          },
+          {
+            "claim_id": "claim_3",
+            "extracted_entities": [],
+            "expected_entities": [
+              "pce-memory-activate",
+              "scope",
+              "boundary",
+              "ranking"
+            ],
+            "missing_entities": [
+              "pce-memory-activate",
+              "scope",
+              "boundary",
+              "ranking"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_4",
+            "extracted_entities": [
+              "crdt"
+            ],
+            "expected_entities": [
+              "crdt-sync",
+              "claims",
+              "content-hash",
+              "boundary-upgrade"
+            ],
+            "missing_entities": [
+              "claims",
+              "content-hash",
+              "boundary-upgrade"
+            ],
+            "matched_entities": 1,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 0.25
+          },
+          {
+            "claim_id": "claim_5",
+            "extracted_entities": [
+              "ttl"
+            ],
+            "expected_entities": [
+              "redis",
+              "cache",
+              "dashboard-fragments",
+              "ttl-based-eviction"
+            ],
+            "missing_entities": [
+              "redis",
+              "cache",
+              "dashboard-fragments",
+              "ttl-based-eviction"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 1,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_6",
+            "extracted_entities": [
+              "pkce"
+            ],
+            "expected_entities": [
+              "oauth-device-flow",
+              "pkce",
+              "verifier-state",
+              "token-exchange",
+              "refresh-grants"
+            ],
+            "missing_entities": [
+              "oauth-device-flow",
+              "verifier-state",
+              "token-exchange",
+              "refresh-grants"
+            ],
+            "matched_entities": 1,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 0.2
+          },
+          {
+            "claim_id": "claim_7",
+            "extracted_entities": [
+              "bm25"
+            ],
+            "expected_entities": [
+              "pgvector",
+              "semantic-search",
+              "bm25",
+              "reranking",
+              "ann-recall"
+            ],
+            "missing_entities": [
+              "pgvector",
+              "semantic-search",
+              "reranking",
+              "ann-recall"
+            ],
+            "matched_entities": 1,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 0.2
+          },
+          {
+            "claim_id": "claim_8",
+            "extracted_entities": [
+              "schemadriftguard"
+            ],
+            "expected_entities": [
+              "schemadriftguard",
+              "tenant-rollout",
+              "policy-bound-migration",
+              "boundary-rules"
+            ],
+            "missing_entities": [
+              "tenant-rollout",
+              "policy-bound-migration",
+              "boundary-rules"
+            ],
+            "matched_entities": 1,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 0.25
+          },
+          {
+            "claim_id": "claim_9",
+            "extracted_entities": [],
+            "expected_entities": [
+              "replica-repair",
+              "vector-clocks",
+              "conflict-resolution",
+              "offline-sync"
+            ],
+            "missing_entities": [
+              "replica-repair",
+              "vector-clocks",
+              "conflict-resolution",
+              "offline-sync"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_10",
+            "extracted_entities": [
+              "cdn",
+              "graphql"
+            ],
+            "expected_entities": [
+              "cdn-edge-cache",
+              "persisted-graphql-responses",
+              "shard-rebalancing"
+            ],
+            "missing_entities": [
+              "cdn-edge-cache",
+              "shard-rebalancing"
+            ],
+            "matched_entities": 1,
+            "noise_entities": 1,
+            "precision": 0.5,
+            "recall": 0.333
+          }
+        ]
+      },
+      "llm": {
+        "extractor": "llm",
+        "total_entities": 22,
+        "matched_entities": 20,
+        "noise_entities": 2,
+        "expected_entities": 42,
+        "matched_expected_entities": 20,
+        "precision": 0.909,
+        "recall": 0.476,
+        "per_claim": [
+          {
+            "claim_id": "claim_1",
+            "extracted_entities": [],
+            "expected_entities": [
+              "jwt",
+              "access-token",
+              "mobile-sign-in-recovery",
+              "rs256"
+            ],
+            "missing_entities": [
+              "jwt",
+              "access-token",
+              "mobile-sign-in-recovery",
+              "rs256"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_2",
+            "extracted_entities": [],
+            "expected_entities": [
+              "duckdb",
+              "hybrid-search",
+              "cosine-similarity",
+              "hnsw",
+              "vector-retrieval"
+            ],
+            "missing_entities": [
+              "duckdb",
+              "hybrid-search",
+              "cosine-similarity",
+              "hnsw",
+              "vector-retrieval"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_3",
+            "extracted_entities": [
+              "pce-memory-activate",
+              "scope",
+              "boundary",
+              "ranking"
+            ],
+            "expected_entities": [
+              "pce-memory-activate",
+              "scope",
+              "boundary",
+              "ranking"
+            ],
+            "missing_entities": [],
+            "matched_entities": 4,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 1
+          },
+          {
+            "claim_id": "claim_4",
+            "extracted_entities": [
+              "git",
+              "crdt",
+              "content-hash",
+              "monotonic-boundary-upgrade"
+            ],
+            "expected_entities": [
+              "crdt-sync",
+              "claims",
+              "content-hash",
+              "boundary-upgrade"
+            ],
+            "missing_entities": [
+              "claims"
+            ],
+            "matched_entities": 3,
+            "noise_entities": 1,
+            "precision": 0.75,
+            "recall": 0.75
+          },
+          {
+            "claim_id": "claim_5",
+            "extracted_entities": [],
+            "expected_entities": [
+              "redis",
+              "cache",
+              "dashboard-fragments",
+              "ttl-based-eviction"
+            ],
+            "missing_entities": [
+              "redis",
+              "cache",
+              "dashboard-fragments",
+              "ttl-based-eviction"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_6",
+            "extracted_entities": [],
+            "expected_entities": [
+              "oauth-device-flow",
+              "pkce",
+              "verifier-state",
+              "token-exchange",
+              "refresh-grants"
+            ],
+            "missing_entities": [
+              "oauth-device-flow",
+              "pkce",
+              "verifier-state",
+              "token-exchange",
+              "refresh-grants"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          },
+          {
+            "claim_id": "claim_7",
+            "extracted_entities": [
+              "pgvector",
+              "semantic-search",
+              "bm25",
+              "reranking",
+              "approximate-nearest-neighbor-recall"
+            ],
+            "expected_entities": [
+              "pgvector",
+              "semantic-search",
+              "bm25",
+              "reranking",
+              "ann-recall"
+            ],
+            "missing_entities": [],
+            "matched_entities": 5,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 1
+          },
+          {
+            "claim_id": "claim_8",
+            "extracted_entities": [
+              "schemadriftguard",
+              "tenant-rollout",
+              "policy-bound-migration-steps",
+              "boundary-rules"
+            ],
+            "expected_entities": [
+              "schemadriftguard",
+              "tenant-rollout",
+              "policy-bound-migration",
+              "boundary-rules"
+            ],
+            "missing_entities": [],
+            "matched_entities": 4,
+            "noise_entities": 0,
+            "precision": 1,
+            "recall": 1
+          },
+          {
+            "claim_id": "claim_9",
+            "extracted_entities": [
+              "replica-repair",
+              "replays",
+              "vector-clocks",
+              "gossip-based-conflict-resolution",
+              "offline-sync"
+            ],
+            "expected_entities": [
+              "replica-repair",
+              "vector-clocks",
+              "conflict-resolution",
+              "offline-sync"
+            ],
+            "missing_entities": [],
+            "matched_entities": 4,
+            "noise_entities": 1,
+            "precision": 0.8,
+            "recall": 1
+          },
+          {
+            "claim_id": "claim_10",
+            "extracted_entities": [],
+            "expected_entities": [
+              "cdn-edge-cache",
+              "persisted-graphql-responses",
+              "shard-rebalancing"
+            ],
+            "missing_entities": [
+              "cdn-edge-cache",
+              "persisted-graphql-responses",
+              "shard-rebalancing"
+            ],
+            "matched_entities": 0,
+            "noise_entities": 0,
+            "precision": 0,
+            "recall": 0
+          }
+        ]
+      },
+      "delta_precision": 0.091,
+      "delta_recall": 0.262
+    },
+    "noise_rate": {
+      "pattern": {
+        "extractor": "pattern-nlp",
+        "total_entities": 11,
+        "noise_entities": 2,
+        "noise_rate": 0.182,
+        "target_lt_0_2": true,
+        "per_claim": [
+          {
+            "claim_id": "claim_1",
+            "total_entities": 2,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_2",
+            "total_entities": 2,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_3",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_4",
+            "total_entities": 1,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_5",
+            "total_entities": 1,
+            "noise_entities": 1,
+            "noise_rate": 1
+          },
+          {
+            "claim_id": "claim_6",
+            "total_entities": 1,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_7",
+            "total_entities": 1,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_8",
+            "total_entities": 1,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_9",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_10",
+            "total_entities": 2,
+            "noise_entities": 1,
+            "noise_rate": 0.5
+          }
+        ]
+      },
+      "llm": {
+        "extractor": "llm",
+        "total_entities": 22,
+        "noise_entities": 2,
+        "noise_rate": 0.091,
+        "target_lt_0_2": true,
+        "per_claim": [
+          {
+            "claim_id": "claim_1",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_2",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_3",
+            "total_entities": 4,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_4",
+            "total_entities": 4,
+            "noise_entities": 1,
+            "noise_rate": 0.25
+          },
+          {
+            "claim_id": "claim_5",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_6",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_7",
+            "total_entities": 5,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_8",
+            "total_entities": 4,
+            "noise_entities": 0,
+            "noise_rate": 0
+          },
+          {
+            "claim_id": "claim_9",
+            "total_entities": 5,
+            "noise_entities": 1,
+            "noise_rate": 0.2
+          },
+          {
+            "claim_id": "claim_10",
+            "total_entities": 0,
+            "noise_entities": 0,
+            "noise_rate": 0
+          }
+        ]
+      },
+      "llm_better_than_pattern": true
+    },
+    "relation_quality": {
+      "pattern": {
+        "extractor": "pattern-nlp",
+        "total_relations": 3,
+        "expected_relations": 29,
+        "matched_relations": 1,
+        "precision": 0.333,
+        "recall": 0.034,
+        "meaningful_relations": 0,
+        "generic_relations": 3,
+        "meaningful_rate": 0,
+        "relation_types": {
+          "CO_OCCURS": 3
+        },
+        "per_claim": [
+          {
+            "claim_id": "claim_1",
+            "extracted_relations": 1,
+            "expected_relations": 2,
+            "matched_relations": 1,
+            "precision": 1,
+            "recall": 0.5,
+            "meaningful_relations": 0,
+            "generic_relations": 1,
+            "relation_types": {
+              "CO_OCCURS": 1
+            }
+          },
+          {
+            "claim_id": "claim_2",
+            "extracted_relations": 1,
+            "expected_relations": 4,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 1,
+            "relation_types": {
+              "CO_OCCURS": 1
+            }
+          },
+          {
+            "claim_id": "claim_3",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_4",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_5",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_6",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_7",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_8",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_9",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_10",
+            "extracted_relations": 1,
+            "expected_relations": 2,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 1,
+            "relation_types": {
+              "CO_OCCURS": 1
+            }
+          }
+        ]
+      },
+      "llm": {
+        "extractor": "llm",
+        "total_relations": 17,
+        "expected_relations": 29,
+        "matched_relations": 11,
+        "precision": 0.647,
+        "recall": 0.379,
+        "meaningful_relations": 13,
+        "generic_relations": 4,
+        "meaningful_rate": 0.765,
+        "relation_types": {
+          "CONFIGURES": 6,
+          "RELATES_TO": 4,
+          "USES": 5,
+          "DEPENDS_ON": 2
+        },
+        "per_claim": [
+          {
+            "claim_id": "claim_1",
+            "extracted_relations": 0,
+            "expected_relations": 2,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_2",
+            "extracted_relations": 0,
+            "expected_relations": 4,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_3",
+            "extracted_relations": 3,
+            "expected_relations": 3,
+            "matched_relations": 3,
+            "precision": 1,
+            "recall": 1,
+            "meaningful_relations": 2,
+            "generic_relations": 1,
+            "relation_types": {
+              "CONFIGURES": 2,
+              "RELATES_TO": 1
+            }
+          },
+          {
+            "claim_id": "claim_4",
+            "extracted_relations": 3,
+            "expected_relations": 3,
+            "matched_relations": 2,
+            "precision": 0.667,
+            "recall": 0.667,
+            "meaningful_relations": 2,
+            "generic_relations": 1,
+            "relation_types": {
+              "USES": 1,
+              "CONFIGURES": 1,
+              "RELATES_TO": 1
+            }
+          },
+          {
+            "claim_id": "claim_5",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_6",
+            "extracted_relations": 0,
+            "expected_relations": 3,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          },
+          {
+            "claim_id": "claim_7",
+            "extracted_relations": 4,
+            "expected_relations": 3,
+            "matched_relations": 1,
+            "precision": 0.25,
+            "recall": 0.333,
+            "meaningful_relations": 4,
+            "generic_relations": 0,
+            "relation_types": {
+              "CONFIGURES": 1,
+              "USES": 3
+            }
+          },
+          {
+            "claim_id": "claim_8",
+            "extracted_relations": 3,
+            "expected_relations": 3,
+            "matched_relations": 3,
+            "precision": 1,
+            "recall": 1,
+            "meaningful_relations": 2,
+            "generic_relations": 1,
+            "relation_types": {
+              "CONFIGURES": 1,
+              "DEPENDS_ON": 1,
+              "RELATES_TO": 1
+            }
+          },
+          {
+            "claim_id": "claim_9",
+            "extracted_relations": 4,
+            "expected_relations": 3,
+            "matched_relations": 2,
+            "precision": 0.5,
+            "recall": 0.667,
+            "meaningful_relations": 3,
+            "generic_relations": 1,
+            "relation_types": {
+              "USES": 1,
+              "DEPENDS_ON": 1,
+              "CONFIGURES": 1,
+              "RELATES_TO": 1
+            }
+          },
+          {
+            "claim_id": "claim_10",
+            "extracted_relations": 0,
+            "expected_relations": 2,
+            "matched_relations": 0,
+            "precision": 0,
+            "recall": 0,
+            "meaningful_relations": 0,
+            "generic_relations": 0,
+            "relation_types": {}
+          }
+        ]
+      },
+      "llm_has_meaningful_relations": true,
+      "notes": [
+        "Pattern NLP relations are synthetic co-occurs edges between all extracted entities in the same claim.",
+        "LLM relation quality improves only when the extractor emits typed edges that land on the gold relation pairs."
+      ]
+    },
+    "query_expansion_impact": {
+      "average_p_at_3": {
+        "no_entities": 0.2,
+        "llm_entities": 0.267,
+        "manual_entities": 0.667
+      },
+      "queries": [
+        {
+          "query": "authentication",
+          "label": "Authentication",
+          "no_entities": {
+            "query": "authentication",
+            "label": "Authentication",
+            "hits": 0,
+            "relevant_pool": 2,
+            "p_at_3": 0,
+            "top_claim_texts": [
+              "pgvector semantic search blends BM25 reranking with approximate nearest-neighbor recall",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync"
+            ]
+          },
+          "llm_entities": {
+            "query": "authentication",
+            "label": "Authentication",
+            "hits": 0,
+            "relevant_pool": 2,
+            "p_at_3": 0,
+            "top_claim_texts": [
+              "pgvector semantic search blends BM25 reranking with approximate nearest-neighbor recall",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync"
+            ]
+          },
+          "manual_entities": {
+            "query": "authentication",
+            "label": "Authentication",
+            "hits": 2,
+            "relevant_pool": 2,
+            "p_at_3": 0.667,
+            "top_claim_texts": [
+              "OAuth device flow pins PKCE verifier state before token exchange with rotating refresh grants",
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "The pce_memory_activate handler validates scope and boundary before ranking"
+            ]
+          }
+        },
+        {
+          "query": "retrieval",
+          "label": "Retrieval",
+          "no_entities": {
+            "query": "retrieval",
+            "label": "Retrieval",
+            "hits": 1,
+            "relevant_pool": 2,
+            "p_at_3": 0.333,
+            "top_claim_texts": [
+              "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing"
+            ]
+          },
+          "llm_entities": {
+            "query": "retrieval",
+            "label": "Retrieval",
+            "hits": 1,
+            "relevant_pool": 2,
+            "p_at_3": 0.333,
+            "top_claim_texts": [
+              "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing"
+            ]
+          },
+          "manual_entities": {
+            "query": "retrieval",
+            "label": "Retrieval",
+            "hits": 2,
+            "relevant_pool": 2,
+            "p_at_3": 0.667,
+            "top_claim_texts": [
+              "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+              "pgvector semantic search blends BM25 reranking with approximate nearest-neighbor recall",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync"
+            ]
+          }
+        },
+        {
+          "query": "policy",
+          "label": "Policy",
+          "no_entities": {
+            "query": "policy",
+            "label": "Policy",
+            "hits": 1,
+            "relevant_pool": 2,
+            "p_at_3": 0.333,
+            "top_claim_texts": [
+              "SchemaDriftGuard blocks tenant rollout when policy-bound migration steps violate boundary rules",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync"
+            ]
+          },
+          "llm_entities": {
+            "query": "policy",
+            "label": "Policy",
+            "hits": 2,
+            "relevant_pool": 2,
+            "p_at_3": 0.667,
+            "top_claim_texts": [
+              "SchemaDriftGuard blocks tenant rollout when policy-bound migration steps violate boundary rules",
+              "The pce_memory_activate handler validates scope and boundary before ranking",
+              "Git-based CRDT sync merges claims by content_hash with monotonic boundary upgrade"
+            ]
+          },
+          "manual_entities": {
+            "query": "policy",
+            "label": "Policy",
+            "hits": 2,
+            "relevant_pool": 2,
+            "p_at_3": 0.667,
+            "top_claim_texts": [
+              "SchemaDriftGuard blocks tenant rollout when policy-bound migration steps violate boundary rules",
+              "The pce_memory_activate handler validates scope and boundary before ranking",
+              "Git-based CRDT sync merges claims by content_hash with monotonic boundary upgrade"
+            ]
+          }
+        },
+        {
+          "query": "synchronization",
+          "label": "Synchronization",
+          "no_entities": {
+            "query": "synchronization",
+            "label": "Synchronization",
+            "hits": 0,
+            "relevant_pool": 2,
+            "p_at_3": 0,
+            "top_claim_texts": [
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing"
+            ]
+          },
+          "llm_entities": {
+            "query": "synchronization",
+            "label": "Synchronization",
+            "hits": 0,
+            "relevant_pool": 2,
+            "p_at_3": 0,
+            "top_claim_texts": [
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing"
+            ]
+          },
+          "manual_entities": {
+            "query": "synchronization",
+            "label": "Synchronization",
+            "hits": 2,
+            "relevant_pool": 2,
+            "p_at_3": 0.667,
+            "top_claim_texts": [
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync",
+              "Git-based CRDT sync merges claims by content_hash with monotonic boundary upgrade",
+              "The pce_memory_activate handler validates scope and boundary before ranking"
+            ]
+          }
+        },
+        {
+          "query": "caching",
+          "label": "Caching",
+          "no_entities": {
+            "query": "caching",
+            "label": "Caching",
+            "hits": 1,
+            "relevant_pool": 2,
+            "p_at_3": 0.333,
+            "top_claim_texts": [
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing"
+            ]
+          },
+          "llm_entities": {
+            "query": "caching",
+            "label": "Caching",
+            "hits": 1,
+            "relevant_pool": 2,
+            "p_at_3": 0.333,
+            "top_claim_texts": [
+              "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing"
+            ]
+          },
+          "manual_entities": {
+            "query": "caching",
+            "label": "Caching",
+            "hits": 2,
+            "relevant_pool": 2,
+            "p_at_3": 0.667,
+            "top_claim_texts": [
+              "Redis cache stores rendered dashboard fragments with TTL-based eviction",
+              "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+              "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync"
+            ]
+          }
+        }
+      ],
+      "notes": [
+        "The manual-entity arm adds one shared topical seed entity per claim cluster as an oracle upper bound for query expansion.",
+        "The LLM arm uses only entities and relations produced by the real Ollama-backed extractor on the claim text itself.",
+        "All three retrieval arms reuse the same deterministic local embedding service so score differences come from entity graph coverage, not embedding drift."
+      ]
+    },
+    "latency": {
+      "target_ms": 3000,
+      "average_ms": 4607.225,
+      "p50_ms": 4985.872,
+      "p95_ms": 5003.3,
+      "max_ms": 5003.3,
+      "over_target_claims": [
+        "claim_1",
+        "claim_2",
+        "claim_3",
+        "claim_4",
+        "claim_5",
+        "claim_6",
+        "claim_7",
+        "claim_8",
+        "claim_9",
+        "claim_10"
+      ],
+      "meets_target": false,
+      "per_claim": [
+        {
+          "claim_id": "claim_1",
+          "latency_ms": 5001.66
+        },
+        {
+          "claim_id": "claim_2",
+          "latency_ms": 5003.094
+        },
+        {
+          "claim_id": "claim_3",
+          "latency_ms": 3679.768
+        },
+        {
+          "claim_id": "claim_4",
+          "latency_ms": 3714.692
+        },
+        {
+          "claim_id": "claim_5",
+          "latency_ms": 5001.296
+        },
+        {
+          "claim_id": "claim_6",
+          "latency_ms": 5003.3
+        },
+        {
+          "claim_id": "claim_7",
+          "latency_ms": 4702.49
+        },
+        {
+          "claim_id": "claim_8",
+          "latency_ms": 3978.063
+        },
+        {
+          "claim_id": "claim_9",
+          "latency_ms": 4985.872
+        },
+        {
+          "claim_id": "claim_10",
+          "latency_ms": 5002.013
+        }
+      ]
+    }
+  },
+  "raw_outputs": {
+    "pattern": [
+      {
+        "claim_id": "claim_1",
+        "text": "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+        "entities": [
+          {
+            "name": "JWT",
+            "canonical_key": "jwt",
+            "type": "Concept"
+          },
+          {
+            "name": "RS256",
+            "canonical_key": "rs256",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "jwt",
+            "dst": "rs256",
+            "type": "CO_OCCURS"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_2",
+        "text": "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+        "entities": [
+          {
+            "name": "DuckDB",
+            "canonical_key": "duckdb",
+            "type": "Concept"
+          },
+          {
+            "name": "HNSW",
+            "canonical_key": "hnsw",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "duckdb",
+            "dst": "hnsw",
+            "type": "CO_OCCURS"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_3",
+        "text": "The pce_memory_activate handler validates scope and boundary before ranking",
+        "entities": [],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_4",
+        "text": "Git-based CRDT sync merges claims by content_hash with monotonic boundary upgrade",
+        "entities": [
+          {
+            "name": "CRDT",
+            "canonical_key": "crdt",
+            "type": "Concept"
+          }
+        ],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_5",
+        "text": "Redis cache stores rendered dashboard fragments with TTL-based eviction",
+        "entities": [
+          {
+            "name": "TTL",
+            "canonical_key": "ttl",
+            "type": "Concept"
+          }
+        ],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_6",
+        "text": "OAuth device flow pins PKCE verifier state before token exchange with rotating refresh grants",
+        "entities": [
+          {
+            "name": "PKCE",
+            "canonical_key": "pkce",
+            "type": "Concept"
+          }
+        ],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_7",
+        "text": "pgvector semantic search blends BM25 reranking with approximate nearest-neighbor recall",
+        "entities": [
+          {
+            "name": "BM25",
+            "canonical_key": "bm25",
+            "type": "Concept"
+          }
+        ],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_8",
+        "text": "SchemaDriftGuard blocks tenant rollout when policy-bound migration steps violate boundary rules",
+        "entities": [
+          {
+            "name": "SchemaDriftGuard",
+            "canonical_key": "schemadriftguard",
+            "type": "Concept"
+          }
+        ],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_9",
+        "text": "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync",
+        "entities": [],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_10",
+        "text": "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+        "entities": [
+          {
+            "name": "CDN",
+            "canonical_key": "cdn",
+            "type": "Concept"
+          },
+          {
+            "name": "GraphQL",
+            "canonical_key": "graphql",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "cdn",
+            "dst": "graphql",
+            "type": "CO_OCCURS"
+          }
+        ]
+      }
+    ],
+    "llm": [
+      {
+        "claim_id": "claim_1",
+        "text": "JWT rotation protects access tokens during mobile sign-in recovery using RS256",
+        "latency_ms": 5001.66,
+        "entities": [],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_2",
+        "text": "DuckDB hybrid search uses cosine similarity with HNSW indexing for vector retrieval",
+        "latency_ms": 5003.094,
+        "entities": [],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_3",
+        "text": "The pce_memory_activate handler validates scope and boundary before ranking",
+        "latency_ms": 3679.768,
+        "entities": [
+          {
+            "name": "pce_memory_activate",
+            "canonical_key": "pce-memory-activate",
+            "type": "Artifact"
+          },
+          {
+            "name": "scope",
+            "canonical_key": "scope",
+            "type": "Concept"
+          },
+          {
+            "name": "boundary",
+            "canonical_key": "boundary",
+            "type": "Concept"
+          },
+          {
+            "name": "ranking",
+            "canonical_key": "ranking",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "pce-memory-activate",
+            "dst": "scope",
+            "type": "CONFIGURES"
+          },
+          {
+            "src": "pce-memory-activate",
+            "dst": "boundary",
+            "type": "CONFIGURES"
+          },
+          {
+            "src": "pce-memory-activate",
+            "dst": "ranking",
+            "type": "RELATES_TO"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_4",
+        "text": "Git-based CRDT sync merges claims by content_hash with monotonic boundary upgrade",
+        "latency_ms": 3714.692,
+        "entities": [
+          {
+            "name": "Git",
+            "canonical_key": "git",
+            "type": "Artifact"
+          },
+          {
+            "name": "CRDT",
+            "canonical_key": "crdt",
+            "type": "Concept"
+          },
+          {
+            "name": "content_hash",
+            "canonical_key": "content-hash",
+            "type": "Artifact"
+          },
+          {
+            "name": "monotonic boundary upgrade",
+            "canonical_key": "monotonic-boundary-upgrade",
+            "type": "Event"
+          }
+        ],
+        "relations": [
+          {
+            "src": "git",
+            "dst": "crdt",
+            "type": "USES"
+          },
+          {
+            "src": "crdt",
+            "dst": "content-hash",
+            "type": "CONFIGURES"
+          },
+          {
+            "src": "crdt",
+            "dst": "monotonic-boundary-upgrade",
+            "type": "RELATES_TO"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_5",
+        "text": "Redis cache stores rendered dashboard fragments with TTL-based eviction",
+        "latency_ms": 5001.296,
+        "entities": [],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_6",
+        "text": "OAuth device flow pins PKCE verifier state before token exchange with rotating refresh grants",
+        "latency_ms": 5003.3,
+        "entities": [],
+        "relations": []
+      },
+      {
+        "claim_id": "claim_7",
+        "text": "pgvector semantic search blends BM25 reranking with approximate nearest-neighbor recall",
+        "latency_ms": 4702.49,
+        "entities": [
+          {
+            "name": "pgvector",
+            "canonical_key": "pgvector",
+            "type": "Artifact"
+          },
+          {
+            "name": "semantic search",
+            "canonical_key": "semantic-search",
+            "type": "Concept"
+          },
+          {
+            "name": "BM25",
+            "canonical_key": "bm25",
+            "type": "Artifact"
+          },
+          {
+            "name": "reranking",
+            "canonical_key": "reranking",
+            "type": "Concept"
+          },
+          {
+            "name": "approximate nearest-neighbor recall",
+            "canonical_key": "approximate-nearest-neighbor-recall",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "pgvector",
+            "dst": "semantic-search",
+            "type": "CONFIGURES"
+          },
+          {
+            "src": "pgvector",
+            "dst": "bm25",
+            "type": "USES"
+          },
+          {
+            "src": "pgvector",
+            "dst": "reranking",
+            "type": "USES"
+          },
+          {
+            "src": "pgvector",
+            "dst": "approximate-nearest-neighbor-recall",
+            "type": "USES"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_8",
+        "text": "SchemaDriftGuard blocks tenant rollout when policy-bound migration steps violate boundary rules",
+        "latency_ms": 3978.063,
+        "entities": [
+          {
+            "name": "SchemaDriftGuard",
+            "canonical_key": "schemadriftguard",
+            "type": "Artifact"
+          },
+          {
+            "name": "tenant rollout",
+            "canonical_key": "tenant-rollout",
+            "type": "Event"
+          },
+          {
+            "name": "policy-bound migration steps",
+            "canonical_key": "policy-bound-migration-steps",
+            "type": "Artifact"
+          },
+          {
+            "name": "boundary rules",
+            "canonical_key": "boundary-rules",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "schemadriftguard",
+            "dst": "tenant-rollout",
+            "type": "CONFIGURES"
+          },
+          {
+            "src": "schemadriftguard",
+            "dst": "policy-bound-migration-steps",
+            "type": "DEPENDS_ON"
+          },
+          {
+            "src": "policy-bound-migration-steps",
+            "dst": "boundary-rules",
+            "type": "RELATES_TO"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_9",
+        "text": "Replica repair replays vector clocks before gossip-based conflict resolution in offline sync",
+        "latency_ms": 4985.872,
+        "entities": [
+          {
+            "name": "Replica repair",
+            "canonical_key": "replica-repair",
+            "type": "Artifact"
+          },
+          {
+            "name": "replays",
+            "canonical_key": "replays",
+            "type": "Concept"
+          },
+          {
+            "name": "vector clocks",
+            "canonical_key": "vector-clocks",
+            "type": "Artifact"
+          },
+          {
+            "name": "gossip-based conflict resolution",
+            "canonical_key": "gossip-based-conflict-resolution",
+            "type": "Concept"
+          },
+          {
+            "name": "offline sync",
+            "canonical_key": "offline-sync",
+            "type": "Concept"
+          }
+        ],
+        "relations": [
+          {
+            "src": "replica-repair",
+            "dst": "replays",
+            "type": "USES"
+          },
+          {
+            "src": "replays",
+            "dst": "vector-clocks",
+            "type": "DEPENDS_ON"
+          },
+          {
+            "src": "replica-repair",
+            "dst": "gossip-based-conflict-resolution",
+            "type": "CONFIGURES"
+          },
+          {
+            "src": "gossip-based-conflict-resolution",
+            "dst": "offline-sync",
+            "type": "RELATES_TO"
+          }
+        ]
+      },
+      {
+        "claim_id": "claim_10",
+        "text": "CDN edge cache invalidates persisted GraphQL responses after shard rebalancing",
+        "latency_ms": 5002.013,
+        "entities": [],
+        "relations": []
+      }
+    ]
+  }
+}
