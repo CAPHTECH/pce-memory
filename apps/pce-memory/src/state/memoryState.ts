@@ -9,7 +9,7 @@
  */
 import * as TE from 'fp-ts/TaskEither';
 import * as E from 'fp-ts/Either';
-import type { BoundaryPolicy, RetrievalPolicy } from '@pce/policy-schemas';
+import type { BoundaryPolicy, MaintenancePolicy, RetrievalPolicy } from '@pce/policy-schemas';
 import { defaultPolicy } from '@pce/policy-schemas';
 import { PCEMemory, canUpsert, canActivate, canFeedback } from '../domain/stateMachine.js';
 import type { PCEState, RuntimeState, RuntimeStateType } from '../domain/stateMachine.js';
@@ -25,6 +25,9 @@ let currentPolicy: BoundaryPolicy = defaultPolicy.boundary;
 
 /** 現在の取得ポリシー */
 let currentRetrievalPolicy: RetrievalPolicy = defaultPolicy.retrieval ?? {};
+
+/** 現在のメンテナンスポリシー */
+let currentMaintenancePolicy: MaintenancePolicy = defaultPolicy.maintenance ?? {};
 
 /** 現在の状態機械インスタンス */
 let currentMachine: PCEMemory<PCEState> = PCEMemory.create();
@@ -42,6 +45,11 @@ export function getPolicy(): BoundaryPolicy {
 /** 現在の取得ポリシーを取得 */
 export function getRetrievalPolicy(): RetrievalPolicy {
   return currentRetrievalPolicy;
+}
+
+/** 現在のメンテナンスポリシーを取得 */
+export function getMaintenancePolicy(): MaintenancePolicy {
+  return currentMaintenancePolicy;
 }
 
 /** 現在のポリシーバージョンを取得 */
@@ -134,6 +142,7 @@ export function initMemoryState(): TE.TaskEither<
       const policyDocument = policyRecord?.config_json ?? defaultPolicy;
       const policy = policyDocument.boundary;
       const retrievalPolicy = policyDocument.retrieval ?? defaultPolicy.retrieval ?? {};
+      const maintenancePolicy = policyDocument.maintenance ?? defaultPolicy.maintenance ?? {};
 
       // DBからclaim数を取得
       const claimCount = await countClaims();
@@ -158,6 +167,7 @@ export function initMemoryState(): TE.TaskEither<
 
       currentPolicy = policy;
       currentRetrievalPolicy = retrievalPolicy;
+      currentMaintenancePolicy = maintenancePolicy;
 
       return E.right({
         state: currentMachine.getStateType(),
@@ -206,6 +216,7 @@ export function applyPolicyOp(
       // 状態更新
       currentPolicy = parsedPolicy.boundary;
       currentRetrievalPolicy = parsedPolicy.retrieval ?? defaultPolicy.retrieval ?? {};
+      currentMaintenancePolicy = parsedPolicy.maintenance ?? defaultPolicy.maintenance ?? {};
       currentMachine = PCEMemory.restore({
         type: 'PolicyApplied',
         policyVersion: parsedPolicy.version,
@@ -273,6 +284,7 @@ export function getStateSummary(includeDetails: boolean = false): {
 export function resetMemoryState(): void {
   currentPolicy = defaultPolicy.boundary;
   currentRetrievalPolicy = defaultPolicy.retrieval ?? {};
+  currentMaintenancePolicy = defaultPolicy.maintenance ?? {};
   currentMachine = PCEMemory.create();
   operationQueue = Promise.resolve();
 }

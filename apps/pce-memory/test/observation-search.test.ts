@@ -42,7 +42,7 @@ function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {
 
 beforeEach(async () => {
   await resetRetrievalPlannerTestState();
-  await applyPolicy({ threshold: 0.0 });
+  await applyPolicy({ hybrid: { threshold: 0.0 } });
 });
 
 async function createObservation(content: string, boundary_class?: 'public' | 'internal' | 'pii') {

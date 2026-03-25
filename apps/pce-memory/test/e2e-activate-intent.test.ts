@@ -50,7 +50,7 @@ type ActiveContextItemRow = {
 
 beforeEach(async () => {
   await resetRetrievalPlannerTestState();
-  await applyPolicy({ threshold: 0.0 });
+  await applyPolicy({ hybrid: { threshold: 0.0 } });
 });
 
 function expectSuccess(result: Awaited<ReturnType<typeof dispatchTool>>) {

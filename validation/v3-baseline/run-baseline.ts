@@ -76,6 +76,16 @@ type ActivatePayload = {
   request_id: string;
   trace_id: string;
   next_cursor?: string;
+  maintenance_hints?: {
+    similar_pairs?: Array<{ a: string; b: string; similarity: number }>;
+    stale_candidates?: Array<{ id: string; last_retrieved_at: null; days_since_created: number }>;
+    unprocessed_observations?: number;
+    high_retrieval_no_feedback?: Array<{
+      id: string;
+      retrieval_count: number;
+      feedback_count: number;
+    }>;
+  };
 };
 
 type SimilarExistingMatch = {
@@ -776,23 +786,23 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
 
   const duplicateSimilarities: number[] = [];
   for (let pair = 0; pair < 5; pair++) {
-    const baseText = `Operations ledger for maple-${pair} shows certificate renewal every 30 days for cluster north.`;
-    const nearDuplicateText = `Operations ledger for maple-${pair} shows certificate renewal every 30 days for cluster south.`;
+    const baseText = `Release memo for module pine-dup-${pair}: partition window keeps renewal at 24 hours for cluster north region.`;
+    const nearDuplicateText = `Release memo for module pine-dup-${pair}: partition window keeps renewal at 24 hours for cluster south region.`;
     duplicateSimilarities.push(
       cosineSimilarity(deterministicEmbedding(baseText), deterministicEmbedding(nearDuplicateText))
     );
     await seedClaim({
       text: baseText,
-      provenance_at: isoDaysAgo(40 + pair),
+      provenance_at: isoDaysAgo(10 + pair),
       timestamps: {
-        created_at: isoDaysAgo(40 + pair),
+        created_at: isoDaysAgo(10 + pair),
       },
     });
     await seedClaim({
       text: nearDuplicateText,
-      provenance_at: isoDaysAgo(39 + pair),
+      provenance_at: isoDaysAgo(9 + pair),
       timestamps: {
-        created_at: isoDaysAgo(39 + pair),
+        created_at: isoDaysAgo(9 + pair),
       },
     });
   }
@@ -802,7 +812,6 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
     `Expected all maintenance duplicate pairs to exceed 0.9 similarity, got ${duplicateSimilarities.join(', ')}`
   );
 
-  const dormantIds: string[] = [];
   for (let index = 0; index < 40; index++) {
     const id = await seedClaim({
       text: `Maintenance catalog ${index}: release memo for module pine-${index} keeps partition window at ${6 + index} hours.`,
@@ -812,7 +821,6 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
       },
     });
     if (index < 5) {
-      dormantIds.push(id);
       await updateClaimTimestamps(id, {
         created_at: isoDaysAgo(95 + index),
         updated_at: isoDaysAgo(95 + index),
@@ -828,7 +836,20 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
     });
   }
 
-  void dormantIds;
+  const highRetrievalId = await seedClaim({
+    text: 'Hotspot memo quartz: recurring maintenance review for cedar relay handoff.',
+    provenance_at: isoDaysAgo(10),
+    timestamps: {
+      created_at: isoDaysAgo(10),
+    },
+  });
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await activate({
+      q: 'quartz cedar relay handoff',
+      top_k: 1,
+    });
+  }
 
   const rawResult = await handleActivate({
     q: 'release memo module partition window',
@@ -839,23 +860,38 @@ async function runMaintenanceBenchmark(): Promise<MaintenanceResult> {
   });
   const payload = asActivatePayload(rawResult);
   const responseText = JSON.stringify(rawResult.structuredContent ?? parseToolContent(rawResult));
-
-  const categoryMatchers: Record<string, RegExp> = {
-    duplicate: /\bduplicate\b|\bnear[- ]duplicate\b/i,
-    observation_backlog: /\bobservation\b|\bunprocessed\b|\bbacklog\b/i,
-    dormant_claims: /\bstale\b|\bdormant\b|\bunused\b|\bnever retrieved\b/i,
-  };
-
-  const detectedCategories = Object.entries(categoryMatchers)
-    .filter(([, pattern]) => pattern.test(responseText))
-    .map(([category]) => category);
-  const checkedCategories = Object.keys(categoryMatchers);
+  const maintenanceHints = payload.maintenance_hints;
+  const detectedCategories = [
+    Array.isArray(maintenanceHints?.similar_pairs) && maintenanceHints.similar_pairs.length > 0
+      ? 'duplicate'
+      : null,
+    typeof maintenanceHints?.unprocessed_observations === 'number' &&
+    maintenanceHints.unprocessed_observations > 0
+      ? 'observation_backlog'
+      : null,
+    Array.isArray(maintenanceHints?.stale_candidates) &&
+    maintenanceHints.stale_candidates.length > 0
+      ? 'dormant_claims'
+      : null,
+    Array.isArray(maintenanceHints?.high_retrieval_no_feedback) &&
+    maintenanceHints.high_retrieval_no_feedback.some(
+      (hint) => hint.id === highRetrievalId && hint.retrieval_count > 5 && hint.feedback_count === 0
+    )
+      ? 'high_retrieval_no_feedback'
+      : null,
+  ].filter((category): category is string => category !== null);
+  const checkedCategories = [
+    'duplicate',
+    'observation_backlog',
+    'dormant_claims',
+    'high_retrieval_no_feedback',
+  ];
 
   return {
     name: 'MAINTENANCE',
     score: round(detectedCategories.length / checkedCategories.length),
     metric: 'detected_hint_category_ratio',
-    expected_baseline: '0 because activate does not currently surface maintenance guidance',
+    expected_baseline: '1.0 when maintenance_hints surfaces all four hint categories',
     detected_hint_category_ratio: round(detectedCategories.length / checkedCategories.length),
     detected_categories: detectedCategories,
     checked_categories: checkedCategories,
@@ -1090,7 +1126,7 @@ function buildReport(results: BenchmarkResults): string {
     '',
     '- B1 measures three aspects of the freshness guard: (1) upsert detection of similar existing claims, (2) activate annotation of stale claims, (3) ranking promotion of newer claims over stale variants.',
     '- B2 isolates usage learning without feedback writes. A post-v3 implementation should move the correlation positive only if plain retrieval history becomes a ranking signal.',
-    '- B3 checks whether activate currently surfaces maintenance guidance for duplicates, raw observations, or dormant claims. The current baseline is expected to stay at zero unless new hint fields are introduced.',
+    '- B3 checks whether activate surfaces maintenance_hints for duplicates, raw observations, dormant claims, and repeatedly retrieved claims lacking feedback. Score reflects the fraction of hint categories detected.',
     '- B4 measures how often logically related claims appear after confirming suggested claim links. Improvements after connectivity work should come from claim-link traversal rather than lexical coincidence alone.',
     '- B5 gives a single regression-friendly number for a realistic multi-session flow.',
     '',
