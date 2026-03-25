@@ -307,6 +307,59 @@ describe('E2E activate intent', () => {
     );
   });
 
+  it('POLICY_CHECK keeps a relevant fact above unrelated norm decoys', async () => {
+    const query = 'policy-fixture-alpha guardrail';
+    const normIds = [
+      await createClaim({
+        text: `${query} authentication policy mfa required before admin access`,
+        kind: 'policy_hint',
+        memory_type: 'norm',
+        scope: 'principle',
+        critic: 0.66,
+      }),
+      await createClaim({
+        text: `${query} authentication policy mfa enforced during token rotation`,
+        kind: 'policy_hint',
+        memory_type: 'norm',
+        scope: 'project',
+        critic: 0.64,
+      }),
+    ];
+    const factId = await createClaim({
+      text: `${query} authentication policy mfa implementation note for gateway`,
+      kind: 'fact',
+      memory_type: 'knowledge',
+      scope: 'project',
+      critic: 0.82,
+    });
+    const taskId = await createClaim({
+      text: `${query} authentication policy mfa rollout task for backlog grooming`,
+      kind: 'task',
+      memory_type: 'working_state',
+      scope: 'project',
+      critic: 0.94,
+    });
+    const unrelatedNormId = await createClaim({
+      text: 'procedure-fixture-delta database migration rollback requires approval board',
+      kind: 'policy_hint',
+      memory_type: 'norm',
+      scope: 'principle',
+      critic: 0.95,
+    });
+
+    const policyCheck = await activate({
+      q: query,
+      scope: ['project', 'principle'],
+      intent: 'policy_check',
+      top_k: 5,
+    });
+
+    expect(policyCheck.intent).toBe('policy_check');
+    expect(claimIds(policyCheck).slice(0, 3)).toEqual([...normIds, factId]);
+    expect(claimIds(policyCheck).slice(0, 3)).not.toContain(taskId);
+    expect(claimIds(policyCheck).slice(0, 3)).not.toContain(unrelatedNormId);
+  });
+
   it('DESIGN_DECISION ranks knowledge above evidence', async () => {
     const query = 'design decision fixture';
     const evidenceId = await createClaim({

@@ -80,7 +80,7 @@ const DEFAULT_INTENT_PROFILE: IntentProfile = {
   kindBoosts: {},
   memoryTypeBoosts: {},
 };
-const POLICY_CHECK_NON_NORM_PENALTY = 0.3;
+const POLICY_CHECK_ACTIVE_TASK_PENALTY = 0.1;
 
 const INTENT_PROFILES: Record<ActivateIntent, IntentProfile> = {
   resume_task: {
@@ -100,8 +100,8 @@ const INTENT_PROFILES: Record<ActivateIntent, IntentProfile> = {
   },
   policy_check: {
     recencyWeight: 0.25,
-    kindBoosts: { policy_hint: 1.45 },
-    memoryTypeBoosts: { norm: 1.5, knowledge: 1.05 },
+    kindBoosts: { policy_hint: 1.2 },
+    memoryTypeBoosts: { norm: 1.4, knowledge: 1.05 },
   },
 };
 
@@ -208,8 +208,8 @@ export function calculateIntentScoreBreakdown(
   const kind_boost = profile.kindBoosts[typedKind] ?? 1.0;
   const memory_type_boost = memoryType ? (profile.memoryTypeBoosts[memoryType] ?? 1.0) : 1.0;
   const penalty_multiplier =
-    intent === 'policy_check' && typedKind !== 'policy_hint' && memoryType !== 'norm'
-      ? POLICY_CHECK_NON_NORM_PENALTY
+    intent === 'policy_check' && (typedKind === 'task' || memoryType === 'working_state')
+      ? POLICY_CHECK_ACTIVE_TASK_PENALTY
       : 1.0;
 
   return {
