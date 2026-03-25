@@ -4851,7 +4851,8 @@ export async function handleListPrompts(args: Record<string, unknown>): Promise<
 
   // ページネーション処理
   const PAGE_SIZE = 10;
-  const startIdx = cursor ? parseInt(cursor, 10) : 0;
+  const parsedCursor = cursor ? parseInt(cursor, 10) : 0;
+  const startIdx = Number.isFinite(parsedCursor) && parsedCursor >= 0 ? parsedCursor : 0;
   const prompts = PROMPTS_DEFINITIONS.slice(startIdx, startIdx + PAGE_SIZE);
 
   return { prompts };

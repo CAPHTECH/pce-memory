@@ -1997,3 +1997,76 @@ describe('BOUNDARY: ISO DateTime validation', () => {
     });
   }
 });
+
+// ==================== recencyDecay division-by-zero guard ====================
+
+describe('BOUNDARY: recencyDecay with invalid halfLifeDays', () => {
+  // Import the function directly for unit testing
+  it('returns 0 for halfLifeDays=0 (division by zero guard)', async () => {
+    const { recencyDecay } = await import('../src/store/rerank');
+    const result = recencyDecay(new Date(), 0);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBe(0);
+  });
+
+  it('returns 0 for halfLifeDays=NaN', async () => {
+    const { recencyDecay } = await import('../src/store/rerank');
+    const result = recencyDecay(new Date(), NaN);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBe(0);
+  });
+
+  it('returns 0 for halfLifeDays=-1', async () => {
+    const { recencyDecay } = await import('../src/store/rerank');
+    const result = recencyDecay(new Date(), -1);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBe(0);
+  });
+
+  it('returns 0 for halfLifeDays=Infinity', async () => {
+    const { recencyDecay } = await import('../src/store/rerank');
+    const result = recencyDecay(new Date(), Infinity);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBe(0);
+  });
+
+  it('returns valid value for normal halfLifeDays', async () => {
+    const { recencyDecay } = await import('../src/store/rerank');
+    const result = recencyDecay(new Date(Date.now() - 86_400_000), 30);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThanOrEqual(1);
+  });
+});
+
+// ==================== Cursor pagination safety ====================
+
+describe('BOUNDARY: handleListPrompts cursor pagination', () => {
+  it('handles NaN cursor gracefully', async () => {
+    const { handleListPrompts } = await import('../src/core/handlers');
+    const result = await handleListPrompts({ cursor: 'not_a_number' });
+    expect(result.prompts).toBeDefined();
+    expect(Array.isArray(result.prompts)).toBe(true);
+  });
+
+  it('handles negative cursor gracefully', async () => {
+    const { handleListPrompts } = await import('../src/core/handlers');
+    const result = await handleListPrompts({ cursor: '-5' });
+    expect(result.prompts).toBeDefined();
+    expect(Array.isArray(result.prompts)).toBe(true);
+  });
+
+  it('handles extremely large cursor', async () => {
+    const { handleListPrompts } = await import('../src/core/handlers');
+    const result = await handleListPrompts({ cursor: '999999999' });
+    expect(result.prompts).toBeDefined();
+    expect(result.prompts.length).toBe(0);
+  });
+
+  it('handles valid cursor', async () => {
+    const { handleListPrompts } = await import('../src/core/handlers');
+    const result = await handleListPrompts({ cursor: '0' });
+    expect(result.prompts).toBeDefined();
+    expect(result.prompts.length).toBeGreaterThan(0);
+  });
+});
