@@ -314,6 +314,26 @@ async function migrateActiveContextsV2(conn: DuckDBConnection): Promise<void> {
   }
 }
 
+async function migratePromotionQueueGraphColumns(conn: DuckDBConnection): Promise<void> {
+  if (!(await tableExists(conn, 'promotion_queue'))) return;
+
+  const cols = await getTableColumns(conn, 'promotion_queue');
+  if (!cols.has('proposed_entities')) {
+    console.error('[DB] Migrating promotion_queue: adding proposed_entities column...');
+    await conn.run("ALTER TABLE promotion_queue ADD COLUMN proposed_entities TEXT DEFAULT '[]'");
+    await conn.run(
+      "UPDATE promotion_queue SET proposed_entities = '[]' WHERE proposed_entities IS NULL"
+    );
+  }
+  if (!cols.has('proposed_relations')) {
+    console.error('[DB] Migrating promotion_queue: adding proposed_relations column...');
+    await conn.run("ALTER TABLE promotion_queue ADD COLUMN proposed_relations TEXT DEFAULT '[]'");
+    await conn.run(
+      "UPDATE promotion_queue SET proposed_relations = '[]' WHERE proposed_relations IS NULL"
+    );
+  }
+}
+
 async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> {
   // まず孤立した一時テーブルをクリーンアップ
   await cleanupOrphanedTempTables(conn);
@@ -440,6 +460,7 @@ export async function initSchema() {
   await migrateClaimsStatus(conn); // Issue #71: claims表にstatus列を追加しworking_stateをbackfill
   await migrateClaimsRollbackColumns(conn); // Issue #61: claims表にrollback列を追加
   await migrateActiveContextsV2(conn); // Issue #60: active_contexts表をv2列で拡張
+  await migratePromotionQueueGraphColumns(conn); // Issue: promotion_queue stores proposed graph data
   await migrateObservationsBoundaryClass(conn); // Issue #61: observations表にboundary_class追加
 
   const statements = SCHEMA_SQL.split(';')
