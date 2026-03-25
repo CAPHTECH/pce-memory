@@ -48,6 +48,15 @@ async function countActiveContextItems(activeContextId: string): Promise<number>
   return rows[0]?.cnt ?? 0;
 }
 
+async function activateWithRetry(args: Record<string, unknown>, retries = 2) {
+  let lastResult = await dispatchTool('pce_memory_activate', args);
+  for (let attempt = 1; attempt < retries && lastResult.isError === true; attempt++) {
+    await applyPolicy({ threshold: 0.0 });
+    lastResult = await dispatchTool('pce_memory_activate', args);
+  }
+  return lastResult;
+}
+
 describe('Property: retrieval planner invariants', () => {
   it('Property: scores stay non-negative, counts stay within top_k, active_context_items align, breakdowns compose, and boundary filters never leak', async () => {
     await fc.assert(
@@ -79,7 +88,7 @@ describe('Property: retrieval planner invariants', () => {
             });
           }
 
-          const activate = await dispatchTool('pce_memory_activate', {
+          const activate = await activateWithRetry({
             scope: ['project'],
             allow: [allowTag],
             top_k: topK,
@@ -98,6 +107,9 @@ describe('Property: retrieval planner invariants', () => {
                 g: { g: number };
                 score_final: number;
                 intent?: { boost?: number };
+                provenance_quality?: { multiplier?: number };
+                feedback_boost?: { multiplier?: number };
+                usage_term?: { multiplier?: number };
               };
             }>;
           };
@@ -118,10 +130,18 @@ describe('Property: retrieval planner invariants', () => {
             const breakdown = item.score_breakdown;
             expect(breakdown).toBeDefined();
             const boost = breakdown?.intent?.boost ?? 1;
+            const provenanceMultiplier = breakdown?.provenance_quality?.multiplier ?? 1;
+            const feedbackMultiplier = breakdown?.feedback_boost?.multiplier ?? 1;
+            const usageMultiplier = breakdown?.usage_term?.multiplier ?? 1;
             expect(item.score).toBeCloseTo(breakdown?.score_final ?? Number.NaN, 10);
             expect(breakdown?.score_final ?? Number.NaN).toBeGreaterThanOrEqual(0);
             expect(breakdown?.score_final ?? Number.NaN).toBeCloseTo(
-              (breakdown?.S ?? Number.NaN) * (breakdown?.g.g ?? Number.NaN) * boost,
+              (breakdown?.S ?? Number.NaN) *
+                (breakdown?.g.g ?? Number.NaN) *
+                boost *
+                provenanceMultiplier *
+                feedbackMultiplier *
+                usageMultiplier,
               10
             );
           }

@@ -187,6 +187,8 @@ function buildActivatedObservationClaim(
     created_at: createdAt,
     updated_at: createdAt,
     recency_anchor: createdAt,
+    retrieval_count: 0,
+    last_retrieved_at: null,
     source_type: observation.source_type,
     actor: observation.actor ?? null,
     tags: parseObservationTags(observation.tags),

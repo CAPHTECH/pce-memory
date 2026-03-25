@@ -15,6 +15,7 @@ import {
   findClaimsByIds,
   findClaimByContentHash,
   markStaleWorkingStateClaims,
+  recordClaimRetrievals,
   updateClaimStatus,
   ContentHashCollisionError,
 } from '../store/claims.js';
@@ -3074,7 +3075,26 @@ export async function handleActivate(args: Record<string, unknown>) {
       );
     }
 
-    const claims = searchResults.map((r) => r.claim);
+    const retrievedAt = new Date().toISOString();
+    const claims = searchResults.map((r) => {
+      if ((r.claim as { source_record_type?: string }).source_record_type === 'observation') {
+        return r.claim;
+      }
+
+      return {
+        ...r.claim,
+        retrieval_count: r.claim.retrieval_count + 1,
+        last_retrieved_at: retrievedAt,
+      };
+    });
+    const durableClaimIds = searchResults
+      .map((item) => item.claim)
+      .filter(
+        (claim): claim is Claim =>
+          (claim as { source_record_type?: string }).source_record_type !== 'observation'
+      )
+      .map((claim) => claim.id);
+    await recordClaimRetrievals(durableClaimIds, retrievedAt);
     const acId = `ac_${crypto.randomUUID().slice(0, 8)}`;
     await saveActiveContext({
       id: acId,
@@ -3121,7 +3141,7 @@ export async function handleActivate(args: Record<string, unknown>) {
         rank,
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
         selection_reason: selectionReason,
-        evidences: evidenceMap?.get(r.claim.id) ?? [],
+        evidences: evidenceMap?.get(claim.id) ?? [],
       };
     });
 

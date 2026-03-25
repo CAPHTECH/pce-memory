@@ -28,6 +28,7 @@ import {
   calculateIntentScoreBreakdown,
   calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
+  calculateUsageTermBreakdown,
   type FeedbackBoostOptions,
   type GFactorBreakdown,
   type ScoreBreakdown,
@@ -453,6 +454,13 @@ function buildTextOnlyScoreBreakdown(score: number): ScoreBreakdown {
     score_final: score,
   };
 }
+
+const NEUTRAL_G_FACTOR: GFactorBreakdown = {
+  utility_term: 1.0,
+  confidence_term: 1.0,
+  recency_term: 1.0,
+  g: 1.0,
+};
 
 function resolveAlpha(alpha: number | undefined): number {
   return typeof alpha === 'number' && Number.isFinite(alpha) ? alpha : ALPHA;
@@ -931,6 +939,7 @@ export async function textSearch(
       SELECT
         c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
         c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+        c.retrieval_count, c.last_retrieved_at,
         COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
       FROM claims c
       LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -963,6 +972,8 @@ export async function textSearch(
         created_at: row.created_at,
         updated_at: row.updated_at,
         recency_anchor: row.recency_anchor,
+        retrieval_count: Number(row.retrieval_count ?? 0),
+        last_retrieved_at: row.last_retrieved_at ?? null,
       },
       score: row.text_score,
     }));
@@ -982,6 +993,7 @@ export async function textSearch(
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+      c.retrieval_count, c.last_retrieved_at,
       COALESCE(cr.score, ${DEFAULT_CRITIC_SCORE}) as text_score
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -1017,6 +1029,8 @@ export async function textSearch(
       created_at: row.created_at,
       updated_at: row.updated_at,
       recency_anchor: row.recency_anchor,
+      retrieval_count: Number(row.retrieval_count ?? 0),
+      last_retrieved_at: row.last_retrieved_at ?? null,
     },
     score: row.text_score,
   }));
@@ -1072,6 +1086,7 @@ export async function vectorSearch(
     SELECT
       c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
       c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+      c.retrieval_count, c.last_retrieved_at,
       norm_cos(cos_sim(cv.embedding, ${embeddingLiteral}::DOUBLE[])) as vec_score
     FROM claims c
     INNER JOIN claim_vectors cv ON cv.claim_id = c.id
@@ -1105,6 +1120,8 @@ export async function vectorSearch(
       created_at: row.created_at,
       updated_at: row.updated_at,
       recency_anchor: row.recency_anchor,
+      retrieval_count: Number(row.retrieval_count ?? 0),
+      last_retrieved_at: row.last_retrieved_at ?? null,
     },
     score: row.vec_score,
   }));
@@ -1352,6 +1369,11 @@ function mergeResultsWithRerank(
 
     // メトリクス取得（存在しない場合はデフォルト値）
     const metrics = claimMetrics.get(id);
+    const usageTerm = calculateUsageTermBreakdown({
+      retrievalCount: claim.retrieval_count,
+      lastRetrievedAt: claim.last_retrieved_at ?? null,
+      createdAt: claim.created_at,
+    });
     let gFactor: GFactorBreakdown;
     let intentBreakdown: ReturnType<typeof calculateIntentScoreBreakdown> = undefined;
     let provenanceQuality = undefined;
@@ -1412,7 +1434,8 @@ function mergeResultsWithRerank(
       gFactor,
       intentBreakdown,
       provenanceQuality,
-      feedbackBoost
+      feedbackBoost,
+      usageTerm
     );
     const scoreFinal = breakdown.score_final;
 
@@ -1632,6 +1655,55 @@ export async function hybridSearchWithScores(
     }));
   }
 
+  if (enableRerank) {
+    const usageAwareRanked: RankedSearchResult[] = textResults
+      .filter((result) => result.score >= textOnlyThreshold)
+      .map((result) => {
+        const usageTerm = calculateUsageTermBreakdown({
+          retrievalCount: result.claim.retrieval_count,
+          lastRetrievedAt: result.claim.last_retrieved_at ?? null,
+          createdAt: result.claim.created_at,
+        });
+        const breakdown = calculateScoreBreakdown(
+          result.score,
+          0,
+          0,
+          NEUTRAL_G_FACTOR,
+          undefined,
+          undefined,
+          undefined,
+          usageTerm
+        );
+
+        return {
+          claim: result.claim,
+          fusedScore: breakdown.score_final,
+          ...(includeBreakdown ? { breakdown } : {}),
+        };
+      });
+
+    const diversifiedUsageAware =
+      mmrConfig && hasQuery
+        ? rerankWithMmr(
+            usageAwareRanked,
+            mmrConfig,
+            normalizedLimit,
+            await fetchClaimEmbeddings(
+              usageAwareRanked
+                .slice(0, Math.max(normalizedLimit, mmrConfig.maxCandidates))
+                .map((result) => result.claim.id)
+            )
+          )
+        : usageAwareRanked;
+
+    return diversifiedUsageAware.slice(0, normalizedLimit).map((result) => ({
+      claim: result.claim,
+      score: result.fusedScore,
+      source_layer: mapScopeToLayer(result.claim.scope),
+      ...(result.breakdown ? { score_breakdown: result.breakdown } : {}),
+    }));
+  }
+
   const textOnlyRanked: RankedSearchResult[] = textResults
     .filter((result) => result.score >= textOnlyThreshold)
     .map((result) => ({
@@ -1740,6 +1812,7 @@ async function fallbackToTextOnlyResults(
   const sql = `
     SELECT c.id, c.text, c.kind, c.scope, c.boundary_class, c.memory_type, c.status, c.content_hash,
            c.utility, c.confidence, c.created_at, c.updated_at, c.recency_anchor,
+           c.retrieval_count, c.last_retrieved_at,
            COALESCE(cr.score, 0) as score
     FROM claims c
     LEFT JOIN critic cr ON cr.claim_id = c.id
@@ -1772,6 +1845,8 @@ async function fallbackToTextOnlyResults(
       created_at: row.created_at,
       updated_at: row.updated_at,
       recency_anchor: row.recency_anchor,
+      retrieval_count: Number(row.retrieval_count ?? 0),
+      last_retrieved_at: row.last_retrieved_at ?? null,
     },
     score: row.score,
   }));

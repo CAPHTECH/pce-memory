@@ -20,6 +20,10 @@ import {
   calculateFeedbackBoostBreakdown,
   calculateProvenanceQualityBreakdown,
   calculateScoreBreakdown,
+  calculateUsageTermBreakdown,
+  MAX_RETRIEVAL_BOOST,
+  MIN_USAGE_DECAY,
+  MIN_RETRIEVAL_COUNT_FOR_BOOST,
 } from '../src/store/rerank.js';
 
 describe('sigmoid function', () => {
@@ -258,6 +262,23 @@ describe('calculateScoreBreakdown function', () => {
     expect(breakdown.score_final).toBeCloseTo(breakdown.S * gFactor.g, 10);
   });
 
+  it('applies usage term multiplier to score_final', () => {
+    const gFactor = calculateG(0, 0.5, 0.5);
+    const usageTerm = calculateUsageTermBreakdown({
+      retrievalCount: 3,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-20T00:00:00.000Z',
+      nowMs: new Date('2026-03-25T00:00:00.000Z').getTime(),
+    });
+    const breakdown = calculateScoreBreakdown(0.4, 0.8, 0.65, gFactor, undefined, undefined, undefined, usageTerm);
+
+    expect(breakdown.usage_term).toEqual(usageTerm);
+    expect(breakdown.score_final).toBeCloseTo(
+      breakdown.S * gFactor.g * usageTerm.multiplier,
+      10
+    );
+  });
+
   it('preserves individual scores in breakdown', () => {
     const gFactor = calculateG(1, 0.7, 0.8);
     const breakdown = calculateScoreBreakdown(0.3, 0.9, 0.65, gFactor);
@@ -315,6 +336,71 @@ describe('calculateScoreBreakdown function', () => {
       breakdown.S * gFactor.g * feedbackBoost.multiplier,
       10
     );
+  });
+});
+
+describe('calculateUsageTermBreakdown function', () => {
+  const now = new Date('2026-03-25T00:00:00.000Z').getTime();
+
+  it('uses last_retrieved_at when available and count exceeds threshold', () => {
+    const breakdown = calculateUsageTermBreakdown({
+      retrievalCount: 15,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(breakdown.usage_anchor_source).toBe('last_retrieved_at');
+    expect(breakdown.usage_decay).toBeCloseTo(1.0, 10);
+    // log2(16) * 0.1 = 4.0 * 0.1 = 0.4 → 1.4
+    expect(breakdown.retrieval_boost).toBeCloseTo(1.4, 10);
+  });
+
+  it('falls back to created_at for never-retrieved claims', () => {
+    const breakdown = calculateUsageTermBreakdown({
+      retrievalCount: 0,
+      lastRetrievedAt: null,
+      createdAt: '2026-02-23T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(breakdown.usage_anchor_source).toBe('created_at');
+    expect(breakdown.days_since_anchor).toBeGreaterThan(0);
+    expect(breakdown.usage_decay).toBeGreaterThanOrEqual(MIN_USAGE_DECAY);
+    expect(breakdown.usage_decay).toBe(1.0);
+    expect(breakdown.retrieval_boost).toBe(1.0);
+  });
+
+  it('does not boost below minimum retrieval count threshold', () => {
+    const belowThreshold = calculateUsageTermBreakdown({
+      retrievalCount: MIN_RETRIEVAL_COUNT_FOR_BOOST - 1,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(belowThreshold.retrieval_boost).toBe(1.0);
+    expect(belowThreshold.retrieval_count).toBe(MIN_RETRIEVAL_COUNT_FOR_BOOST - 1);
+
+    const atThreshold = calculateUsageTermBreakdown({
+      retrievalCount: MIN_RETRIEVAL_COUNT_FOR_BOOST,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(atThreshold.retrieval_boost).toBeGreaterThan(1.0);
+  });
+
+  it('caps retrieval boost', () => {
+    const breakdown = calculateUsageTermBreakdown({
+      retrievalCount: 1_000_000,
+      lastRetrievedAt: '2026-03-25T00:00:00.000Z',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      nowMs: now,
+    });
+
+    expect(breakdown.retrieval_boost).toBe(MAX_RETRIEVAL_BOOST);
   });
 });
 
