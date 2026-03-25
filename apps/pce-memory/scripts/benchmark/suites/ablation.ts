@@ -13,11 +13,13 @@ import { upsertClaimWithEmbedding } from '../../../src/store/claims';
 import { hybridSearchPaginated, setEmbeddingService } from '../../../src/store/hybridSearch';
 import type { EmbeddingService } from '@pce/embeddings';
 import type { ClaimKind } from '../../../src/domain/types';
+import { generateClaims } from '../data/synthetic-claims';
 import type {
   AblationConfig,
   AblationConfigResult,
   AblationDelta,
   AblationResult,
+  RerankAblationResult,
   QueryMetrics,
 } from '../types';
 
@@ -43,8 +45,15 @@ type QueryType = {
 };
 
 async function warmup(embeddingService: EmbeddingService): Promise<Map<string, string>> {
+  return warmupClaims(TEST_CLAIMS, embeddingService);
+}
+
+async function warmupClaims(
+  claims: Array<{ id: string; text: string; kind: string; scope: string; boundary_class: string; content_hash: string; provenance: { at: string; actor: string; note: string } }>,
+  embeddingService: EmbeddingService,
+): Promise<Map<string, string>> {
   const testIdToClaimId = new Map<string, string>();
-  for (const claim of TEST_CLAIMS) {
+  for (const claim of claims) {
     const result = await upsertClaimWithEmbedding(
       {
         text: claim.text,
@@ -145,6 +154,52 @@ async function runConfigQueries(
   };
 }
 
+const RERANK_ABLATION_CLAIM_COUNT = 150;
+
+const RERANK_CONFIGS: AblationConfig[] = [
+  { name: 'hybrid-no-rerank', alpha: 0.65, kText: 48, kVec: 96, enableRerank: false, mmr: { enabled: false } },
+  { name: BASELINE_NAME, alpha: 0.65, kText: 48, kVec: 96, enableRerank: true, mmr: { enabled: false } },
+];
+
+async function runRerankAblation(
+  embeddingService: EmbeddingService,
+  queries: QueryType[],
+): Promise<RerankAblationResult> {
+  console.log(`  [ablation] Rerank ablation with ${RERANK_ABLATION_CLAIM_COUNT} claims...`);
+  const claims = generateClaims(RERANK_ABLATION_CLAIM_COUNT);
+  const results: AblationConfigResult[] = [];
+
+  for (const config of RERANK_CONFIGS) {
+    console.log(`  [ablation] Rerank ablation: ${config.name}`);
+    await resetDbAsync();
+    await initDb();
+    await initSchema();
+    setEmbeddingService(embeddingService);
+    const idMap = await warmupClaims(claims, embeddingService);
+    const result = await runConfigQueries(config, queries, idMap, embeddingService);
+    results.push(result);
+    console.log(
+      `    P=${(result.avgPrecision * 100).toFixed(1)}% R=${(result.avgRecall * 100).toFixed(1)}% MRR=${(result.avgMrr * 100).toFixed(1)}% nDCG=${(result.avgNdcg * 100).toFixed(1)}%`,
+    );
+  }
+
+  const withoutRerank = results.find((r) => r.config.name === 'hybrid-no-rerank')!;
+  const withRerank = results.find((r) => r.config.name === BASELINE_NAME)!;
+
+  return {
+    claimCount: RERANK_ABLATION_CLAIM_COUNT,
+    withRerank,
+    withoutRerank,
+    delta: {
+      configName: 'rerank-effect',
+      deltaPrecision: withRerank.avgPrecision - withoutRerank.avgPrecision,
+      deltaRecall: withRerank.avgRecall - withoutRerank.avgRecall,
+      deltaMrr: withRerank.avgMrr - withoutRerank.avgMrr,
+      deltaNdcg: withRerank.avgNdcg - withoutRerank.avgNdcg,
+    },
+  };
+}
+
 export async function runAblation(
   embeddingService: EmbeddingService,
   datasetPath: string,
@@ -177,5 +232,8 @@ export async function runAblation(
     deltaNdcg: baseline ? c.avgNdcg - baseline.avgNdcg : 0,
   }));
 
-  return { configs, baselineName: BASELINE_NAME, deltas };
+  // Large-corpus rerank ablation to detect g() effect
+  const rerankAblation = await runRerankAblation(embeddingService, queries);
+
+  return { configs, baselineName: BASELINE_NAME, deltas, rerankAblation };
 }

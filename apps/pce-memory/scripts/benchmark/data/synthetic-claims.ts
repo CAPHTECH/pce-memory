@@ -129,8 +129,8 @@ export function generateClaims(count: number): SyntheticClaim[] {
       content_hash: `sha256:synth-${i}`,
       provenance: {
         at: new Date(Date.UTC(2024, 0, 15) + i * 3600_000).toISOString(),
-        actor: 'benchmark-generator',
-        note: `Synthetic claim #${i}`,
+        actor: '',
+        note: '',
       },
     });
   }

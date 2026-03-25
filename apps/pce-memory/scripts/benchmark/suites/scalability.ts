@@ -71,6 +71,8 @@ async function measureScalePoint(
 
   const allPrecisions: number[] = [];
   const allRecalls: number[] = [];
+  const allPrecisionsAt5: number[] = [];
+  const allRecallsAt5: number[] = [];
   const allMrrs: number[] = [];
   const allNdcgs: number[] = [];
   const allLatencies: number[] = [];
@@ -108,18 +110,32 @@ async function measureScalePoint(
         }
 
         const evalStartTime = Date.now();
-        const metrics = evaluateRetrieval({
-          items: retrievedIds.map((id, i) => ({ id, timestampMs: evalStartTime + i * 10 })),
-          relevant: Array.from(relevantIdSet),
+        const evalItems = retrievedIds.map((id, i) => ({ id, timestampMs: evalStartTime + i * 10 }));
+        const relevantArray = Array.from(relevantIdSet);
+        const gradesOpt = relevanceGrades.size > 0 ? { relevanceGrades } : {};
+
+        const metricsAt10 = evaluateRetrieval({
+          items: evalItems,
+          relevant: relevantArray,
           k: TOP_K,
           startTimestampMs: evalStartTime,
-          ...(relevanceGrades.size > 0 && { relevanceGrades }),
+          ...gradesOpt,
         });
 
-        allPrecisions.push(metrics.precisionAtK);
-        allRecalls.push(metrics.recallAtK);
-        allMrrs.push(metrics.mrr);
-        allNdcgs.push(metrics.ndcg ?? 0);
+        const metricsAt5 = evaluateRetrieval({
+          items: evalItems,
+          relevant: relevantArray,
+          k: 5,
+          startTimestampMs: evalStartTime,
+          ...gradesOpt,
+        });
+
+        allPrecisions.push(metricsAt10.precisionAtK);
+        allRecalls.push(metricsAt10.recallAtK);
+        allPrecisionsAt5.push(metricsAt5.precisionAtK);
+        allRecallsAt5.push(metricsAt5.recallAtK);
+        allMrrs.push(metricsAt10.mrr);
+        allNdcgs.push(metricsAt10.ndcg ?? 0);
       }
     }
   }
@@ -130,6 +146,8 @@ async function measureScalePoint(
     claimCount,
     avgPrecision: avg(allPrecisions),
     avgRecall: avg(allRecalls),
+    avgPrecisionAt5: avg(allPrecisionsAt5),
+    avgRecallAt5: avg(allRecallsAt5),
     avgMrr: avg(allMrrs),
     avgNdcg: avg(allNdcgs),
     latency: computeLatencyStats(allLatencies),

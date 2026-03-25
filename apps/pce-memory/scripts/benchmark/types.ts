@@ -79,6 +79,18 @@ export interface AblationResult {
   configs: AblationConfigResult[];
   baselineName: string;
   deltas: AblationDelta[];
+  rerankAblation?: RerankAblationResult;
+}
+
+// ---------------------------------------------------------------------------
+// Rerank Ablation (large corpus)
+// ---------------------------------------------------------------------------
+
+export interface RerankAblationResult {
+  claimCount: number;
+  withRerank: AblationConfigResult;
+  withoutRerank: AblationConfigResult;
+  delta: AblationDelta;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +101,8 @@ export interface ScalabilityDataPoint {
   claimCount: number;
   avgPrecision: number;
   avgRecall: number;
+  avgPrecisionAt5: number;
+  avgRecallAt5: number;
   avgMrr: number;
   avgNdcg: number;
   latency: LatencyStats;
