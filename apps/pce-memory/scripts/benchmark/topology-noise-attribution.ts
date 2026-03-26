@@ -1,6 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { computeContentHash, type EmbeddingService } from '@pce/embeddings';
-import * as E from 'fp-ts/Either';
+import { computeContentHash } from '@pce/embeddings';
 import {
   CONNECTIVITY_SEED_MULTIPLIER,
   expandActivateResultsWithClaimLinks,
@@ -16,6 +15,10 @@ import { setEmbeddingService, hybridSearchWithScores } from '../../src/store/hyb
 import { initRateState, resetRates } from '../../src/store/rate.js';
 import { upsertRelation } from '../../src/store/relations.js';
 import { resolveTopologyConfig } from '../../src/store/search/types.js';
+import {
+  createBenchmarkEmbeddingService,
+  withRestoredEmbeddingService,
+} from './embeddingService.js';
 import { dispatchToolOrThrow } from './toolResult.js';
 
 interface ScenarioSeed {
@@ -115,19 +118,8 @@ function createSimilarityVector(similarity: number): readonly number[] {
   return normalize([clamped, Math.sqrt(Math.max(0, 1 - clamped * clamped))]);
 }
 
-function createEmbeddingService(embeddings: Record<string, readonly number[]>): EmbeddingService {
-  return {
-    embed:
-      ({ text }) =>
-      async () =>
-        E.right({
-          embedding: embeddings[text] ?? normalize([-1, 0]),
-          modelVersion: 'topology-noise-attribution-v1',
-        }),
-  };
-}
-
 async function resetBenchmarkState(): Promise<void> {
+  setEmbeddingService(null);
   await resetDbAsync();
   resetMemoryState();
   resetLayerScopeState();
@@ -202,7 +194,12 @@ async function createBenchmarkClaims(input: {
   for (const claim of input.claims) {
     embeddings[claim.text] = createSimilarityVector(claim.similarity);
   }
-  setEmbeddingService(createEmbeddingService(embeddings));
+  setEmbeddingService(
+    createBenchmarkEmbeddingService(embeddings, {
+      fallbackEmbedding: normalize([-1, 0]),
+      modelVersion: 'topology-noise-attribution-v1',
+    })
+  );
 
   const idsByLabel: Record<string, string> = {};
   const labelById: Record<string, string> = {};
@@ -599,43 +596,45 @@ const SCENARIOS: readonly ScenarioDefinition[] = [
 ];
 
 export async function runTopologyNoiseAttributionBenchmark(): Promise<TopologyNoiseAttributionReport> {
-  const scenarios: TopologyNoiseAttributionScenarioReport[] = [];
-  for (const scenario of SCENARIOS) {
-    scenarios.push(await runScenario(scenario));
-  }
+  return withRestoredEmbeddingService(async () => {
+    const scenarios: TopologyNoiseAttributionScenarioReport[] = [];
+    for (const scenario of SCENARIOS) {
+      scenarios.push(await runScenario(scenario));
+    }
 
-  const naturalPrecisionDrops = scenarios
-    .map((scenario) => Math.min(0, scenario.deltas.natural_vs_baseline.precision_at_k))
-    .map((value) => Math.abs(value));
-  const injectedPrecisionDrops = scenarios
-    .map((scenario) => Math.min(0, scenario.deltas.injected_vs_baseline.precision_at_k))
-    .map((value) => Math.abs(value));
+    const naturalPrecisionDrops = scenarios
+      .map((scenario) => Math.min(0, scenario.deltas.natural_vs_baseline.precision_at_k))
+      .map((value) => Math.abs(value));
+    const injectedPrecisionDrops = scenarios
+      .map((scenario) => Math.min(0, scenario.deltas.injected_vs_baseline.precision_at_k))
+      .map((value) => Math.abs(value));
 
-  return {
-    generated_at: new Date().toISOString(),
-    environment: {
-      node: process.version,
-      platform: `${process.platform}/${process.arch}`,
-    },
-    summary: {
-      scenario_count: scenarios.length,
-      injection_only_noise_scenarios: scenarios.filter(
-        (scenario) => scenario.forced_noise_labels.length > 0
-      ).length,
-      natural_noise_scenarios: scenarios.filter(
-        (scenario) => scenario.natural_noise_labels.length > 0
-      ).length,
-      avg_natural_precision_delta: avg(
-        scenarios.map((scenario) => scenario.deltas.natural_vs_baseline.precision_at_k)
-      ),
-      avg_injected_precision_delta: avg(
-        scenarios.map((scenario) => scenario.deltas.injected_vs_baseline.precision_at_k)
-      ),
-      max_natural_precision_drop: Number(Math.max(...naturalPrecisionDrops, 0).toFixed(3)),
-      max_injected_precision_drop: Number(Math.max(...injectedPrecisionDrops, 0).toFixed(3)),
-    },
-    scenarios,
-  };
+    return {
+      generated_at: new Date().toISOString(),
+      environment: {
+        node: process.version,
+        platform: `${process.platform}/${process.arch}`,
+      },
+      summary: {
+        scenario_count: scenarios.length,
+        injection_only_noise_scenarios: scenarios.filter(
+          (scenario) => scenario.forced_noise_labels.length > 0
+        ).length,
+        natural_noise_scenarios: scenarios.filter(
+          (scenario) => scenario.natural_noise_labels.length > 0
+        ).length,
+        avg_natural_precision_delta: avg(
+          scenarios.map((scenario) => scenario.deltas.natural_vs_baseline.precision_at_k)
+        ),
+        avg_injected_precision_delta: avg(
+          scenarios.map((scenario) => scenario.deltas.injected_vs_baseline.precision_at_k)
+        ),
+        max_natural_precision_drop: Number(Math.max(...naturalPrecisionDrops, 0).toFixed(3)),
+        max_injected_precision_drop: Number(Math.max(...injectedPrecisionDrops, 0).toFixed(3)),
+      },
+      scenarios,
+    };
+  });
 }
 
 function formatPathEvidence(evidence: TopologyPathEvidence): string {

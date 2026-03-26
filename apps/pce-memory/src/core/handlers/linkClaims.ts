@@ -7,8 +7,7 @@
 import {
   createToolResult,
   err,
-  ProvenanceValidationError,
-  requireValidatedProvenance,
+  validateRequiredProvenance,
   toStructuredProvenance,
   type ToolResult,
 } from './shared.js';
@@ -107,17 +106,23 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
       );
     }
 
-    const resolvedProvenance: Provenance = (() => {
-      if (provenance === undefined) {
-        return {
-          at: new Date().toISOString(),
-          actor: DEFAULT_LINK_PROVENANCE_ACTOR,
-          note: 'explicit claim link confirmation',
-        };
+    let resolvedProvenance: Provenance;
+    if (provenance === undefined) {
+      resolvedProvenance = {
+        at: new Date().toISOString(),
+        actor: DEFAULT_LINK_PROVENANCE_ACTOR,
+        note: 'explicit claim link confirmation',
+      };
+    } else {
+      const validatedProvenance = validateRequiredProvenance(provenance);
+      if (!validatedProvenance.ok) {
+        return createToolResult(
+          { ...err('VALIDATION_ERROR', validatedProvenance.message, reqId), trace_id: traceId },
+          { isError: true }
+        );
       }
-
-      return requireValidatedProvenance(provenance);
-    })();
+      resolvedProvenance = validatedProvenance.value;
+    }
 
     const [sourceClaim, targetClaim] = await Promise.all([
       findClaimById(source_claim_id),
@@ -185,12 +190,6 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    if (e instanceof ProvenanceValidationError) {
-      return createToolResult(
-        { ...err('VALIDATION_ERROR', message, reqId), trace_id: traceId },
-        { isError: true }
-      );
-    }
     await appendLog({
       id: `log_${reqId}`,
       op: 'link_claims',

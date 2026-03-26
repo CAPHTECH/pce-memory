@@ -1,6 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { computeContentHash, type EmbeddingService } from '@pce/embeddings';
-import * as E from 'fp-ts/Either';
+import { computeContentHash } from '@pce/embeddings';
 import { initDb, initSchema, resetDbAsync } from '../../src/db/connection.js';
 import { resetLayerScopeState } from '../../src/state/layerScopeState.js';
 import { resetMemoryState } from '../../src/state/memoryState.js';
@@ -8,6 +7,10 @@ import { linkClaimEntity, upsertEntity } from '../../src/store/entities.js';
 import { setEmbeddingService } from '../../src/store/hybridSearch.js';
 import { initRateState, resetRates } from '../../src/store/rate.js';
 import { upsertRelation } from '../../src/store/relations.js';
+import {
+  createBenchmarkEmbeddingService,
+  withRestoredEmbeddingService,
+} from './embeddingService.js';
 import { dispatchToolOrThrow } from './toolResult.js';
 
 interface ActivateClaimResult {
@@ -79,19 +82,8 @@ function normalize(vector: readonly number[]): readonly number[] {
   return vector.map((value) => Number((value / magnitude).toFixed(6)));
 }
 
-function createEmbeddingService(embeddings: Record<string, readonly number[]>): EmbeddingService {
-  return {
-    embed:
-      ({ text }) =>
-      async () =>
-        E.right({
-          embedding: embeddings[text] ?? normalize([-1, 0]),
-          modelVersion: 'topology-benchmark-v1',
-        }),
-  };
-}
-
 async function resetBenchmarkState(): Promise<void> {
+  setEmbeddingService(null);
   await resetDbAsync();
   resetMemoryState();
   resetLayerScopeState();
@@ -241,12 +233,18 @@ async function seedClaimLinkScenario(): Promise<ScenarioSeed> {
   const queryText = 'maple login token issuer validation handoff';
 
   setEmbeddingService(
-    createEmbeddingService({
-      [anchorText]: normalize([1, 0]),
-      [relatedText]: normalize([0.6, 0.8]),
-      [distractorText]: normalize([1, 1]),
-      [queryText]: normalize([1, -1]),
-    })
+    createBenchmarkEmbeddingService(
+      {
+        [anchorText]: normalize([1, 0]),
+        [relatedText]: normalize([0.6, 0.8]),
+        [distractorText]: normalize([1, 1]),
+        [queryText]: normalize([1, -1]),
+      },
+      {
+        fallbackEmbedding: normalize([-1, 0]),
+        modelVersion: 'topology-benchmark-v1',
+      }
+    )
   );
 
   const anchorId = await upsertKnowledge(anchorText);
@@ -278,12 +276,18 @@ async function seedEntityRelationScenario(): Promise<ScenarioSeed> {
   const queryText = 'oauth issuer validation audience checks';
 
   setEmbeddingService(
-    createEmbeddingService({
-      [seedText]: normalize([1, 0]),
-      [bridgedText]: normalize([-1, 0]),
-      [distractorText]: normalize([0.8, 0.2]),
-      [queryText]: normalize([1, 0]),
-    })
+    createBenchmarkEmbeddingService(
+      {
+        [seedText]: normalize([1, 0]),
+        [bridgedText]: normalize([-1, 0]),
+        [distractorText]: normalize([0.8, 0.2]),
+        [queryText]: normalize([1, 0]),
+      },
+      {
+        fallbackEmbedding: normalize([-1, 0]),
+        modelVersion: 'topology-benchmark-v1',
+      }
+    )
   );
 
   const seedId = await upsertKnowledge(seedText);
@@ -333,12 +337,18 @@ async function seedSupersessionScenario(): Promise<ScenarioSeed> {
   const queryText = 'legacy issuer validation static partner secrets';
 
   setEmbeddingService(
-    createEmbeddingService({
-      [oldText]: normalize([1, 0]),
-      [newText]: normalize([-1, 0]),
-      [distractorText]: normalize([0, 1]),
-      [queryText]: normalize([1, 0]),
-    })
+    createBenchmarkEmbeddingService(
+      {
+        [oldText]: normalize([1, 0]),
+        [newText]: normalize([-1, 0]),
+        [distractorText]: normalize([0, 1]),
+        [queryText]: normalize([1, 0]),
+      },
+      {
+        fallbackEmbedding: normalize([-1, 0]),
+        modelVersion: 'topology-benchmark-v1',
+      }
+    )
   );
 
   const oldId = await upsertKnowledge(oldText);
@@ -388,56 +398,60 @@ const SCENARIOS: ScenarioDefinition[] = [
 ];
 
 export async function runTopologyEffectivenessBenchmark(): Promise<TopologyBenchmarkReport> {
-  const scenarios: TopologyScenarioReport[] = [];
+  return withRestoredEmbeddingService(async () => {
+    const scenarios: TopologyScenarioReport[] = [];
 
-  for (const definition of SCENARIOS) {
-    const baseline = await runScenarioVariant(definition, false);
-    const topology = await runScenarioVariant(definition, true);
+    for (const definition of SCENARIOS) {
+      const baseline = await runScenarioVariant(definition, false);
+      const topology = await runScenarioVariant(definition, true);
 
-    scenarios.push({
-      name: definition.name,
-      description: definition.description,
-      path_kind: definition.pathKind,
-      top_k: baseline.topK,
-      relevant_labels: baseline.relevantLabels,
-      baseline: baseline.metrics,
-      topology: topology.metrics,
-      deltas: {
-        precision_at_k: Number(
-          (topology.metrics.precision_at_k - baseline.metrics.precision_at_k).toFixed(3)
-        ),
-        recall_at_k: Number(
-          (topology.metrics.recall_at_k - baseline.metrics.recall_at_k).toFixed(3)
-        ),
-        avg_latency_ms: Number(
-          (topology.metrics.avg_latency_ms - baseline.metrics.avg_latency_ms).toFixed(3)
-        ),
+      scenarios.push({
+        name: definition.name,
+        description: definition.description,
+        path_kind: definition.pathKind,
+        top_k: baseline.topK,
+        relevant_labels: baseline.relevantLabels,
+        baseline: baseline.metrics,
+        topology: topology.metrics,
+        deltas: {
+          precision_at_k: Number(
+            (topology.metrics.precision_at_k - baseline.metrics.precision_at_k).toFixed(3)
+          ),
+          recall_at_k: Number(
+            (topology.metrics.recall_at_k - baseline.metrics.recall_at_k).toFixed(3)
+          ),
+          avg_latency_ms: Number(
+            (topology.metrics.avg_latency_ms - baseline.metrics.avg_latency_ms).toFixed(3)
+          ),
+        },
+      });
+    }
+
+    const avg = (values: number[]): number =>
+      Number(
+        (values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)).toFixed(3)
+      );
+
+    return {
+      generated_at: new Date().toISOString(),
+      environment: {
+        node: process.version,
+        platform: `${process.platform}/${process.arch}`,
       },
-    });
-  }
-
-  const avg = (values: number[]): number =>
-    Number((values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)).toFixed(3));
-
-  return {
-    generated_at: new Date().toISOString(),
-    environment: {
-      node: process.version,
-      platform: `${process.platform}/${process.arch}`,
-    },
-    summary: {
-      scenario_count: scenarios.length,
-      improved_precision_scenarios: scenarios.filter(
-        (scenario) => scenario.deltas.precision_at_k > 0
-      ).length,
-      improved_recall_scenarios: scenarios.filter((scenario) => scenario.deltas.recall_at_k > 0)
-        .length,
-      avg_precision_delta: avg(scenarios.map((scenario) => scenario.deltas.precision_at_k)),
-      avg_recall_delta: avg(scenarios.map((scenario) => scenario.deltas.recall_at_k)),
-      avg_latency_delta_ms: avg(scenarios.map((scenario) => scenario.deltas.avg_latency_ms)),
-    },
-    scenarios,
-  };
+      summary: {
+        scenario_count: scenarios.length,
+        improved_precision_scenarios: scenarios.filter(
+          (scenario) => scenario.deltas.precision_at_k > 0
+        ).length,
+        improved_recall_scenarios: scenarios.filter((scenario) => scenario.deltas.recall_at_k > 0)
+          .length,
+        avg_precision_delta: avg(scenarios.map((scenario) => scenario.deltas.precision_at_k)),
+        avg_recall_delta: avg(scenarios.map((scenario) => scenario.deltas.recall_at_k)),
+        avg_latency_delta_ms: avg(scenarios.map((scenario) => scenario.deltas.avg_latency_ms)),
+      },
+      scenarios,
+    };
+  });
 }
 
 export function generateTopologyBenchmarkMarkdown(report: TopologyBenchmarkReport): string {

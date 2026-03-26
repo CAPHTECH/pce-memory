@@ -1,6 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { computeContentHash, type EmbeddingService } from '@pce/embeddings';
-import * as E from 'fp-ts/Either';
+import { computeContentHash } from '@pce/embeddings';
 import { initDb, initSchema, resetDbAsync } from '../../src/db/connection.js';
 import { resetLayerScopeState } from '../../src/state/layerScopeState.js';
 import { resetMemoryState } from '../../src/state/memoryState.js';
@@ -8,6 +7,10 @@ import { linkClaimEntity, upsertEntity } from '../../src/store/entities.js';
 import { setEmbeddingService } from '../../src/store/hybridSearch.js';
 import { initRateState, resetRates } from '../../src/store/rate.js';
 import { upsertRelation } from '../../src/store/relations.js';
+import {
+  createBenchmarkEmbeddingService,
+  withRestoredEmbeddingService,
+} from './embeddingService.js';
 import { dispatchToolOrThrow } from './toolResult.js';
 
 interface ActivateClaimResult {
@@ -175,18 +178,6 @@ function normalize(vector: readonly number[]): readonly number[] {
   return vector.map((value) => Number((value / magnitude).toFixed(6)));
 }
 
-function createEmbeddingService(embeddings: Record<string, readonly number[]>): EmbeddingService {
-  return {
-    embed:
-      ({ text }) =>
-      async () =>
-        E.right({
-          embedding: embeddings[text] ?? normalize([-1, 0]),
-          modelVersion: 'topology-noise-benchmark-v2',
-        }),
-  };
-}
-
 function directVector(rank: number): readonly number[] {
   return normalize([1 - rank * 0.025, Math.max(0.01, rank * 0.02)]);
 }
@@ -200,6 +191,7 @@ function noiseVector(): readonly number[] {
 }
 
 async function resetBenchmarkState(): Promise<void> {
+  setEmbeddingService(null);
   await resetDbAsync();
   resetMemoryState();
   resetLayerScopeState();
@@ -519,12 +511,18 @@ async function seedForcedPresenceNoiseScenario(): Promise<ScenarioSeed> {
   const queryText = 'issuer validation partner authentication';
 
   setEmbeddingService(
-    createEmbeddingService({
-      [seedText]: normalize([1, 0]),
-      [directRelevantText]: normalize([0.94, 0.06]),
-      [noisyRelatedText]: noiseVector(),
-      [queryText]: normalize([1, 0]),
-    })
+    createBenchmarkEmbeddingService(
+      {
+        [seedText]: normalize([1, 0]),
+        [directRelevantText]: normalize([0.94, 0.06]),
+        [noisyRelatedText]: noiseVector(),
+        [queryText]: normalize([1, 0]),
+      },
+      {
+        fallbackEmbedding: normalize([-1, 0]),
+        modelVersion: 'topology-noise-benchmark-v2',
+      }
+    )
   );
 
   const seedId = await upsertKnowledge(seedText);
@@ -557,12 +555,18 @@ async function seedGenericHubNoiseScenario(): Promise<ScenarioSeed> {
   const queryText = 'oauth issuer validation mobile auth service';
 
   setEmbeddingService(
-    createEmbeddingService({
-      [seedText]: normalize([1, 0]),
-      [directRelevantText]: normalize([0.93, 0.07]),
-      [hubNoiseText]: noiseVector(),
-      [queryText]: normalize([1, 0]),
-    })
+    createBenchmarkEmbeddingService(
+      {
+        [seedText]: normalize([1, 0]),
+        [directRelevantText]: normalize([0.93, 0.07]),
+        [hubNoiseText]: noiseVector(),
+        [queryText]: normalize([1, 0]),
+      },
+      {
+        fallbackEmbedding: normalize([-1, 0]),
+        modelVersion: 'topology-noise-benchmark-v2',
+      }
+    )
   );
 
   const seedId = await upsertKnowledge(seedText);
@@ -625,14 +629,20 @@ async function seedConfidenceMitigatedScenario(): Promise<ScenarioSeed> {
   const queryText = 'session revocation customer security controls';
 
   setEmbeddingService(
-    createEmbeddingService({
-      [seedText]: normalize([1, 0]),
-      [directRelevantText]: normalize([0.95, 0.05]),
-      [directDistractorText]: normalize([0.8, 0.2]),
-      [relevantLinkedText]: noiseVector(),
-      [noisyLinkedText]: noiseVector(),
-      [queryText]: normalize([1, 0]),
-    })
+    createBenchmarkEmbeddingService(
+      {
+        [seedText]: normalize([1, 0]),
+        [directRelevantText]: normalize([0.95, 0.05]),
+        [directDistractorText]: normalize([0.8, 0.2]),
+        [relevantLinkedText]: noiseVector(),
+        [noisyLinkedText]: noiseVector(),
+        [queryText]: normalize([1, 0]),
+      },
+      {
+        fallbackEmbedding: normalize([-1, 0]),
+        modelVersion: 'topology-noise-benchmark-v2',
+      }
+    )
   );
 
   const seedId = await upsertKnowledge(seedText);
@@ -694,7 +704,12 @@ async function seedRelatedStarSweepCase(params: SweepCaseParams): Promise<Scenar
   for (const text of noiseTexts) {
     embeddings[text] = noiseVector();
   }
-  setEmbeddingService(createEmbeddingService(embeddings));
+  setEmbeddingService(
+    createBenchmarkEmbeddingService(embeddings, {
+      fallbackEmbedding: normalize([-1, 0]),
+      modelVersion: 'topology-noise-benchmark-v2',
+    })
+  );
 
   const directIds: string[] = [];
   const labelById: Record<string, string> = {};
@@ -746,7 +761,12 @@ async function seedGenericHubSweepCase(params: SweepCaseParams): Promise<Scenari
   for (const text of noiseTexts) {
     embeddings[text] = noiseVector();
   }
-  setEmbeddingService(createEmbeddingService(embeddings));
+  setEmbeddingService(
+    createBenchmarkEmbeddingService(embeddings, {
+      fallbackEmbedding: normalize([-1, 0]),
+      modelVersion: 'topology-noise-benchmark-v2',
+    })
+  );
 
   const directIds: string[] = [];
   const labelById: Record<string, string> = {};
@@ -820,7 +840,12 @@ async function seedTwoHopSweepCase(params: SweepCaseParams): Promise<ScenarioSee
   for (const text of noiseTexts) {
     embeddings[text] = noiseVector();
   }
-  setEmbeddingService(createEmbeddingService(embeddings));
+  setEmbeddingService(
+    createBenchmarkEmbeddingService(embeddings, {
+      fallbackEmbedding: normalize([-1, 0]),
+      modelVersion: 'topology-noise-benchmark-v2',
+    })
+  );
 
   const directIds: string[] = [];
   const labelById: Record<string, string> = {};
@@ -939,48 +964,23 @@ const SWEEPS: SweepDefinition[] = [
 ];
 
 export async function runTopologyNoiseBenchmark(): Promise<TopologyNoiseBenchmarkReport> {
-  const scenarios: TopologyNoiseScenarioReport[] = [];
-  const sweeps: TopologyNoiseSweepReport[] = [];
+  return withRestoredEmbeddingService(async () => {
+    const scenarios: TopologyNoiseScenarioReport[] = [];
+    const sweeps: TopologyNoiseSweepReport[] = [];
 
-  for (const definition of SCENARIOS) {
-    const baseline = await runScenarioVariant(definition, false, ANCHOR_REPEATS);
-    const naturalTopology = await runScenarioVariant(definition, true, ANCHOR_REPEATS, {
-      disableGraphPresenceInjection: true,
-    });
-    const topology = await runScenarioVariant(definition, true, ANCHOR_REPEATS);
-    const naturalDeltas = computeDeltas(baseline.metrics, naturalTopology.metrics);
-    const deltas = computeDeltas(baseline.metrics, topology.metrics);
-    const injectionDeltas = computeDeltas(naturalTopology.metrics, topology.metrics);
-
-    scenarios.push({
-      name: definition.name,
-      description: definition.description,
-      top_k: baseline.topK,
-      relevant_labels: baseline.relevantLabels,
-      baseline: baseline.metrics,
-      natural_topology: naturalTopology.metrics,
-      topology: topology.metrics,
-      natural_deltas: naturalDeltas,
-      deltas,
-      injection_deltas: injectionDeltas,
-      ...(topology.diagnostics ? { diagnostics: topology.diagnostics } : {}),
-    });
-  }
-
-  for (const sweep of SWEEPS) {
-    const cases: TopologyNoiseSweepCaseReport[] = [];
-    for (const definition of sweep.cases) {
-      const baseline = await runSweepCaseVariant(definition, false, SWEEP_REPEATS);
-      const naturalTopology = await runSweepCaseVariant(definition, true, SWEEP_REPEATS, {
+    for (const definition of SCENARIOS) {
+      const baseline = await runScenarioVariant(definition, false, ANCHOR_REPEATS);
+      const naturalTopology = await runScenarioVariant(definition, true, ANCHOR_REPEATS, {
         disableGraphPresenceInjection: true,
       });
-      const topology = await runSweepCaseVariant(definition, true, SWEEP_REPEATS);
+      const topology = await runScenarioVariant(definition, true, ANCHOR_REPEATS);
       const naturalDeltas = computeDeltas(baseline.metrics, naturalTopology.metrics);
       const deltas = computeDeltas(baseline.metrics, topology.metrics);
       const injectionDeltas = computeDeltas(naturalTopology.metrics, topology.metrics);
 
-      cases.push({
-        params: definition.params,
+      scenarios.push({
+        name: definition.name,
+        description: definition.description,
         top_k: baseline.topK,
         relevant_labels: baseline.relevantLabels,
         baseline: baseline.metrics,
@@ -993,68 +993,99 @@ export async function runTopologyNoiseBenchmark(): Promise<TopologyNoiseBenchmar
       });
     }
 
-    sweeps.push({
-      name: sweep.name,
-      description: sweep.description,
-      summary: summarizeSweepCases(cases),
-      cases,
-    });
-  }
+    for (const sweep of SWEEPS) {
+      const cases: TopologyNoiseSweepCaseReport[] = [];
+      for (const definition of sweep.cases) {
+        const baseline = await runSweepCaseVariant(definition, false, SWEEP_REPEATS);
+        const naturalTopology = await runSweepCaseVariant(definition, true, SWEEP_REPEATS, {
+          disableGraphPresenceInjection: true,
+        });
+        const topology = await runSweepCaseVariant(definition, true, SWEEP_REPEATS);
+        const naturalDeltas = computeDeltas(baseline.metrics, naturalTopology.metrics);
+        const deltas = computeDeltas(baseline.metrics, topology.metrics);
+        const injectionDeltas = computeDeltas(naturalTopology.metrics, topology.metrics);
 
-  const avg = (values: number[]): number =>
-    Number((values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)).toFixed(3));
-  const precisionDrops = scenarios
-    .map((scenario) => Math.min(0, scenario.deltas.precision_at_k))
-    .map((value) => Math.abs(value));
-  const injectionPrecisionDrops = scenarios
-    .map((scenario) => Math.min(0, scenario.injection_deltas.precision_at_k))
-    .map((value) => Math.abs(value));
-  const sweepCases = sweeps.flatMap((sweep) => sweep.cases);
+        cases.push({
+          params: definition.params,
+          top_k: baseline.topK,
+          relevant_labels: baseline.relevantLabels,
+          baseline: baseline.metrics,
+          natural_topology: naturalTopology.metrics,
+          topology: topology.metrics,
+          natural_deltas: naturalDeltas,
+          deltas,
+          injection_deltas: injectionDeltas,
+          ...(topology.diagnostics ? { diagnostics: topology.diagnostics } : {}),
+        });
+      }
 
-  return {
-    generated_at: new Date().toISOString(),
-    environment: {
-      node: process.version,
-      platform: `${process.platform}/${process.arch}`,
-    },
-    summary: {
-      scenario_count: scenarios.length,
-      sweep_count: sweeps.length,
-      sweep_case_count: sweepCases.length,
-      precision_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.precision_at_k < 0)
-        .length,
-      recall_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.recall_at_k < 0).length,
-      increased_noise_scenarios: scenarios.filter((scenario) => scenario.deltas.noise_count > 0)
-        .length,
-      injection_worsened_scenarios: scenarios.filter(
-        (scenario) => scenario.injection_deltas.precision_at_k < 0
-      ).length,
-      precision_drop_sweep_cases: sweepCases.filter(
-        (caseReport) => caseReport.deltas.precision_at_k < 0
-      ).length,
-      recall_drop_sweep_cases: sweepCases.filter((caseReport) => caseReport.deltas.recall_at_k < 0)
-        .length,
-      increased_noise_sweep_cases: sweepCases.filter(
-        (caseReport) => caseReport.deltas.noise_count > 0
-      ).length,
-      injection_worsened_sweep_cases: sweepCases.filter(
-        (caseReport) => caseReport.injection_deltas.precision_at_k < 0
-      ).length,
-      avg_precision_delta: avg(scenarios.map((scenario) => scenario.deltas.precision_at_k)),
-      avg_recall_delta: avg(scenarios.map((scenario) => scenario.deltas.recall_at_k)),
-      avg_latency_delta_ms: avg(scenarios.map((scenario) => scenario.deltas.avg_latency_ms)),
-      avg_injection_precision_delta: avg(
-        scenarios.map((scenario) => scenario.injection_deltas.precision_at_k)
-      ),
-      max_precision_drop: Number(Math.max(...precisionDrops, 0).toFixed(3)),
-      max_sweep_precision_drop: Number(
-        Math.max(...sweeps.map((sweep) => sweep.summary.max_precision_drop), 0).toFixed(3)
-      ),
-      max_injection_precision_drop: Number(Math.max(...injectionPrecisionDrops, 0).toFixed(3)),
-    },
-    scenarios,
-    sweeps,
-  };
+      sweeps.push({
+        name: sweep.name,
+        description: sweep.description,
+        summary: summarizeSweepCases(cases),
+        cases,
+      });
+    }
+
+    const avg = (values: number[]): number =>
+      Number(
+        (values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)).toFixed(3)
+      );
+    const precisionDrops = scenarios
+      .map((scenario) => Math.min(0, scenario.deltas.precision_at_k))
+      .map((value) => Math.abs(value));
+    const injectionPrecisionDrops = scenarios
+      .map((scenario) => Math.min(0, scenario.injection_deltas.precision_at_k))
+      .map((value) => Math.abs(value));
+    const sweepCases = sweeps.flatMap((sweep) => sweep.cases);
+
+    return {
+      generated_at: new Date().toISOString(),
+      environment: {
+        node: process.version,
+        platform: `${process.platform}/${process.arch}`,
+      },
+      summary: {
+        scenario_count: scenarios.length,
+        sweep_count: sweeps.length,
+        sweep_case_count: sweepCases.length,
+        precision_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.precision_at_k < 0)
+          .length,
+        recall_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.recall_at_k < 0)
+          .length,
+        increased_noise_scenarios: scenarios.filter((scenario) => scenario.deltas.noise_count > 0)
+          .length,
+        injection_worsened_scenarios: scenarios.filter(
+          (scenario) => scenario.injection_deltas.precision_at_k < 0
+        ).length,
+        precision_drop_sweep_cases: sweepCases.filter(
+          (caseReport) => caseReport.deltas.precision_at_k < 0
+        ).length,
+        recall_drop_sweep_cases: sweepCases.filter(
+          (caseReport) => caseReport.deltas.recall_at_k < 0
+        ).length,
+        increased_noise_sweep_cases: sweepCases.filter(
+          (caseReport) => caseReport.deltas.noise_count > 0
+        ).length,
+        injection_worsened_sweep_cases: sweepCases.filter(
+          (caseReport) => caseReport.injection_deltas.precision_at_k < 0
+        ).length,
+        avg_precision_delta: avg(scenarios.map((scenario) => scenario.deltas.precision_at_k)),
+        avg_recall_delta: avg(scenarios.map((scenario) => scenario.deltas.recall_at_k)),
+        avg_latency_delta_ms: avg(scenarios.map((scenario) => scenario.deltas.avg_latency_ms)),
+        avg_injection_precision_delta: avg(
+          scenarios.map((scenario) => scenario.injection_deltas.precision_at_k)
+        ),
+        max_precision_drop: Number(Math.max(...precisionDrops, 0).toFixed(3)),
+        max_sweep_precision_drop: Number(
+          Math.max(...sweeps.map((sweep) => sweep.summary.max_precision_drop), 0).toFixed(3)
+        ),
+        max_injection_precision_drop: Number(Math.max(...injectionPrecisionDrops, 0).toFixed(3)),
+      },
+      scenarios,
+      sweeps,
+    };
+  });
 }
 
 function formatParams(params: SweepCaseParams, keys: readonly string[]): string[] {
