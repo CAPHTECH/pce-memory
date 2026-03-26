@@ -3,7 +3,8 @@
  * @see docs/adr/0004-hybrid-search-design.md
  */
 
-import { getConnection } from '../../db/connection.js';
+import type { DuckDBConnection } from '@duckdb/node-api';
+import { getConnection, withWriteConnection } from '../../db/connection.js';
 import type { Claim } from '../claims.js';
 import * as E from 'fp-ts/Either';
 import { validateEmbedding } from '../../domain/validation.js';
@@ -127,7 +128,8 @@ export async function vectorSearch(
 export async function saveClaimVector(
   claimId: string,
   embedding: readonly number[],
-  modelVersion: string
+  modelVersion: string,
+  connection?: DuckDBConnection
 ): Promise<void> {
   // 埋め込みベクトルの検証（SQLインジェクション防止）
   const saveEmbeddingResult = validateEmbedding(embedding);
@@ -135,17 +137,23 @@ export async function saveClaimVector(
     throw new Error(saveEmbeddingResult.left.message);
   }
 
-  const conn = await getConnection();
-  // DuckDB Node APIは配列パラメータを直接サポートしないため、
-  // 配列リテラル文字列として埋め込む（検証済みなので安全）
-  const embeddingLiteral = `[${embedding.join(',')}]`;
-  await conn.run(
-    `INSERT INTO claim_vectors (claim_id, embedding, model_version)
-     VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)
-     ON CONFLICT (claim_id)
-     DO UPDATE SET embedding = EXCLUDED.embedding, model_version = EXCLUDED.model_version`,
-    [claimId, modelVersion]
-  );
+  const write = async (conn: DuckDBConnection) => {
+    const embeddingLiteral = `[${embedding.join(',')}]`;
+    await conn.run(
+      `INSERT INTO claim_vectors (claim_id, embedding, model_version)
+       VALUES ($1, ${embeddingLiteral}::DOUBLE[], $2)
+       ON CONFLICT (claim_id)
+       DO UPDATE SET embedding = EXCLUDED.embedding, model_version = EXCLUDED.model_version`,
+      [claimId, modelVersion]
+    );
+  };
+
+  if (connection) {
+    await write(connection);
+    return;
+  }
+
+  await withWriteConnection(write);
 }
 
 /**

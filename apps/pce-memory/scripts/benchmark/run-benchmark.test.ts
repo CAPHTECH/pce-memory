@@ -10,9 +10,15 @@ import { join } from 'node:path';
 import { runBenchmark } from './orchestrator';
 import { generateMarkdownReport } from './report/markdown-report';
 
+const repoRoot = join(import.meta.dirname, '../..');
+const assayKitEntry = join(
+  repoRoot,
+  'external/assay-kit/packages/assay-kit/src/metrics/combined.ts'
+);
+const benchmarkIt = existsSync(assayKitEntry) ? it : it.skip;
+
 describe('PCE-Memory Benchmark', () => {
-  it('generates comprehensive benchmark report', async () => {
-    const repoRoot = join(import.meta.dirname, '../..');
+  benchmarkIt('generates comprehensive benchmark report', async () => {
     const resultsDir = join(repoRoot, 'var/benchmark');
     if (!existsSync(resultsDir)) mkdirSync(resultsDir, { recursive: true });
 

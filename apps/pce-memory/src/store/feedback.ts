@@ -1,4 +1,4 @@
-import { getConnection } from '../db/connection.js';
+import { withWriteConnection } from '../db/connection.js';
 import type { FeedbackSignal } from '../domain/types.js';
 
 export interface FeedbackInput {
@@ -38,29 +38,26 @@ export const FEEDBACK_DELTAS: Record<
  * - utilityは累積（上限なし）
  */
 export async function recordFeedback(input: FeedbackInput): Promise<{ id: string }> {
-  const conn = await getConnection();
   const id = `fb_${crypto.randomUUID().slice(0, 8)}`;
 
-  // 1. feedbackテーブルにイベント記録
-  await conn.run(
-    'INSERT INTO feedback (id, claim_id, signal, score, active_context_id) VALUES ($1, $2, $3, $4, $5)',
-    [id, input.claim_id, input.signal, input.score ?? null, input.active_context_id ?? null]
-  );
+  await withWriteConnection(async (conn) => {
+    await conn.run(
+      'INSERT INTO feedback (id, claim_id, signal, score, active_context_id) VALUES ($1, $2, $3, $4, $5)',
+      [id, input.claim_id, input.signal, input.score ?? null, input.active_context_id ?? null]
+    );
 
-  // 2. claimsのutility/confidence更新（g()再ランキング用）
-  // positive feedback (utility > 0) のみrecency_anchorを更新
-  // negative feedbackではrecency_anchorを維持（ペナルティ効果を保持）
-  const deltas = FEEDBACK_DELTAS[input.signal];
+    const deltas = FEEDBACK_DELTAS[input.signal];
 
-  await conn.run(
-    `UPDATE claims SET
-      utility = utility + $1,
-      confidence = GREATEST(0.0, LEAST(1.0, confidence + $2)),
-      updated_at = CURRENT_TIMESTAMP,
-      recency_anchor = CASE WHEN $1 > 0 THEN CURRENT_TIMESTAMP ELSE recency_anchor END
-    WHERE id = $3`,
-    [deltas.utility, deltas.confidence, input.claim_id]
-  );
+    await conn.run(
+      `UPDATE claims SET
+        utility = utility + $1,
+        confidence = GREATEST(0.0, LEAST(1.0, confidence + $2)),
+        updated_at = CURRENT_TIMESTAMP,
+        recency_anchor = CASE WHEN $1 > 0 THEN CURRENT_TIMESTAMP ELSE recency_anchor END
+      WHERE id = $3`,
+      [deltas.utility, deltas.confidence, input.claim_id]
+    );
+  });
 
   return { id };
 }

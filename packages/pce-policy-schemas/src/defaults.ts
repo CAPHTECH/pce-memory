@@ -53,6 +53,21 @@ export const defaultPolicy: PolicyDocument = {
         min_multiplier: 0.45,
         max_multiplier: 1.65,
       },
+      topology: {
+        enabled: true,
+        mode: 'walk',
+        seed_k: 6,
+        max_hops: 2,
+        hop_decay: 0.75,
+        include_paths: true,
+        edge_policy: {
+          supports: { weight: 0.9, direction: 'forward' },
+          extends: { weight: 0.7, direction: 'forward' },
+          related: { weight: 0.35, direction: 'both' },
+          contradicts: { action: 'flag_conflict' },
+          supersedes: { action: 'shadow_old' },
+        },
+      },
     },
   },
   maintenance: {

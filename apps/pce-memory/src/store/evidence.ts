@@ -2,6 +2,7 @@
  * Evidence Store（mcp-tools.md definitions.evidence準拠）
  * Claimの根拠情報
  */
+import type { DuckDBConnection } from '@duckdb/node-api';
 import { getConnection } from '../db/connection.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
@@ -28,8 +29,11 @@ export type EvidenceInput = Omit<Evidence, 'at'> & {
  * Evidenceを登録
  * Note: DBカラムはrecorded_at（DuckDB予約語回避）、APIはatを使用
  */
-export async function insertEvidence(e: EvidenceInput): Promise<Evidence> {
-  const conn = await getConnection();
+export async function insertEvidence(
+  e: EvidenceInput,
+  connection?: DuckDBConnection
+): Promise<Evidence> {
+  const conn = connection ?? (await getConnection());
 
   await conn.run(
     'INSERT INTO evidence (id, claim_id, source_type, source_id, snippet, recorded_at) VALUES ($1, $2, $3, $4, $5, COALESCE($6::TIMESTAMP, CURRENT_TIMESTAMP))',

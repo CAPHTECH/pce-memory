@@ -1,4 +1,4 @@
-import { getConnection } from '../db/connection.js';
+import { withWriteConnection } from '../db/connection.js';
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -40,18 +40,19 @@ export function setAuditLogPath(path: string | undefined): void {
  * ON CONFLICT DO NOTHING: 同一IDのログは上書きせず無視（冪等性確保）
  */
 export async function appendLog(entry: AuditLog): Promise<void> {
-  const conn = await getConnection();
-  await conn.run(
-    'INSERT INTO logs (id, op, ok, req, trace, policy_version) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
-    [
-      entry.id,
-      entry.op,
-      entry.ok,
-      entry.req ?? null,
-      entry.trace ?? null,
-      entry.policy_version ?? null,
-    ]
-  );
+  await withWriteConnection(async (conn) => {
+    await conn.run(
+      'INSERT INTO logs (id, op, ok, req, trace, policy_version) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING',
+      [
+        entry.id,
+        entry.op,
+        entry.ok,
+        entry.req ?? null,
+        entry.trace ?? null,
+        entry.policy_version ?? null,
+      ]
+    );
+  });
 }
 
 /**

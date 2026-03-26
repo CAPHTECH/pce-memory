@@ -13,7 +13,11 @@ import type { RelationInput } from '../../store/relations.js';
 import { isDomainError } from '../../domain/errors.js';
 import type { ClaimKind, MemoryType } from '../../domain/types.js';
 import { isValidMemoryType } from '../../domain/types.js';
-import { getPolicyVersion, getStateType, transitionToHasClaims } from '../../state/memoryState.js';
+import {
+  getPolicyVersion,
+  getStateType,
+  transitionToHasClaimsFromDb,
+} from '../../state/memoryState.js';
 import {
   enterRequestScope,
   exitRequestScope,
@@ -169,11 +173,17 @@ export async function handleUpsert(args: Record<string, unknown>) {
     // スコープへのリソース登録
     const addResult = addResourceToCurrentScope(scopeId, claim.id);
     if (E.isLeft(addResult)) {
-      console.error(`[Handler] Failed to add resource to scope: ${addResult.left.message}`);
+      const isBenignDedupOwnershipConflict =
+        !isNew &&
+        addResult.left.code === 'VALIDATION_ERROR' &&
+        addResult.left.message.includes('already owned by scope');
+      if (!isBenignDedupOwnershipConflict) {
+        console.error(`[Handler] Failed to add resource to scope: ${addResult.left.message}`);
+      }
     }
 
     // 状態遷移
-    transitionToHasClaims(isNew);
+    await transitionToHasClaimsFromDb(isNew ? 1 : 0);
 
     // 監査ログ記録
     await appendLog({

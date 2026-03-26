@@ -1,7 +1,7 @@
-import { getConnection } from '../db/connection.js';
+import { getConnection, withWriteConnection } from '../db/connection.js';
 import type { Claim } from './claims.js';
 import { normalizeRowsTimestamps, safeJsonStringify } from '../utils/serialization.js';
-import type { ScoreBreakdown } from './rerank.js';
+import type { ScoreBreakdown, TopologyScoreBreakdown } from './rerank.js';
 
 export interface ActiveContext {
   id: string;
@@ -18,6 +18,7 @@ export interface ActiveContextItemRow {
   source_layer?: string | null;
   score?: number | null;
   score_breakdown?: string | null;
+  topology_metadata?: string | null;
   selection_reason?: string | null;
   rank?: number | null;
 }
@@ -29,23 +30,24 @@ export interface ActiveContextItemInput {
   source_layer?: string;
   score?: number;
   score_breakdown?: ScoreBreakdown;
+  topology_metadata?: Record<string, unknown> | TopologyScoreBreakdown;
   selection_reason?: string;
   rank?: number;
 }
 
 export async function saveActiveContext(ac: ActiveContext): Promise<void> {
-  const conn = await getConnection();
-  // safeJsonStringifyを使用してBigInt値を安全にシリアライズ
-  await conn.run(
-    'INSERT INTO active_contexts (id, claims, intent, expires_at, policy_version) VALUES ($1, $2, $3, $4, $5)',
-    [
-      ac.id,
-      safeJsonStringify(ac.claims),
-      ac.intent ?? null,
-      ac.expires_at instanceof Date ? ac.expires_at.toISOString() : (ac.expires_at ?? null),
-      ac.policy_version ?? null,
-    ]
-  );
+  await withWriteConnection(async (conn) => {
+    await conn.run(
+      'INSERT INTO active_contexts (id, claims, intent, expires_at, policy_version) VALUES ($1, $2, $3, $4, $5)',
+      [
+        ac.id,
+        safeJsonStringify(ac.claims),
+        ac.intent ?? null,
+        ac.expires_at instanceof Date ? ac.expires_at.toISOString() : (ac.expires_at ?? null),
+        ac.policy_version ?? null,
+      ]
+    );
+  });
 }
 
 export async function saveActiveContextItems(items: ActiveContextItemInput[]): Promise<void> {
@@ -53,24 +55,26 @@ export async function saveActiveContextItems(items: ActiveContextItemInput[]): P
     return;
   }
 
-  const conn = await getConnection();
-  for (const item of items) {
-    await conn.run(
-      `INSERT INTO active_context_items (
-        id, active_context_id, claim_id, source_layer, score, score_breakdown, selection_reason, rank
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        item.id,
-        item.active_context_id,
-        item.claim_id,
-        item.source_layer ?? null,
-        item.score ?? null,
-        item.score_breakdown ? safeJsonStringify(item.score_breakdown) : null,
-        item.selection_reason ?? null,
-        item.rank ?? null,
-      ]
-    );
-  }
+  await withWriteConnection(async (conn) => {
+    for (const item of items) {
+      await conn.run(
+        `INSERT INTO active_context_items (
+          id, active_context_id, claim_id, source_layer, score, score_breakdown, topology_metadata, selection_reason, rank
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          item.id,
+          item.active_context_id,
+          item.claim_id,
+          item.source_layer ?? null,
+          item.score ?? null,
+          item.score_breakdown ? safeJsonStringify(item.score_breakdown) : null,
+          item.topology_metadata ? safeJsonStringify(item.topology_metadata) : null,
+          item.selection_reason ?? null,
+          item.rank ?? null,
+        ]
+      );
+    }
+  });
 }
 
 export async function findActiveContextById(id: string): Promise<ActiveContext | undefined> {

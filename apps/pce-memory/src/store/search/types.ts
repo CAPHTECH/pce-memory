@@ -7,6 +7,7 @@ import type { Claim } from '../claims.js';
 import type { EmbeddingService } from '@pce/embeddings';
 import type { FeedbackBoostOptions, GFactorBreakdown, ScoreBreakdown } from '../rerank.js';
 import type { ActivateIntent, ClaimKind, ClaimStatus, MemoryType } from '../../domain/types.js';
+import type { ClaimLinkType } from '../claimLinks.js';
 
 // ========== ADR-0004 パラメータ ==========
 
@@ -30,6 +31,13 @@ export const DEFAULT_MMR_MAX_CANDIDATES = 48;
 export const DEFAULT_QUERY_EXPANSION_MAX_SEED_ENTITIES = 3;
 export const DEFAULT_QUERY_EXPANSION_MAX_RELATED_ENTITIES = 8;
 export const DEFAULT_QUERY_EXPANSION_MAX_TERMS = 6;
+
+/** Topology walk関連デフォルト値 */
+export const DEFAULT_TOPOLOGY_SEED_K = 6;
+export const DEFAULT_TOPOLOGY_MAX_HOPS = 2;
+export const DEFAULT_TOPOLOGY_HOP_DECAY = 0.75;
+export const DEFAULT_TOPOLOGY_ENTITY_PATH_WEIGHT = 0.45;
+export const DEFAULT_TOPOLOGY_ENTITY_PATH_CONFIDENCE = 1.0;
 
 /** criticスコアが存在しない場合のデフォルト値 */
 export const DEFAULT_CRITIC_SCORE = 0.5;
@@ -66,6 +74,44 @@ export interface QueryExpansionConfig {
   maxSeedEntities?: number;
   maxRelatedEntities?: number;
   maxExpansionTerms?: number;
+}
+
+export type TopologyEdgeDirection = 'forward' | 'both';
+export type TopologyEdgeAction = 'boost' | 'flag_conflict' | 'shadow_old';
+
+export interface TopologyEdgePolicyEntry {
+  weight?: number;
+  direction?: TopologyEdgeDirection;
+  action?: TopologyEdgeAction;
+}
+
+export interface TopologyConfig {
+  enabled?: boolean;
+  mode?: 'walk';
+  seedK?: number;
+  maxHops?: number;
+  hopDecay?: number;
+  includePaths?: boolean;
+  edgePolicy?: Partial<Record<ClaimLinkType, TopologyEdgePolicyEntry>>;
+}
+
+export interface ResolvedTopologyConfig {
+  enabled: boolean;
+  mode: 'walk';
+  seedK: number;
+  maxHops: number;
+  hopDecay: number;
+  includePaths: boolean;
+  entityPathWeight: number;
+  entityPathConfidence: number;
+  edgePolicy: Record<
+    ClaimLinkType,
+    {
+      weight: number;
+      direction: TopologyEdgeDirection;
+      action: TopologyEdgeAction;
+    }
+  >;
 }
 
 export interface FeedbackBoostConfig extends FeedbackBoostOptions {
@@ -157,6 +203,8 @@ export interface HybridSearchConfig {
   mmr?: MmrConfig;
   /** 実験的なエンティティグラフ拡張設定 */
   queryExpansion?: QueryExpansionConfig;
+  /** 実験的なgraph topology walk設定 */
+  topology?: TopologyConfig;
   /** 実験的なfeedback boost設定 */
   feedbackBoost?: FeedbackBoostConfig;
 }
@@ -540,6 +588,78 @@ export function resolveFeedbackBoostConfig(
     ...(typeof feedbackBoost.maxMultiplier === 'number'
       ? { maxMultiplier: feedbackBoost.maxMultiplier }
       : {}),
+  };
+}
+
+export function resolveTopologyConfig(
+  topology: TopologyConfig | undefined
+): ResolvedTopologyConfig | undefined {
+  if (topology?.enabled === false) {
+    return undefined;
+  }
+
+  const maxHops =
+    typeof topology?.maxHops === 'number' &&
+    Number.isFinite(topology.maxHops) &&
+    topology.maxHops > 0
+      ? Math.min(DEFAULT_TOPOLOGY_MAX_HOPS, normalizeLimit(topology.maxHops))
+      : DEFAULT_TOPOLOGY_MAX_HOPS;
+
+  const hopDecay =
+    typeof topology?.hopDecay === 'number' &&
+    Number.isFinite(topology.hopDecay) &&
+    topology.hopDecay > 0 &&
+    topology.hopDecay <= 1
+      ? topology.hopDecay
+      : DEFAULT_TOPOLOGY_HOP_DECAY;
+
+  const defaultEdgePolicy: ResolvedTopologyConfig['edgePolicy'] = {
+    supports: { weight: 0.9, direction: 'forward', action: 'boost' },
+    extends: { weight: 0.7, direction: 'forward', action: 'boost' },
+    related: { weight: 0.35, direction: 'both', action: 'boost' },
+    contradicts: { weight: 0.15, direction: 'both', action: 'flag_conflict' },
+    supersedes: { weight: 1.0, direction: 'forward', action: 'shadow_old' },
+  };
+
+  const resolvedEdgePolicy = (Object.keys(defaultEdgePolicy) as ClaimLinkType[]).reduce<
+    ResolvedTopologyConfig['edgePolicy']
+  >((acc, linkType) => {
+    const override = topology?.edgePolicy?.[linkType];
+    const defaultEntry = defaultEdgePolicy[linkType];
+    acc[linkType] = {
+      weight:
+        typeof override?.weight === 'number' &&
+        Number.isFinite(override.weight) &&
+        override.weight >= 0
+          ? override.weight
+          : defaultEntry.weight,
+      direction:
+        override?.direction === 'both' || override?.direction === 'forward'
+          ? override.direction
+          : defaultEntry.direction,
+      action:
+        override?.action === 'flag_conflict' ||
+        override?.action === 'shadow_old' ||
+        override?.action === 'boost'
+          ? override.action
+          : defaultEntry.action,
+    };
+    return acc;
+  }, {} as ResolvedTopologyConfig['edgePolicy']);
+
+  return {
+    enabled: true,
+    mode: 'walk',
+    seedK:
+      typeof topology?.seedK === 'number' && Number.isFinite(topology.seedK) && topology.seedK > 0
+        ? normalizeLimit(topology.seedK)
+        : DEFAULT_TOPOLOGY_SEED_K,
+    maxHops,
+    hopDecay,
+    includePaths: topology?.includePaths !== false,
+    entityPathWeight: DEFAULT_TOPOLOGY_ENTITY_PATH_WEIGHT,
+    entityPathConfidence: DEFAULT_TOPOLOGY_ENTITY_PATH_CONFIDENCE,
+    edgePolicy: resolvedEdgePolicy,
   };
 }
 

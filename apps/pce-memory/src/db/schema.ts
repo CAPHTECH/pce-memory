@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS active_context_items (
   source_layer TEXT,
   score REAL,
   score_breakdown TEXT,
+  topology_metadata JSON,
   selection_reason TEXT,
   rank INTEGER
 );
@@ -148,11 +149,14 @@ CREATE TABLE IF NOT EXISTS claim_links (
   target_claim_id TEXT NOT NULL,
   link_type TEXT NOT NULL,
   confidence REAL DEFAULT 1.0,
+  evidence_claim_id TEXT,
+  provenance JSON,
   created_at TEXT NOT NULL,
   created_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_claim_links_source ON claim_links(source_claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_links_target ON claim_links(target_claim_id);
+CREATE INDEX IF NOT EXISTS idx_claim_links_evidence ON claim_links(evidence_claim_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_links_unique
 ON claim_links(source_claim_id, target_claim_id, link_type);
 

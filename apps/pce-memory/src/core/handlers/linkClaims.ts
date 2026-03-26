@@ -4,20 +4,31 @@
  * Links two claims together with a typed relationship.
  */
 
-import { createToolResult, err, type ToolResult } from './shared.js';
+import {
+  createToolResult,
+  err,
+  validateRequiredProvenance,
+  type ToolResult,
+} from './shared.js';
 import { findClaimById } from '../../store/claims.js';
+import type { Provenance } from '../../store/claims.js';
 import { isValidClaimLinkType, upsertClaimLink } from '../../store/claimLinks.js';
 import { appendLog } from '../../store/logs.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { stateError } from '../../domain/stateMachine.js';
 import { getStateType, canDoUpsert, getPolicyVersion } from '../../state/memoryState.js';
 
+const DEFAULT_LINK_PROVENANCE_ACTOR = 'pce_memory_link_claims';
+
 export async function handleLinkClaims(args: Record<string, unknown>): Promise<ToolResult> {
-  const { source_claim_id, target_claim_id, link_type, confidence } = args as {
+  const { source_claim_id, target_claim_id, link_type, confidence, evidence_claim_id, provenance } =
+    args as {
     source_claim_id?: unknown;
     target_claim_id?: unknown;
     link_type?: unknown;
     confidence?: unknown;
+    evidence_claim_id?: unknown;
+    provenance?: unknown;
   };
 
   const reqId = crypto.randomUUID();
@@ -84,6 +95,31 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
         { isError: true }
       );
     }
+    if (evidence_claim_id !== undefined && typeof evidence_claim_id !== 'string') {
+      return createToolResult(
+        {
+          ...err('VALIDATION_ERROR', 'evidence_claim_id must be a string', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+
+    const resolvedProvenance: Provenance = (() => {
+      if (provenance === undefined) {
+        return {
+          at: new Date().toISOString(),
+          actor: DEFAULT_LINK_PROVENANCE_ACTOR,
+          note: 'explicit claim link confirmation',
+        };
+      }
+
+      const validated = validateRequiredProvenance(provenance);
+      if (!validated.ok) {
+        throw new Error(validated.message);
+      }
+      return validated.value;
+    })();
 
     const [sourceClaim, targetClaim] = await Promise.all([
       findClaimById(source_claim_id),
@@ -98,12 +134,26 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
         { isError: true }
       );
     }
+    if (typeof evidence_claim_id === 'string') {
+      const evidenceClaim = await findClaimById(evidence_claim_id);
+      if (!evidenceClaim) {
+        return createToolResult(
+          {
+            ...err('VALIDATION_ERROR', 'evidence_claim_id must reference an existing claim', reqId),
+            trace_id: traceId,
+          },
+          { isError: true }
+        );
+      }
+    }
 
     const { link, isNew } = await upsertClaimLink({
       source_claim_id,
       target_claim_id,
       link_type,
       ...(typeof confidence === 'number' ? { confidence } : {}),
+      ...(typeof evidence_claim_id === 'string' ? { evidence_claim_id } : {}),
+      provenance: resolvedProvenance as unknown as Record<string, unknown>,
       created_by: 'client',
     });
 
@@ -123,6 +173,8 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
       target_claim_id: link.target_claim_id,
       link_type: link.link_type,
       confidence: link.confidence,
+      ...(link.evidence_claim_id ? { evidence_claim_id: link.evidence_claim_id } : {}),
+      ...(link.provenance ? { provenance: link.provenance } : {}),
       created_by: link.created_by ?? 'client',
       policy_version: getPolicyVersion(),
       state: getStateType(),
@@ -130,6 +182,13 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
       trace_id: traceId,
     });
   } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes('provenance.at')) {
+      return createToolResult(
+        { ...err('VALIDATION_ERROR', message, reqId), trace_id: traceId },
+        { isError: true }
+      );
+    }
     await appendLog({
       id: `log_${reqId}`,
       op: 'link_claims',
@@ -138,9 +197,8 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
       trace: traceId,
       policy_version: getPolicyVersion(),
     });
-    const msg = e instanceof Error ? e.message : String(e);
     return createToolResult(
-      { ...err('DB_ERROR', msg, reqId), trace_id: traceId },
+      { ...err('DB_ERROR', message, reqId), trace_id: traceId },
       { isError: true }
     );
   }

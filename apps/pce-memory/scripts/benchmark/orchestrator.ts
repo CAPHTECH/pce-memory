@@ -5,14 +5,16 @@
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { BenchmarkReport } from './types';
-import { runAblation } from './suites/ablation';
-import { runScalability } from './suites/scalability';
-import { runLatencyProfile } from './suites/latency-profile';
 
 export async function runBenchmark(): Promise<BenchmarkReport> {
   const repoRoot = join(import.meta.dirname, '../..');
   const datasetPath = join(repoRoot, 'tests/eval/goldens/queries.yaml');
   const pkgJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8'));
+  const [{ runLatencyProfile }, { runAblation }, { runScalability }] = await Promise.all([
+    import('./suites/latency-profile'),
+    import('./suites/ablation'),
+    import('./suites/scalability'),
+  ]);
 
   // 1. Latency Profile first (before any other init, to measure true cold start)
   console.log('[benchmark] === Latency Profile ===');

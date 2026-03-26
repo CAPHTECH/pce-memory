@@ -24,6 +24,8 @@ import {
 import { markStaleWorkingStateClaims, recordClaimRetrievals } from '../../store/claims.js';
 import type { Claim } from '../../store/claims.js';
 import { hybridSearchWithScores, findNewerSimilarClaims } from '../../store/hybridSearch.js';
+import type { TopologyEdgePolicyEntry } from '../../store/search/types.js';
+import { resolveTopologyConfig } from '../../store/search/types.js';
 import { collectMaintenanceHints } from '../../store/maintenance.js';
 import { searchObservationsWithScores } from '../../store/observations.js';
 import { getEvidenceForClaims } from '../../store/evidence.js';
@@ -64,6 +66,7 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
     intent,
     kind_filter,
     memory_type_filter,
+    debug_disable_graph_presence_injection,
   } = args as {
     scope?: unknown;
     allow?: unknown;
@@ -76,6 +79,7 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
     intent?: unknown;
     kind_filter?: unknown;
     memory_type_filter?: unknown;
+    debug_disable_graph_presence_injection?: unknown;
   };
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
@@ -144,6 +148,22 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
       return createToolResult(
         {
           ...err('VALIDATION_ERROR', 'include_stale_tasks must be boolean', reqId),
+          trace_id: traceId,
+        },
+        { isError: true }
+      );
+    }
+    if (
+      debug_disable_graph_presence_injection !== undefined &&
+      typeof debug_disable_graph_presence_injection !== 'boolean'
+    ) {
+      return createToolResult(
+        {
+          ...err(
+            'VALIDATION_ERROR',
+            'debug_disable_graph_presence_injection must be boolean',
+            reqId
+          ),
           trace_id: traceId,
         },
         { isError: true }
@@ -275,18 +295,67 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
             },
           }
         : {}),
+      ...(hybridPolicy.topology
+        ? {
+            topology: {
+              enabled: hybridPolicy.topology.enabled !== false,
+              ...(hybridPolicy.topology.mode === 'walk' ? { mode: 'walk' as const } : {}),
+              ...(typeof hybridPolicy.topology.seed_k === 'number'
+                ? { seedK: hybridPolicy.topology.seed_k }
+                : {}),
+              ...(typeof hybridPolicy.topology.max_hops === 'number'
+                ? { maxHops: hybridPolicy.topology.max_hops }
+                : {}),
+              ...(typeof hybridPolicy.topology.hop_decay === 'number'
+                ? { hopDecay: hybridPolicy.topology.hop_decay }
+                : {}),
+              ...(typeof hybridPolicy.topology.include_paths === 'boolean'
+                ? { includePaths: hybridPolicy.topology.include_paths }
+                : {}),
+              ...(hybridPolicy.topology.edge_policy
+                ? {
+                    edgePolicy: Object.fromEntries(
+                      Object.entries(
+                        hybridPolicy.topology.edge_policy as Record<string, TopologyEdgePolicyEntry>
+                      ).map(([key, value]) => [
+                        key,
+                        {
+                          ...(typeof value.weight === 'number' ? { weight: value.weight } : {}),
+                          ...(value.direction === 'forward' || value.direction === 'both'
+                            ? { direction: value.direction }
+                            : {}),
+                          ...(value.action === 'boost' ||
+                          value.action === 'flag_conflict' ||
+                          value.action === 'shadow_old'
+                            ? { action: value.action }
+                            : {}),
+                        },
+                      ])
+                    ),
+                  }
+                : {}),
+            },
+          }
+        : {}),
     };
+    const topologyConfig = resolveTopologyConfig(searchConfig.topology);
     const connectivityFilterSet = {
       scopes: scope as string[],
       boundaryClasses: allowedBoundaryClasses,
       ...(resolvedKindFilter ? { kindFilter: resolvedKindFilter } : {}),
       ...(resolvedMemoryTypeFilter ? { memoryTypeFilter: resolvedMemoryTypeFilter } : {}),
       excludedWorkingStateStatuses: getActivateExcludedWorkingStateStatuses(includeStaleTasks),
+      ...(topologyConfig ? { topology: topologyConfig } : {}),
     };
     const directCandidateLimit =
       cursor !== undefined
         ? Number.MAX_SAFE_INTEGER
-        : Math.max(resolvedTopK + 1, resolvedTopK * CONNECTIVITY_SEED_MULTIPLIER);
+        : Math.max(
+            resolvedTopK + 1,
+            resolvedTopK * CONNECTIVITY_SEED_MULTIPLIER,
+            (topologyConfig?.seedK ?? 0) * CONNECTIVITY_SEED_MULTIPLIER
+          );
+    const disableGraphPresenceInjection = debug_disable_graph_presence_injection === true;
 
     let searchResults: ActivateSearchItem[];
     let nextCursor: string | undefined;
@@ -312,6 +381,7 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
         durableResults: expandedDurableResults,
         observationResults: normalizedObservationResults,
         topK: resolvedTopK,
+        ...(disableGraphPresenceInjection ? { disableGraphPresenceInjection: true } : {}),
         ...(cursor !== undefined ? { cursor } : {}),
       });
 
@@ -332,6 +402,7 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
       const pagedResults = pageActivateResults({
         results: expandedDurableResults,
         topK: resolvedTopK,
+        ...(disableGraphPresenceInjection ? { disableGraphPresenceInjection: true } : {}),
         ...(cursor !== undefined ? { cursor } : {}),
       });
       searchResults = pagedResults.searchResults;
@@ -418,6 +489,7 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
               },
             }
           : {}),
+        ...(r.topology ? { topology: r.topology } : {}),
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
         ...(resolvedIntent ? { intent: resolvedIntent } : {}),
       });
@@ -428,6 +500,7 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
         source_layer: sourceLayer,
         ...(r.source ? { source: r.source } : {}),
         ...(r.link ? { link: r.link } : {}),
+        ...(r.topology ? { topology: r.topology } : {}),
         rank,
         ...(r.score_breakdown ? { score_breakdown: r.score_breakdown } : {}),
         selection_reason: selectionReason,
@@ -443,6 +516,9 @@ export async function handleActivate(args: Record<string, unknown>): Promise<Too
         source_layer: item.source_layer,
         score: item.score,
         ...(item.score_breakdown ? { score_breakdown: item.score_breakdown } : {}),
+        ...(item.topology
+          ? { topology_metadata: item.topology as unknown as Record<string, unknown> }
+          : {}),
         selection_reason: item.selection_reason,
         rank: item.rank,
       }))

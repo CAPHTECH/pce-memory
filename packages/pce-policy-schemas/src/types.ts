@@ -45,6 +45,29 @@ export interface RetrievalPolicy {
       min_multiplier?: number;
       max_multiplier?: number;
     };
+    topology?: TopologyPolicy;
+  };
+}
+
+export interface TopologyEdgePolicy {
+  weight?: number;
+  direction?: 'forward' | 'both';
+  action?: 'boost' | 'flag_conflict' | 'shadow_old';
+}
+
+export interface TopologyPolicy {
+  enabled?: boolean;
+  mode?: 'walk';
+  seed_k?: number;
+  max_hops?: number;
+  hop_decay?: number;
+  include_paths?: boolean;
+  edge_policy?: {
+    supports?: TopologyEdgePolicy;
+    extends?: TopologyEdgePolicy;
+    related?: TopologyEdgePolicy;
+    contradicts?: TopologyEdgePolicy;
+    supersedes?: TopologyEdgePolicy;
   };
 }
 

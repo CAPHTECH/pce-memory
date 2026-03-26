@@ -288,7 +288,29 @@ export const TOOL_DEFINITIONS = [
       properties: {
         rollback_id: { type: 'string' },
         superseded_claim_id: { type: 'string' },
-        blast_radius: { type: 'object' },
+        blast_radius: {
+          type: 'object',
+          properties: {
+            scope: { type: 'string' },
+            target_layer: { type: 'string', enum: ['micro', 'meso', 'macro'] },
+            root_claim: { type: 'object' },
+            connected_claims: { type: 'array', items: { type: 'object' } },
+            linked_entities: { type: 'array', items: { type: 'object' } },
+            affected_active_contexts: { type: 'array', items: { type: 'object' } },
+            neighborhoods: { type: 'object' },
+            summary: { type: 'object' },
+          },
+          required: [
+            'scope',
+            'target_layer',
+            'root_claim',
+            'connected_claims',
+            'linked_entities',
+            'affected_active_contexts',
+            'neighborhoods',
+            'summary',
+          ],
+        },
         policy_version: { type: 'string' },
         state: {
           type: 'string',
@@ -301,6 +323,44 @@ export const TOOL_DEFINITIONS = [
         'rollback_id',
         'superseded_claim_id',
         'blast_radius',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  {
+    name: 'pce_memory_graph_audit',
+    description:
+      'Audit the claim/entity graph for orphan nodes, contradiction cycles, supersession debt, missing edges, scope holes, and generic hubs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        min_supersession_chain_length: { type: 'integer', minimum: 1 },
+        repeated_coactivation_threshold: { type: 'integer', minimum: 1 },
+        generic_hub_degree_threshold: { type: 'integer', minimum: 1 },
+        max_findings_per_kind: { type: 'integer', minimum: 1 },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        summary: { type: 'object' },
+        findings: { type: 'array', items: { type: 'object' } },
+        components: { type: 'array', items: { type: 'object' } },
+        policy_version: { type: 'string' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'summary',
+        'findings',
+        'components',
         'policy_version',
         'state',
         'request_id',
@@ -479,6 +539,32 @@ export const TOOL_DEFINITIONS = [
           maximum: 1,
           description: 'Optional confidence override. Defaults to 1.0.',
         },
+        evidence_claim_id: {
+          type: 'string',
+          description: 'Optional claim id that evidences why this explicit link exists.',
+        },
+        provenance: {
+          type: 'object',
+          description:
+            'Optional structured provenance for the explicit link. If omitted, the server records a minimal confirmation provenance.',
+          properties: {
+            at: { type: 'string', format: 'date-time' },
+            actor: { type: 'string' },
+            git: {
+              type: 'object',
+              properties: {
+                commit: { type: 'string' },
+                repo: { type: 'string' },
+                url: { type: 'string' },
+                files: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            url: { type: 'string' },
+            note: { type: 'string' },
+            signed: { type: 'boolean' },
+          },
+          required: ['at'],
+        },
       },
       required: ['source_claim_id', 'target_claim_id', 'link_type'],
     },
@@ -491,6 +577,8 @@ export const TOOL_DEFINITIONS = [
         target_claim_id: { type: 'string' },
         link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
         confidence: { type: 'number' },
+        evidence_claim_id: { type: 'string' },
+        provenance: { type: 'object' },
         created_by: { type: 'string', enum: ['client', 'auto_similarity'] },
         policy_version: { type: 'string' },
         state: {
@@ -602,7 +690,7 @@ export const TOOL_DEFINITIONS = [
               },
               source: {
                 type: 'string',
-                enum: ['search', 'observation', 'claim_link'],
+                enum: ['search', 'observation', 'claim_link', 'topology'],
                 description: 'How the item entered the activate result set',
               },
               link: {
@@ -619,6 +707,10 @@ export const TOOL_DEFINITIONS = [
               score_breakdown: {
                 type: 'object',
                 description: 'Hybrid and rerank score breakdown',
+              },
+              topology: {
+                type: 'object',
+                description: 'Graph-topology explanation for graph-derived or graph-adjusted items',
               },
               selection_reason: {
                 type: 'string',

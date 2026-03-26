@@ -1,4 +1,4 @@
-import { getConnection } from '../db/connection.js';
+import { getConnection, withQueuedConnection } from '../db/connection.js';
 
 const DEFAULT_BUCKETS = ['tool', 'policy', 'activate'];
 
@@ -29,15 +29,16 @@ function windowSec(): number {
  * これにより、永続化DBを使用している場合でも、デーモン起動時にクリーンな状態から開始できる。
  */
 export async function initRateState(): Promise<void> {
-  const conn = await getConnection();
-  for (const b of DEFAULT_BUCKETS) {
-    await conn.run(
-      `INSERT INTO rate_state (bucket, value, last_reset)
-       VALUES ($1, 0, epoch(now())::INTEGER)
-       ON CONFLICT(bucket) DO UPDATE SET value = 0, last_reset = epoch(now())::INTEGER`,
-      [b]
-    );
-  }
+  await withQueuedConnection(async (conn) => {
+    for (const b of DEFAULT_BUCKETS) {
+      await conn.run(
+        `INSERT INTO rate_state (bucket, value, last_reset)
+         VALUES ($1, 0, epoch(now())::INTEGER)
+         ON CONFLICT(bucket) DO UPDATE SET value = 0, last_reset = epoch(now())::INTEGER`,
+        [b]
+      );
+    }
+  });
 }
 
 async function getRow(bucket: string): Promise<{ value: number; last_reset: number } | undefined> {
@@ -56,11 +57,12 @@ export async function getRate(bucket: string): Promise<number> {
 }
 
 export async function setRate(bucket: string, value: number): Promise<void> {
-  const conn = await getConnection();
-  await conn.run(
-    'INSERT INTO rate_state (bucket, value, last_reset) VALUES ($1, $2, epoch(now())::INTEGER) ON CONFLICT(bucket) DO UPDATE SET value=excluded.value, last_reset=excluded.last_reset',
-    [bucket, value]
-  );
+  await withQueuedConnection(async (conn) => {
+    await conn.run(
+      'INSERT INTO rate_state (bucket, value, last_reset) VALUES ($1, $2, epoch(now())::INTEGER) ON CONFLICT(bucket) DO UPDATE SET value=excluded.value, last_reset=excluded.last_reset',
+      [bucket, value]
+    );
+  });
 }
 
 /**
@@ -69,31 +71,29 @@ export async function setRate(bucket: string, value: number): Promise<void> {
  * アトミックな UPDATE ... WHERE ... RETURNING で競合状態を回避。
  */
 export async function checkAndConsume(bucket: string): Promise<boolean> {
-  const conn = await getConnection();
-  const now = Math.floor(Date.now() / 1000);
-  const win = windowSec();
-  const limit = cap();
+  return withQueuedConnection(async (conn) => {
+    const now = Math.floor(Date.now() / 1000);
+    const win = windowSec();
+    const limit = cap();
 
-  // まず時間窓リセットが必要かチェック（アトミックにリセット）
-  if (win > 0) {
-    await conn.run(
-      'UPDATE rate_state SET value = 0, last_reset = $1 WHERE bucket = $2 AND ($1 - last_reset) >= $3',
-      [now, bucket, win]
+    if (win > 0) {
+      await conn.run(
+        'UPDATE rate_state SET value = 0, last_reset = $1 WHERE bucket = $2 AND ($1 - last_reset) >= $3',
+        [now, bucket, win]
+      );
+    }
+
+    const reader = await conn.runAndReadAll(
+      'UPDATE rate_state SET value = value + 1 WHERE bucket = $1 AND value < $2 RETURNING value',
+      [bucket, limit]
     );
-  }
-
-  // アトミックに条件付きインクリメント: value < limit の場合のみ更新
-  const reader = await conn.runAndReadAll(
-    'UPDATE rate_state SET value = value + 1 WHERE bucket = $1 AND value < $2 RETURNING value',
-    [bucket, limit]
-  );
-  const rows = reader.getRowObjects() as { value: number }[];
-
-  // 更新された行があれば成功、なければレート制限超過
-  return rows.length > 0;
+    const rows = reader.getRowObjects() as { value: number }[];
+    return rows.length > 0;
+  });
 }
 
 export async function resetRates(): Promise<void> {
-  const conn = await getConnection();
-  await conn.run('UPDATE rate_state SET value = 0');
+  await withQueuedConnection(async (conn) => {
+    await conn.run('UPDATE rate_state SET value = 0');
+  });
 }

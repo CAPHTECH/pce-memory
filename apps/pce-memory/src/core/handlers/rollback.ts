@@ -15,6 +15,7 @@ import { findClaimById } from '../../store/claims.js';
 import { getEvidenceForClaims } from '../../store/evidence.js';
 import { insertPromotionQueueRow } from '../../store/promotionQueue.js';
 import { findRollbackRecordByClaimId } from '../../store/promotionQueue.js';
+import { collectRollbackTopologyBlastRadius } from '../../store/rollbackTopology.js';
 import { appendLog } from '../../store/logs.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { getStateType, canDoUpsert, getPolicyVersion } from '../../state/memoryState.js';
@@ -104,6 +105,7 @@ export async function handleRollback(args: Record<string, unknown>): Promise<Too
       );
     }
 
+    const blastRadius = await collectRollbackTopologyBlastRadius(claim.id);
     const rollbackId = `rbk_${crypto.randomUUID().slice(0, 8)}`;
     const evidenceMap = await getEvidenceForClaims([claim.id]);
     const evidenceIds = (evidenceMap.get(claim.id) ?? []).map((evidence) => evidence.id);
@@ -145,16 +147,12 @@ export async function handleRollback(args: Record<string, unknown>): Promise<Too
     return createToolResult({
       rollback_id: rollbackId,
       superseded_claim_id: claim.id,
-      blast_radius: {
-        scope: claim.scope,
-        target_layer: mapScopeToLayer(claim.scope),
-        active_contexts_invalidated: 0,
-      },
+      blast_radius: blastRadius,
       policy_version: getPolicyVersion(),
       state: getStateType(),
       request_id: reqId,
       trace_id: traceId,
-    });
+    }, { useSafeStringify: true });
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,

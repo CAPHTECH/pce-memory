@@ -42,7 +42,10 @@
     "clean": "rm -rf dist *.tsbuildinfo",
     "assay:evaluate": "vitest run --root ../.. --config vitest.assay.config.ts apps/pce-memory/scripts/assay/run-evaluation.test.ts",
     "assay:perturbation": "vitest run --root ../.. --config vitest.assay.config.ts apps/pce-memory/scripts/assay/run-perturbation.test.ts",
-    "benchmark": "vitest run --root ../.. --config vitest.assay.config.ts apps/pce-memory/scripts/benchmark/run-benchmark.test.ts"
+    "benchmark": "vitest run --root ../.. --config vitest.assay.config.ts apps/pce-memory/scripts/benchmark/run-benchmark.test.ts",
+    "benchmark:topology": "vitest run --root ../.. apps/pce-memory/scripts/benchmark/run-topology-effectiveness.test.ts",
+    "benchmark:topology-noise": "vitest run --root ../.. apps/pce-memory/scripts/benchmark/run-topology-noise.test.ts",
+    "benchmark:topology-attribution": "vitest run --root ../.. apps/pce-memory/scripts/benchmark/run-topology-noise-attribution.test.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "1.4.1-r.5",

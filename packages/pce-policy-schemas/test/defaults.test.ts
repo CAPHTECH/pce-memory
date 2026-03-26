@@ -40,6 +40,29 @@ describe('defaultRetrievalPolicy', () => {
     const rp = defaultRetrievalPolicy();
     expect(rp).toBe(defaultPolicy.retrieval);
   });
+
+  it('includes topology defaults under hybrid retrieval', () => {
+    const topology = defaultPolicy.retrieval?.hybrid?.topology;
+    expect(topology).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        mode: 'walk',
+        seed_k: 6,
+        max_hops: 2,
+        hop_decay: 0.75,
+        include_paths: true,
+      })
+    );
+    expect(topology?.edge_policy).toEqual(
+      expect.objectContaining({
+        supports: expect.objectContaining({ weight: 0.9, direction: 'forward' }),
+        extends: expect.objectContaining({ weight: 0.7, direction: 'forward' }),
+        related: expect.objectContaining({ weight: 0.35, direction: 'both' }),
+        contradicts: expect.objectContaining({ action: 'flag_conflict' }),
+        supersedes: expect.objectContaining({ action: 'shadow_old' }),
+      })
+    );
+  });
 });
 
 describe('defaultMaintenancePolicy', () => {

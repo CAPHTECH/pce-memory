@@ -178,6 +178,88 @@ describe('Output Schema - ハンドラ出力検証', () => {
     expect(data.trace_id).toBeDefined();
   });
 
+  it('pce_memory_graph_audit: 出力がスキーマに準拠', async () => {
+    await dispatchTool('pce_memory_policy_apply', {});
+
+    const result = await dispatchTool('pce_memory_graph_audit', {});
+    const data = result.structuredContent!;
+
+    expect(data.summary).toBeDefined();
+    expect(Array.isArray(data.findings)).toBe(true);
+    expect(Array.isArray(data.components)).toBe(true);
+    expect(data.policy_version).toBeDefined();
+    expect(['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready']).toContain(data.state);
+    expect(data.request_id).toBeDefined();
+    expect(data.trace_id).toBeDefined();
+  });
+
+  it('pce_memory_rollback: blast_radius が topology shape を返す', async () => {
+    await dispatchTool('pce_memory_policy_apply', {});
+
+    const rootText = 'rollback schema root';
+    const supportText = 'rollback schema support';
+    const root = await dispatchTool('pce_memory_upsert', {
+      text: rootText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(rootText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
+    });
+    const support = await dispatchTool('pce_memory_upsert', {
+      text: supportText,
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      content_hash: `sha256:${computeContentHash(supportText)}`,
+      provenance: { at: '2025-01-01T00:00:00.000Z' },
+    });
+    await dispatchTool('pce_memory_link_claims', {
+      source_claim_id: support.structuredContent!.id as string,
+      target_claim_id: root.structuredContent!.id as string,
+      link_type: 'supports',
+    });
+    await dispatchTool('pce_memory_activate', {
+      scope: ['project'],
+      allow: ['answer:task'],
+      q: rootText,
+      top_k: 5,
+    });
+
+    const result = await dispatchTool('pce_memory_rollback', {
+      claim_id: root.structuredContent!.id as string,
+      reason: 'schema rollback',
+      provenance: { at: '2025-01-01T00:00:05.000Z', actor: 'vitest' },
+    });
+    const data = result.structuredContent! as {
+      blast_radius: {
+        scope: string;
+        target_layer: string;
+        root_claim: { id: string };
+        connected_claims: Array<{ claim: { id: string } }>;
+        linked_entities: unknown[];
+        affected_active_contexts: Array<{ active_context_id: string }>;
+        neighborhoods: Record<string, unknown>;
+        summary: { connected_claims: number };
+      };
+    };
+
+    expect(data.blast_radius.scope).toBe('project');
+    expect(data.blast_radius.target_layer).toBe('meso');
+    expect(data.blast_radius.root_claim.id).toBe(root.structuredContent!.id);
+    expect(data.blast_radius.connected_claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          claim: expect.objectContaining({ id: support.structuredContent!.id }),
+        }),
+      ])
+    );
+    expect(Array.isArray(data.blast_radius.linked_entities)).toBe(true);
+    expect(Array.isArray(data.blast_radius.affected_active_contexts)).toBe(true);
+    expect(data.blast_radius.neighborhoods).toBeDefined();
+    expect(data.blast_radius.summary.connected_claims).toBeGreaterThanOrEqual(1);
+  });
+
   it('pce_memory_boundary_validate: 出力がスキーマに準拠', async () => {
     const result = await dispatchTool('pce_memory_boundary_validate', {
       payload: 'テストペイロード',
