@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeContentHash } from '@pce/embeddings';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
 import { initRateState, resetRates } from '../src/store/rate';
@@ -7,7 +7,8 @@ import { upsertEntity, linkClaimEntity } from '../src/store/entities';
 import { upsertRelation } from '../src/store/relations';
 import { upsertClaimLink } from '../src/store/claimLinks';
 import { saveActiveContextItems } from '../src/store/activeContext';
-import { auditGraph } from '../src/store/graphAudit';
+import * as graphAuditStore from '../src/store/graphAudit';
+import * as logsStore from '../src/store/logs';
 import { handleGraphAudit } from '../src/core/handlers/graphAudit';
 
 async function createClaim(text: string, scope: 'project' | 'principle' | 'session' = 'project') {
@@ -56,6 +57,10 @@ beforeEach(async () => {
   await initSchema();
   await initRateState();
   await resetRates();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('auditGraph', () => {
@@ -140,7 +145,7 @@ describe('auditGraph', () => {
     await seedCoactivationPair('ac_2', coactiveLeft.id, coactiveRight.id);
     await seedCoactivationPair('ac_3', coactiveLeft.id, coactiveRight.id);
 
-    const report = await auditGraph({
+    const report = await graphAuditStore.auditGraph({
       minSupersessionChainLength: 3,
       repeatedCoactivationThreshold: 3,
       genericHubDegreeThreshold: 3,
@@ -202,7 +207,7 @@ describe('auditGraph', () => {
     await upsertEntity({ id: 'ent_attached_only', type: 'Concept', name: 'Attached Only' });
     await linkClaimEntity(claim.id, 'ent_attached_only');
 
-    const report = await auditGraph();
+    const report = await graphAuditStore.auditGraph();
     expect(report.findings).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: 'orphan_claim', node_ids: [claim.id] }),
@@ -215,7 +220,7 @@ describe('auditGraph', () => {
       await createClaim(`Orphan capped claim ${index}`);
     }
 
-    const report = await auditGraph({ maxFindingsPerKind: 1 });
+    const report = await graphAuditStore.auditGraph({ maxFindingsPerKind: 1 });
     const orphanFindings = report.findings.filter((finding) => finding.kind === 'orphan_claim');
 
     expect(orphanFindings).toHaveLength(1);
@@ -225,7 +230,7 @@ describe('auditGraph', () => {
     await createClaim('Truncated claim 1');
     await createClaim('Truncated claim 2');
 
-    const report = await auditGraph({ scanLimit: 1 });
+    const report = await graphAuditStore.auditGraph({ scanLimit: 1 });
 
     expect(report.truncation).toEqual(
       expect.objectContaining({
@@ -236,5 +241,37 @@ describe('auditGraph', () => {
     );
     expect(report.summary.truncated).toBe(true);
     expect(report.summary.claims).toBe(1);
+  });
+
+  it('returns the audit report even when success logging fails', async () => {
+    vi.spyOn(logsStore, 'appendLog').mockRejectedValueOnce(new Error('log write failed'));
+
+    const result = await handleGraphAudit({});
+    expect(result.isError).not.toBe(true);
+
+    const payload = result.structuredContent as {
+      summary: { claims: number };
+      request_id: string;
+      trace_id: string;
+    };
+    expect(payload.summary.claims).toBeGreaterThanOrEqual(0);
+    expect(payload.request_id).toBeDefined();
+    expect(payload.trace_id).toBeDefined();
+  });
+
+  it('preserves the original DB error when failure logging also fails', async () => {
+    vi.spyOn(graphAuditStore, 'auditGraph').mockRejectedValueOnce(new Error('audit exploded'));
+    vi.spyOn(logsStore, 'appendLog').mockRejectedValueOnce(new Error('log write failed'));
+
+    const result = await handleGraphAudit({});
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({
+          code: 'DB_ERROR',
+          message: 'audit exploded',
+        }),
+      })
+    );
   });
 });

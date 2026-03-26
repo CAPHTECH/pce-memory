@@ -183,7 +183,7 @@ describe('Output Schema - ハンドラ出力検証', () => {
 
     const result = await dispatchTool('pce_memory_graph_audit', {});
     const data = result.structuredContent! as {
-      summary: { claims: number };
+      summary: { claims: number; truncated?: boolean };
       truncation: { claims: boolean; entities: boolean; relations: boolean };
       findings: unknown[];
       components: unknown[];

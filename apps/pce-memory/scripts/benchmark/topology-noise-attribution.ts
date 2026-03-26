@@ -16,7 +16,7 @@ import { setEmbeddingService, hybridSearchWithScores } from '../../src/store/hyb
 import { initRateState, resetRates } from '../../src/store/rate.js';
 import { upsertRelation } from '../../src/store/relations.js';
 import { resolveTopologyConfig } from '../../src/store/search/types.js';
-import { dispatchTool } from '../../src/core/handlers.js';
+import { dispatchToolOrThrow } from './toolResult.js';
 
 interface ScenarioSeed {
   query: string;
@@ -174,11 +174,13 @@ maintenance:
 }
 
 async function applyPolicy(topologyEnabled: boolean): Promise<void> {
-  await dispatchTool('pce_memory_policy_apply', { yaml: buildPolicyYaml(topologyEnabled) });
+  await dispatchToolOrThrow('pce_memory_policy_apply', {
+    yaml: buildPolicyYaml(topologyEnabled),
+  });
 }
 
 async function upsertKnowledge(text: string): Promise<string> {
-  const result = await dispatchTool('pce_memory_upsert', {
+  const result = await dispatchToolOrThrow<{ id: string }>('pce_memory_upsert', {
     text,
     kind: 'fact',
     scope: 'project',
@@ -187,7 +189,7 @@ async function upsertKnowledge(text: string): Promise<string> {
     content_hash: `sha256:${computeContentHash(text)}`,
     provenance: { at: '2025-01-01T00:00:00.000Z', actor: 'benchmark' },
   });
-  return result.structuredContent!.id as string;
+  return result.id;
 }
 
 async function createBenchmarkClaims(input: {
@@ -431,7 +433,7 @@ async function seedRelatedInjectionScenario(): Promise<ScenarioSeed> {
     ],
   });
 
-  await dispatchTool('pce_memory_link_claims', {
+  await dispatchToolOrThrow('pce_memory_link_claims', {
     source_claim_id: idsByLabel['related-noise-1'],
     target_claim_id: idsByLabel['seed'],
     link_type: 'related',
@@ -534,7 +536,7 @@ async function seedTwoHopInjectionScenario(): Promise<ScenarioSeed> {
     ],
   });
 
-  await dispatchTool('pce_memory_link_claims', {
+  await dispatchToolOrThrow('pce_memory_link_claims', {
     source_claim_id: idsByLabel['relevant-bridge'],
     target_claim_id: idsByLabel['seed'],
     link_type: 'related',

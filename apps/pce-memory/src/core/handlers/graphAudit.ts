@@ -8,6 +8,17 @@ function readPositiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+async function appendGraphAuditLogBestEffort(
+  entry: Parameters<typeof appendLog>[0]
+): Promise<void> {
+  try {
+    await appendLog(entry);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Handler] Failed to append graph_audit log: ${message}`);
+  }
+}
+
 export async function handleGraphAudit(args: Record<string, unknown> = {}): Promise<ToolResult> {
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();
@@ -59,7 +70,7 @@ export async function handleGraphAudit(args: Record<string, unknown> = {}): Prom
 
     const report = await auditGraph(options);
 
-    await appendLog({
+    await appendGraphAuditLogBestEffort({
       id: `log_${reqId}`,
       op: 'graph_audit',
       ok: true,
@@ -79,7 +90,7 @@ export async function handleGraphAudit(args: Record<string, unknown> = {}): Prom
       { useSafeStringify: true }
     );
   } catch (error: unknown) {
-    await appendLog({
+    await appendGraphAuditLogBestEffort({
       id: `log_${reqId}`,
       op: 'graph_audit',
       ok: false,

@@ -1,7 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { computeContentHash, type EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
-import { dispatchTool } from '../../src/core/handlers.js';
 import { initDb, initSchema, resetDbAsync } from '../../src/db/connection.js';
 import { resetLayerScopeState } from '../../src/state/layerScopeState.js';
 import { resetMemoryState } from '../../src/state/memoryState.js';
@@ -9,6 +8,7 @@ import { linkClaimEntity, upsertEntity } from '../../src/store/entities.js';
 import { setEmbeddingService } from '../../src/store/hybridSearch.js';
 import { initRateState, resetRates } from '../../src/store/rate.js';
 import { upsertRelation } from '../../src/store/relations.js';
+import { dispatchToolOrThrow } from './toolResult.js';
 
 interface ActivateClaimResult {
   claim: { id: string };
@@ -246,11 +246,13 @@ maintenance:
 }
 
 async function applyPolicy(topologyEnabled: boolean): Promise<void> {
-  await dispatchTool('pce_memory_policy_apply', { yaml: buildPolicyYaml(topologyEnabled) });
+  await dispatchToolOrThrow('pce_memory_policy_apply', {
+    yaml: buildPolicyYaml(topologyEnabled),
+  });
 }
 
 async function upsertKnowledge(text: string): Promise<string> {
-  const result = await dispatchTool('pce_memory_upsert', {
+  const result = await dispatchToolOrThrow<{ id: string }>('pce_memory_upsert', {
     text,
     kind: 'fact',
     scope: 'project',
@@ -259,7 +261,7 @@ async function upsertKnowledge(text: string): Promise<string> {
     content_hash: `sha256:${computeContentHash(text)}`,
     provenance: { at: '2025-01-01T00:00:00.000Z', actor: 'benchmark' },
   });
-  return result.structuredContent!.id as string;
+  return result.id;
 }
 
 async function runMeasuredActivate(
@@ -273,7 +275,9 @@ async function runMeasuredActivate(
   avgLatencyMs: number;
   probeClaims: ActivateClaimResult[];
 }> {
-  const first = (await dispatchTool('pce_memory_activate', {
+  const first = await dispatchToolOrThrow<{
+    claims: ActivateClaimResult[];
+  }>('pce_memory_activate', {
     scope: ['project'],
     allow: ['answer:task'],
     q: query,
@@ -281,14 +285,12 @@ async function runMeasuredActivate(
     ...(options.disableGraphPresenceInjection
       ? { debug_disable_graph_presence_injection: true }
       : {}),
-  }).then((result) => result.structuredContent)) as {
-    claims: ActivateClaimResult[];
-  };
+  });
 
   const samples: number[] = [];
   for (let index = 0; index < repeats; index++) {
     const startedAt = performance.now();
-    await dispatchTool('pce_memory_activate', {
+    await dispatchToolOrThrow('pce_memory_activate', {
       scope: ['project'],
       allow: ['answer:task'],
       q: query,
@@ -303,7 +305,9 @@ async function runMeasuredActivate(
   const probeClaims =
     typeof probeTopK === 'number' && probeTopK > topK
       ? ((
-          (await dispatchTool('pce_memory_activate', {
+          await dispatchToolOrThrow<{
+            claims: ActivateClaimResult[];
+          }>('pce_memory_activate', {
             scope: ['project'],
             allow: ['answer:task'],
             q: query,
@@ -311,9 +315,7 @@ async function runMeasuredActivate(
             ...(options.disableGraphPresenceInjection
               ? { debug_disable_graph_presence_injection: true }
               : {}),
-          }).then((result) => result.structuredContent)) as {
-            claims: ActivateClaimResult[];
-          }
+          })
         ).claims ?? first.claims)
       : first.claims;
 
@@ -529,7 +531,7 @@ async function seedForcedPresenceNoiseScenario(): Promise<ScenarioSeed> {
   const directRelevantId = await upsertKnowledge(directRelevantText);
   const noisyRelatedId = await upsertKnowledge(noisyRelatedText);
 
-  await dispatchTool('pce_memory_link_claims', {
+  await dispatchToolOrThrow('pce_memory_link_claims', {
     source_claim_id: noisyRelatedId,
     target_claim_id: seedId,
     link_type: 'related',
@@ -589,12 +591,12 @@ async function seedGenericHubNoiseScenario(): Promise<ScenarioSeed> {
     type: 'ASSOCIATED_WITH',
   });
 
-  const audit = (await dispatchTool('pce_memory_graph_audit', {
+  const audit = await dispatchToolOrThrow<{
+    findings: Array<{ kind: string; node_ids?: string[] }>;
+  }>('pce_memory_graph_audit', {
     generic_hub_degree_threshold: 2,
     max_findings_per_kind: 10,
-  }).then((result) => result.structuredContent)) as {
-    findings: Array<{ kind: string; node_ids?: string[] }>;
-  };
+  });
   const genericHubDetected = audit.findings.some(
     (finding) => finding.kind === 'generic_hub' && finding.node_ids?.includes(genericHub.id)
   );
@@ -639,13 +641,13 @@ async function seedConfidenceMitigatedScenario(): Promise<ScenarioSeed> {
   const relevantLinkedId = await upsertKnowledge(relevantLinkedText);
   const noisyLinkedId = await upsertKnowledge(noisyLinkedText);
 
-  await dispatchTool('pce_memory_link_claims', {
+  await dispatchToolOrThrow('pce_memory_link_claims', {
     source_claim_id: relevantLinkedId,
     target_claim_id: seedId,
     link_type: 'related',
     confidence: 1,
   });
-  await dispatchTool('pce_memory_link_claims', {
+  await dispatchToolOrThrow('pce_memory_link_claims', {
     source_claim_id: noisyLinkedId,
     target_claim_id: seedId,
     link_type: 'related',
@@ -706,7 +708,7 @@ async function seedRelatedStarSweepCase(params: SweepCaseParams): Promise<Scenar
   for (const [index, text] of noiseTexts.entries()) {
     const noiseId = await upsertKnowledge(text);
     labelById[noiseId] = `related-noise-${index + 1}`;
-    await dispatchTool('pce_memory_link_claims', {
+    await dispatchToolOrThrow('pce_memory_link_claims', {
       source_claim_id: noiseId,
       target_claim_id: seedId,
       link_type: 'related',
@@ -831,7 +833,7 @@ async function seedTwoHopSweepCase(params: SweepCaseParams): Promise<ScenarioSee
   const bridgeId = await upsertKnowledge(bridgeText);
   labelById[bridgeId] = 'bridge-relevant';
 
-  await dispatchTool('pce_memory_link_claims', {
+  await dispatchToolOrThrow('pce_memory_link_claims', {
     source_claim_id: bridgeId,
     target_claim_id: seedId,
     link_type: 'related',

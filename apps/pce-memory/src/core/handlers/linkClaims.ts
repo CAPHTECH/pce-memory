@@ -171,8 +171,12 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
       target_claim_id: link.target_claim_id,
       link_type: link.link_type,
       confidence: link.confidence,
-      ...(link.evidence_claim_id ? { evidence_claim_id: link.evidence_claim_id } : {}),
-      ...(link.provenance ? { provenance: link.provenance } : {}),
+      ...(link.evidence_claim_id !== undefined && link.evidence_claim_id !== null
+        ? { evidence_claim_id: link.evidence_claim_id }
+        : {}),
+      ...(link.provenance !== undefined && link.provenance !== null
+        ? { provenance: link.provenance }
+        : {}),
       created_by: link.created_by ?? 'client',
       policy_version: getPolicyVersion(),
       state: getStateType(),
