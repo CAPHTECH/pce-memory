@@ -1,6 +1,6 @@
 {
   "name": "pce-memory-plugin",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Persistent knowledge management with pce-memory v2: raw observe, distill/promote pipeline, intent-aware activate, and layer-aware sync",
   "author": {
     "name": "CAPH TECH Inc."

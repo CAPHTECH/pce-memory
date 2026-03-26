@@ -18,7 +18,7 @@ if [ "$SHOULD_OBSERVE" = true ]; then
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "Architecturally significant file changed. If this change involves a design decision worth preserving: (1) Use pce_memory_observe to capture the raw change context. (2) If the decision is durable and confirmed, use pce_memory_upsert with kind=fact, scope=project, memory_type=knowledge, and provenance. For speculative or in-progress changes, observe only — do not upsert until the decision is confirmed. Update entities/relations as needed."
+    "additionalContext": "Architecturally significant file changed. If this change involves a design decision worth preserving: (1) Use pce_memory_observe to capture the raw change context as scratchpad. (2) If the decision is confirmed and reusable, prefer observe → distill → promote in the same task. Use pce_memory_upsert only for already-distilled knowledge. For speculative or in-progress changes, observe only — do not promote until the decision is validated. Keep scope: session for transient findings."
   }
 }
 EOF

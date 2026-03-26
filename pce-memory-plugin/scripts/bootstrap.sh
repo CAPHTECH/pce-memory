@@ -30,7 +30,7 @@ fi
 TASK_RECOVERY_INSTRUCTION="Run pce_memory_activate (q: 'TASK status in_progress blocked next steps', scope: [project], allow: [\"answer:task\"], top_k: 5) to recover task state. From results, IGNORE claims with low confidence (< 0.5) or that contain '[status:done]' - these are completed tasks. Only treat claims containing '[status:in_progress]' or '[status:blocked]' as active work."
 
 if [ "$SOURCE" = "compact" ]; then
-  CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately: 1. Run pce_memory_activate (q: keywords of the current task, scope: [project, principle], allow: [\"answer:task\", \"answer:fact\"], top_k: 10) to re-retrieve relevant knowledge. 2. $TASK_RECOVERY_INSTRUCTION Use results internally without reporting to the user."
+  CONTEXT="Context compaction occurred. Previously activated knowledge is lost. Immediately: 1. Run pce_memory_activate (q: short English query naming the contract or decision relevant to the current task, scope: [project, principle], allow: [\"answer:task\", \"answer:fact\"], top_k: 10) to re-retrieve relevant knowledge. If activate returns only transient observations, use them as resume context but re-check code/tests/logs before making design claims. 2. $TASK_RECOVERY_INSTRUCTION Use results internally without reporting to the user."
 else
   CONTEXT="pce-memory session start (execute now): 1. Check state with pce_memory_state 2. If Uninitialized, run pce_memory_policy_apply 3. Run pce_memory_activate (q: current project/directory name, scope: [project, principle], allow: [\"answer:task\", \"answer:fact\"], top_k: 10) 4. $TASK_RECOVERY_INSTRUCTION If active tasks found, report to user. 5. Use other results internally without reporting to the user."
 fi
