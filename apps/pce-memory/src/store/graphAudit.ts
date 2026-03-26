@@ -277,11 +277,7 @@ export async function auditGraph(options: GraphAuditOptions = {}): Promise<Graph
       ? Math.floor(options.scanLimit)
       : DEFAULT_SCAN_LIMIT;
 
-  const [
-    claimsLoaded,
-    entitiesLoaded,
-    relationsLoaded,
-  ] = await Promise.all([
+  const [claimsLoaded, entitiesLoaded, relationsLoaded] = await Promise.all([
     listClaimsByFilter({ includeInactive: true, limit: scanLimit + 1 }),
     listAllEntities(scanLimit + 1),
     listAllRelations(scanLimit + 1),
@@ -494,7 +490,10 @@ export async function auditGraph(options: GraphAuditOptions = {}): Promise<Graph
   };
 }
 
-function buildInClause(values: readonly string[], startIndex = 1): { clause: string; params: string[] } {
+function buildInClause(
+  values: readonly string[],
+  startIndex = 1
+): { clause: string; params: string[] } {
   return {
     clause: values.map((_, index) => `$${index + startIndex}`).join(', '),
     params: [...values],
@@ -538,7 +537,9 @@ async function readClaimEntities(
   return reader.getRowObjects() as unknown as ClaimEntityRow[];
 }
 
-async function readActiveContextItems(claimIds: readonly string[]): Promise<ActiveContextItemRow[]> {
+async function readActiveContextItems(
+  claimIds: readonly string[]
+): Promise<ActiveContextItemRow[]> {
   if (claimIds.length === 0) {
     return [];
   }

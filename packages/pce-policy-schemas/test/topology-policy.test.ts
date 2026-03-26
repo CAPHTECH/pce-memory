@@ -153,10 +153,7 @@ retrieval:
     const result = validatePolicy(policy);
     expect(result.ok).toBe(false);
     expect(result.errors).toEqual(
-      expect.arrayContaining([
-        'retrieval.hybird is not allowed',
-        'topology.seed_k must be number',
-      ])
+      expect.arrayContaining(['retrieval.hybird is not allowed', 'topology.seed_k must be number'])
     );
   });
 
@@ -173,8 +170,6 @@ retrieval:
     expect(() => validatePolicy(policy)).not.toThrow();
     const result = validatePolicy(policy);
     expect(result.ok).toBe(false);
-    expect(result.errors).toEqual(
-      expect.arrayContaining(['topology.edge_policy must be object'])
-    );
+    expect(result.errors).toEqual(expect.arrayContaining(['topology.edge_policy must be object']));
   });
 });

@@ -19,12 +19,13 @@ import {
   isDurableBoundaryClass,
 } from './shared.js';
 
-import {
-  upsertClaim,
-  findClaimByContentHash,
-} from '../../store/claims.js';
+import { upsertClaim, findClaimByContentHash } from '../../store/claims.js';
 import type { Provenance } from '../../store/claims.js';
-import { findSimilarActiveClaims, getEmbeddingService, saveClaimVector } from '../../store/hybridSearch.js';
+import {
+  findSimilarActiveClaims,
+  getEmbeddingService,
+  saveClaimVector,
+} from '../../store/hybridSearch.js';
 import { suggestRelatedClaimLinks } from '../../store/claimLinks.js';
 import { insertEvidence } from '../../store/evidence.js';
 import { acceptPromotionQueueRow, findPromotionQueueRowById } from '../../store/promotionQueue.js';
@@ -385,7 +386,11 @@ export async function handlePromote(args: Record<string, unknown>) {
       })();
       if (E.isRight(embedResult)) {
         try {
-          await saveClaimVector(claim.id, embedResult.right.embedding, embedResult.right.modelVersion);
+          await saveClaimVector(
+            claim.id,
+            embedResult.right.embedding,
+            embedResult.right.modelVersion
+          );
         } catch {
           // Best-effort: durable claim promotion remains successful without vector persistence.
         }
