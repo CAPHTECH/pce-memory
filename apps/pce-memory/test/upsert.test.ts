@@ -86,4 +86,41 @@ describe('upsertClaim', () => {
         e.code === 'CONTENT_HASH_COLLISION'
     );
   });
+
+  it('revives rolled-back claims without overwriting their classification metadata', async () => {
+    const original = await upsertClaim({
+      text: 'stable revived claim',
+      kind: 'fact',
+      scope: 'project',
+      boundary_class: 'internal',
+      memory_type: 'knowledge',
+      provenance: { at: '2025-01-01T00:00:00.000Z', actor: 'vitest' },
+      content_hash: 'hash-rolled-back-002',
+    });
+
+    await markClaimRolledBack(original.claim.id, {
+      tombstone_at: '2025-01-01T00:00:00.000Z',
+      rollback_reason: 'test rollback',
+      superseded_by: 'rbk_test_002',
+    });
+
+    const revived = await upsertClaim({
+      text: 'stable revived claim',
+      kind: 'task',
+      scope: 'principle',
+      boundary_class: 'public',
+      memory_type: 'norm',
+      provenance: { at: '2025-01-02T00:00:00.000Z', actor: 'vitest-2' },
+      content_hash: 'hash-rolled-back-002',
+    });
+
+    expect(revived.claim.id).toBe(original.claim.id);
+    expect(revived.claim.kind).toBe('fact');
+    expect(revived.claim.scope).toBe('project');
+    expect(revived.claim.boundary_class).toBe('internal');
+    expect(revived.claim.memory_type).toBe('knowledge');
+    expect(revived.claim.provenance).toEqual(
+      expect.objectContaining({ actor: 'vitest', at: '2025-01-01T00:00:00.000Z' })
+    );
+  });
 });

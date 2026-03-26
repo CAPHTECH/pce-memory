@@ -5,6 +5,7 @@
 import * as crypto from 'node:crypto';
 import { boundaryValidate } from '@pce/boundary';
 import * as E from 'fp-ts/Either';
+import type { SensitivityLevel } from '@pce/embeddings';
 
 import {
   createToolResult,
@@ -20,11 +21,10 @@ import {
 
 import {
   upsertClaim,
-  upsertClaimWithEmbedding,
   findClaimByContentHash,
 } from '../../store/claims.js';
 import type { Provenance } from '../../store/claims.js';
-import { findSimilarActiveClaims, getEmbeddingService } from '../../store/hybridSearch.js';
+import { findSimilarActiveClaims, getEmbeddingService, saveClaimVector } from '../../store/hybridSearch.js';
 import { suggestRelatedClaimLinks } from '../../store/claimLinks.js';
 import { insertEvidence } from '../../store/evidence.js';
 import { acceptPromotionQueueRow, findPromotionQueueRowById } from '../../store/promotionQueue.js';
@@ -255,40 +255,25 @@ export async function handlePromote(args: Record<string, unknown>) {
       }
     }
 
+    const embeddingService = getEmbeddingService();
+
     const transactionalResult = await withDedicatedConnection(async (conn) => {
       await conn.run('BEGIN TRANSACTION');
       try {
-        const embeddingService = getEmbeddingService();
-        const { claim, isNew } = embeddingService
-          ? await upsertClaimWithEmbedding(
-              {
-                text: candidate.distilled_text,
-                kind: candidate.proposed_kind,
-                scope: candidate.proposed_scope,
-                boundary_class: candidate.proposed_boundary_class,
-                ...(candidate.proposed_memory_type
-                  ? { memory_type: candidate.proposed_memory_type }
-                  : {}),
-                content_hash: candidate.candidate_hash,
-                provenance: promotionProvenance,
-              },
-              embeddingService,
-              conn
-            )
-          : await upsertClaim(
-              {
-                text: candidate.distilled_text,
-                kind: candidate.proposed_kind,
-                scope: candidate.proposed_scope,
-                boundary_class: candidate.proposed_boundary_class,
-                ...(candidate.proposed_memory_type
-                  ? { memory_type: candidate.proposed_memory_type }
-                  : {}),
-                content_hash: candidate.candidate_hash,
-                provenance: promotionProvenance,
-              },
-              conn
-            );
+        const { claim, isNew } = await upsertClaim(
+          {
+            text: candidate.distilled_text,
+            kind: candidate.proposed_kind,
+            scope: candidate.proposed_scope,
+            boundary_class: candidate.proposed_boundary_class,
+            ...(candidate.proposed_memory_type
+              ? { memory_type: candidate.proposed_memory_type }
+              : {}),
+            content_hash: candidate.candidate_hash,
+            provenance: promotionProvenance,
+          },
+          conn
+        );
 
         const promotedClaimConflict = getPromotionCandidateConflictMessage(candidate, claim);
         if (promotedClaimConflict) {
@@ -385,6 +370,27 @@ export async function handlePromote(args: Record<string, unknown>) {
     }
 
     const { claim, isNew } = transactionalResult;
+
+    if (isNew && embeddingService) {
+      const sensitivity: SensitivityLevel =
+        candidate.proposed_boundary_class === 'public'
+          ? 'public'
+          : candidate.proposed_boundary_class === 'internal'
+            ? 'internal'
+            : 'confidential';
+
+      const embedResult = await embeddingService.embed({
+        text: candidate.distilled_text,
+        sensitivity,
+      })();
+      if (E.isRight(embedResult)) {
+        try {
+          await saveClaimVector(claim.id, embedResult.right.embedding, embedResult.right.modelVersion);
+        } catch {
+          // Best-effort: durable claim promotion remains successful without vector persistence.
+        }
+      }
+    }
 
     await transitionToHasClaimsFromDb(isNew ? 1 : 0);
     const similarExisting = await findSimilarActiveClaims(claim.id).catch(() => []);

@@ -108,7 +108,7 @@ describe('ensureClaimLinkPresence', () => {
       makeItem({
         id: 'related-context',
         score: 0.2,
-        source: 'search',
+        source: 'topology',
         topology: makeTopology(0.2),
         link: {
           id: 'link-2',
@@ -122,7 +122,7 @@ describe('ensureClaimLinkPresence', () => {
     const result = ensureClaimLinkPresence(pageResults, allResults, 2);
 
     expect(result.map((item) => item.claim.id)).toEqual(['seed', 'related-context']);
-    expect(result[1]?.source).toBe('claim_link');
+    expect(result[1]?.source).toBe('topology');
   });
 
   it('leaves the page unchanged when a graph-derived claim is already present', () => {
@@ -143,6 +143,25 @@ describe('ensureClaimLinkPresence', () => {
     const pageResults = [makeItem({ id: 'seed', score: 0.9, source: 'search' }), graphItem];
 
     const result = ensureClaimLinkPresence(pageResults, pageResults, 2);
+
+    expect(result).toEqual(pageResults);
+  });
+
+  it('does not satisfy graph presence with a search seed that only carries topology metadata', () => {
+    process.env.PCE_ACTIVATE_FORCE_GRAPH_PRESENCE = '1';
+
+    const pageResults = [makeItem({ id: 'seed', score: 0.9, source: 'search' })];
+    const allResults = [
+      ...pageResults,
+      makeItem({
+        id: 'seed-with-conflict-metadata',
+        score: 0.4,
+        source: 'search',
+        topology: makeTopology(0.4),
+      }),
+    ];
+
+    const result = ensureClaimLinkPresence(pageResults, allResults, 2);
 
     expect(result).toEqual(pageResults);
   });

@@ -619,9 +619,7 @@ export function ensureClaimLinkPresence(
   const fallbackClaimLink = [...allResults]
     .filter(
       (item) =>
-        (item.source === 'claim_link' ||
-          item.source === 'topology' ||
-          item.topology !== undefined) &&
+        (item.source === 'claim_link' || item.source === 'topology') &&
         !pageResults.some((pageItem) => pageItem.claim.id === item.claim.id)
     )
     .sort((left, right) => {

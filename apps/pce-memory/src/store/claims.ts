@@ -221,24 +221,15 @@ export async function upsertClaim(
         if (revived.text !== c.text) {
           throw new ContentHashCollisionError();
         }
-        const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
-        const memoryType = c.memory_type ?? null;
-        const status = c.status ?? 'active';
         await conn.run(
           `UPDATE claims
            SET tombstone = FALSE,
                tombstone_at = NULL,
                rollback_reason = NULL,
                superseded_by = NULL,
-               kind = $1,
-               scope = $2,
-               boundary_class = $3,
-               memory_type = $4,
-               status = $5,
-               provenance = $6,
                updated_at = CURRENT_TIMESTAMP
-           WHERE id = $7`,
-          [c.kind, c.scope, c.boundary_class, memoryType, status, provenanceJson, revived.id]
+           WHERE id = $1`,
+          [revived.id]
         );
         await conn.run(
           `DELETE FROM promotion_queue WHERE accepted_claim_id = $1 AND status = 'rolled_back'`,

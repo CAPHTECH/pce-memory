@@ -102,7 +102,7 @@ describe('ensureClaimLinkPresence properties', () => {
             makeItem({
               id,
               score: 0.1 + index * 0.01,
-              source: 'search',
+              source: 'topology',
               topology: makeTopology(0.2 + index * 0.1, id),
               link: {
                 id: `link-${id}`,
@@ -153,7 +153,7 @@ describe('ensureClaimLinkPresence properties', () => {
             makeItem({
               id,
               score: 0.2 - index * 0.01,
-              source: 'search',
+              source: 'topology',
               topology: makeTopology(1 + index, id),
               link: {
                 id: `link-${id}`,
@@ -174,7 +174,7 @@ describe('ensureClaimLinkPresence properties', () => {
           expect(result).toHaveLength(pageResults.length + 1);
           expect(new Set(ids(result))).toEqual(new Set([...ids(pageResults), winner.claim.id]));
           const injected = result.find((item) => item.claim.id === winner.claim.id);
-          expect(injected?.source).toBe('claim_link');
+          expect(injected?.source).toBe('topology');
         }
       ),
       { numRuns: 50 }
@@ -224,7 +224,7 @@ describe('ensureClaimLinkPresence properties', () => {
             makeItem({
               id,
               score: 0.2 - index * 0.01,
-              source: 'search',
+              source: 'topology',
               topology: makeTopology(1 + index, id),
               link: {
                 id: `link-${id}`,
