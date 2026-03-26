@@ -13,7 +13,7 @@ function ensureBoolean(field: string, val: unknown, errors: string[]) {
 }
 
 function ensureNumber(field: string, val: unknown, errors: string[]) {
-  if (typeof val !== 'number' || Number.isNaN(val)) errors.push(`${field} must be number`);
+  if (typeof val !== 'number' || !Number.isFinite(val)) errors.push(`${field} must be number`);
 }
 
 function ensureInteger(field: string, val: unknown, errors: string[]) {
@@ -102,39 +102,45 @@ function validateTopologyPolicy(input: Record<string, unknown>): ValidationResul
 
   if (input['edge_policy'] !== undefined) {
     ensureObject('topology.edge_policy', input['edge_policy'], errors);
-    const edgePolicy = input['edge_policy'] as Record<string, unknown>;
     const linkTypes = ['supports', 'extends', 'related', 'contradicts', 'supersedes'] as const;
-    rejectUnknownKeys('topology.edge_policy', edgePolicy, linkTypes, errors);
-    for (const edgeType of linkTypes) {
-      const candidate = edgePolicy[edgeType];
-      if (candidate === undefined) continue;
-      ensureObject(`topology.edge_policy.${edgeType}`, candidate, errors);
-      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
-        const typedCandidate = candidate as Record<string, unknown>;
-        rejectUnknownKeys(
-          `topology.edge_policy.${edgeType}`,
-          typedCandidate,
-          ['weight', 'direction', 'action'],
-          errors
-        );
-        if (typedCandidate['weight'] !== undefined) {
-          ensureNumber(`topology.edge_policy.${edgeType}.weight`, typedCandidate['weight'], errors);
-        }
-        if (typedCandidate['direction'] !== undefined) {
-          ensureEnum(
-            `topology.edge_policy.${edgeType}.direction`,
-            typedCandidate['direction'],
-            ['forward', 'both'] as const,
+    if (input['edge_policy'] && typeof input['edge_policy'] === 'object') {
+      const edgePolicy = input['edge_policy'] as Record<string, unknown>;
+      rejectUnknownKeys('topology.edge_policy', edgePolicy, linkTypes, errors);
+      for (const edgeType of linkTypes) {
+        const candidate = edgePolicy[edgeType];
+        if (candidate === undefined) continue;
+        ensureObject(`topology.edge_policy.${edgeType}`, candidate, errors);
+        if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+          const typedCandidate = candidate as Record<string, unknown>;
+          rejectUnknownKeys(
+            `topology.edge_policy.${edgeType}`,
+            typedCandidate,
+            ['weight', 'direction', 'action'],
             errors
           );
-        }
-        if (typedCandidate['action'] !== undefined) {
-          ensureEnum(
-            `topology.edge_policy.${edgeType}.action`,
-            typedCandidate['action'],
-            ['boost', 'flag_conflict', 'shadow_old'] as const,
-            errors
-          );
+          if (typedCandidate['weight'] !== undefined) {
+            ensureNumber(
+              `topology.edge_policy.${edgeType}.weight`,
+              typedCandidate['weight'],
+              errors
+            );
+          }
+          if (typedCandidate['direction'] !== undefined) {
+            ensureEnum(
+              `topology.edge_policy.${edgeType}.direction`,
+              typedCandidate['direction'],
+              ['forward', 'both'] as const,
+              errors
+            );
+          }
+          if (typedCandidate['action'] !== undefined) {
+            ensureEnum(
+              `topology.edge_policy.${edgeType}.action`,
+              typedCandidate['action'],
+              ['boost', 'flag_conflict', 'shadow_old'] as const,
+              errors
+            );
+          }
         }
       }
     }
@@ -144,6 +150,7 @@ function validateTopologyPolicy(input: Record<string, unknown>): ValidationResul
 }
 
 function validateHybridPolicy(input: Record<string, unknown>, errors: string[]): void {
+  rejectUnknownKeys('retrieval', input, ['hybrid'], errors);
   const hybrid = input['hybrid'];
   if (hybrid === undefined) {
     return;

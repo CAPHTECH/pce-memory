@@ -138,4 +138,43 @@ retrieval:
     expect(result.ok).toBe(false);
     expect(result.errors).toEqual(expect.arrayContaining(['boundary must be object']));
   });
+
+  it('rejects retrieval-level typos and non-finite topology integers', () => {
+    const policy = cloneDefaultPolicy();
+    policy['retrieval'] = {
+      hybird: {},
+      hybrid: {
+        topology: {
+          seed_k: Number.POSITIVE_INFINITY,
+        },
+      },
+    };
+
+    const result = validatePolicy(policy);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'retrieval.hybird is not allowed',
+        'topology.seed_k must be number',
+      ])
+    );
+  });
+
+  it('returns validation errors instead of throwing on null edge_policy', () => {
+    const policy = cloneDefaultPolicy();
+    policy['retrieval'] = {
+      hybrid: {
+        topology: {
+          edge_policy: null,
+        },
+      },
+    };
+
+    expect(() => validatePolicy(policy)).not.toThrow();
+    const result = validatePolicy(policy);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining(['topology.edge_policy must be object'])
+    );
+  });
 });

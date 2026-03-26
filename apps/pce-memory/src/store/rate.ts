@@ -1,6 +1,7 @@
 import { getConnection, withQueuedConnection } from '../db/connection.js';
 
 const DEFAULT_BUCKETS = ['tool', 'policy', 'activate'];
+const RATE_CONFLICT_RETRY_ATTEMPTS = 4;
 
 /**
  * レート制限の上限値を取得
@@ -71,25 +72,40 @@ export async function setRate(bucket: string, value: number): Promise<void> {
  * アトミックな UPDATE ... WHERE ... RETURNING で競合状態を回避。
  */
 export async function checkAndConsume(bucket: string): Promise<boolean> {
-  return withQueuedConnection(async (conn) => {
-    const now = Math.floor(Date.now() / 1000);
-    const win = windowSec();
-    const limit = cap();
+  for (let attempt = 0; attempt < RATE_CONFLICT_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await withQueuedConnection(async (conn) => {
+        const now = Math.floor(Date.now() / 1000);
+        const win = windowSec();
+        const limit = cap();
 
-    if (win > 0) {
-      await conn.run(
-        'UPDATE rate_state SET value = 0, last_reset = $1 WHERE bucket = $2 AND ($1 - last_reset) >= $3',
-        [now, bucket, win]
-      );
+        if (win > 0) {
+          await conn.run(
+            'UPDATE rate_state SET value = 0, last_reset = $1 WHERE bucket = $2 AND ($1 - last_reset) >= $3',
+            [now, bucket, win]
+          );
+        }
+
+        const reader = await conn.runAndReadAll(
+          'UPDATE rate_state SET value = value + 1 WHERE bucket = $1 AND value < $2 RETURNING value',
+          [bucket, limit]
+        );
+        const rows = reader.getRowObjects() as { value: number }[];
+        return rows.length > 0;
+      });
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes('write-write conflict on key') ||
+        attempt === RATE_CONFLICT_RETRY_ATTEMPTS - 1
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt + 1));
     }
+  }
 
-    const reader = await conn.runAndReadAll(
-      'UPDATE rate_state SET value = value + 1 WHERE bucket = $1 AND value < $2 RETURNING value',
-      [bucket, limit]
-    );
-    const rows = reader.getRowObjects() as { value: number }[];
-    return rows.length > 0;
-  });
+  return false;
 }
 
 export async function resetRates(): Promise<void> {

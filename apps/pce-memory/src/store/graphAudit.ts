@@ -281,16 +281,10 @@ export async function auditGraph(options: GraphAuditOptions = {}): Promise<Graph
     claimsLoaded,
     entitiesLoaded,
     relationsLoaded,
-    claimLinks,
-    claimEntities,
-    activeContextItems,
   ] = await Promise.all([
     listClaimsByFilter({ includeInactive: true, limit: scanLimit + 1 }),
     listAllEntities(scanLimit + 1),
     listAllRelations(scanLimit + 1),
-    readClaimLinks(),
-    readClaimEntities(),
-    readActiveContextItems(),
   ]);
   const claimsTruncated = claimsLoaded.length > scanLimit;
   const entitiesTruncated = entitiesLoaded.length > scanLimit;
@@ -298,6 +292,14 @@ export async function auditGraph(options: GraphAuditOptions = {}): Promise<Graph
   const claims = claimsLoaded.slice(0, scanLimit);
   const entities = entitiesLoaded.slice(0, scanLimit);
   const relations = relationsLoaded.slice(0, scanLimit);
+  const claimIds = claims.map((claim) => claim.id);
+  const entityIds = entities.map((entity) => entity.id);
+
+  const [claimLinks, claimEntities, activeContextItems] = await Promise.all([
+    readClaimLinks(claimIds),
+    readClaimEntities(claimIds, entityIds),
+    readActiveContextItems(claimIds),
+  ]);
 
   const claimsById = new Map(claims.map((claim) => [claim.id, claim]));
   const entitiesById = new Map(entities.map((entity) => [entity.id, entity]));
@@ -492,24 +494,61 @@ export async function auditGraph(options: GraphAuditOptions = {}): Promise<Graph
   };
 }
 
-async function readClaimLinks(): Promise<ClaimLinkRow[]> {
+function buildInClause(values: readonly string[], startIndex = 1): { clause: string; params: string[] } {
+  return {
+    clause: values.map((_, index) => `$${index + startIndex}`).join(', '),
+    params: [...values],
+  };
+}
+
+async function readClaimLinks(claimIds: readonly string[]): Promise<ClaimLinkRow[]> {
+  if (claimIds.length === 0) {
+    return [];
+  }
   const conn = await getConnection();
+  const sourceIds = buildInClause(claimIds, 1);
+  const targetIds = buildInClause(claimIds, claimIds.length + 1);
   const reader = await conn.runAndReadAll(
-    'SELECT id, source_claim_id, target_claim_id, link_type FROM claim_links'
+    `SELECT id, source_claim_id, target_claim_id, link_type
+     FROM claim_links
+     WHERE source_claim_id IN (${sourceIds.clause})
+       AND target_claim_id IN (${targetIds.clause})`,
+    [...sourceIds.params, ...targetIds.params]
   );
   return reader.getRowObjects() as unknown as ClaimLinkRow[];
 }
 
-async function readClaimEntities(): Promise<ClaimEntityRow[]> {
+async function readClaimEntities(
+  claimIds: readonly string[],
+  entityIds: readonly string[]
+): Promise<ClaimEntityRow[]> {
+  if (claimIds.length === 0 || entityIds.length === 0) {
+    return [];
+  }
   const conn = await getConnection();
-  const reader = await conn.runAndReadAll('SELECT claim_id, entity_id FROM claim_entities');
+  const claimClause = buildInClause(claimIds, 1);
+  const entityClause = buildInClause(entityIds, claimIds.length + 1);
+  const reader = await conn.runAndReadAll(
+    `SELECT claim_id, entity_id
+     FROM claim_entities
+     WHERE claim_id IN (${claimClause.clause})
+       AND entity_id IN (${entityClause.clause})`,
+    [...claimClause.params, ...entityClause.params]
+  );
   return reader.getRowObjects() as unknown as ClaimEntityRow[];
 }
 
-async function readActiveContextItems(): Promise<ActiveContextItemRow[]> {
+async function readActiveContextItems(claimIds: readonly string[]): Promise<ActiveContextItemRow[]> {
+  if (claimIds.length === 0) {
+    return [];
+  }
   const conn = await getConnection();
+  const claimClause = buildInClause(claimIds, 1);
   const reader = await conn.runAndReadAll(
-    'SELECT active_context_id, claim_id FROM active_context_items'
+    `SELECT active_context_id, claim_id
+     FROM active_context_items
+     WHERE claim_id IN (${claimClause.clause})`,
+    claimClause.params
   );
   return reader.getRowObjects() as unknown as ActiveContextItemRow[];
 }

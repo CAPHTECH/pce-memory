@@ -460,24 +460,11 @@ export function getDb(): DuckDBInstance {
 /**
  * コネクションを取得（非同期）
  * 単一コネクションを再利用してリーク防止
- * 無効なコネクションは自動的に再作成
  */
 export async function getConnection(): Promise<DuckDBConnection> {
   if (cachedConnection) {
-    try {
-      // コネクションが有効かを簡単なクエリで確認
-      await cachedConnection.runAndReadAll('SELECT 1');
-      return cachedConnectionProxy ?? createQueuedSharedConnection(cachedConnection);
-    } catch {
-      // コネクションが無効な場合は再作成
-      try {
-        cachedConnection.closeSync();
-      } catch {
-        // クローズエラーは無視
-      }
-      cachedConnection = null;
-      cachedConnectionProxy = null;
-    }
+    cachedConnectionProxy ??= createQueuedSharedConnection(cachedConnection);
+    return cachedConnectionProxy;
   }
   cachedConnection = await getDb().connect();
   cachedConnectionProxy = createQueuedSharedConnection(cachedConnection);
