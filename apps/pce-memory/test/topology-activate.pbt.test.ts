@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import { computeContentHash, type EmbeddingService } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
@@ -34,6 +34,7 @@ async function applyPolicy(): Promise<void> {
 }
 
 async function resetTopologyHarness(): Promise<void> {
+  setEmbeddingService(null);
   await resetDbAsync();
   resetMemoryState();
   resetLayerScopeState();
@@ -58,8 +59,13 @@ async function upsertKnowledge(text: string): Promise<string> {
   return result.structuredContent!.id as string;
 }
 
-beforeEach(async () => {
-  await resetTopologyHarness();
+afterEach(async () => {
+  setEmbeddingService(null);
+  await resetDbAsync();
+  resetMemoryState();
+  resetLayerScopeState();
+  process.env.PCE_DB = ':memory:';
+  process.env.PCE_RATE_CAP = '100';
 });
 
 describe('Property: topology-aware activate invariants', () => {

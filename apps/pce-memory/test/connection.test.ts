@@ -7,7 +7,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initDb, initSchema, resetDbAsync, closeDb, getConnection } from '../src/db/connection';
+import {
+  initDb,
+  initSchema,
+  resetDbAsync,
+  closeDb,
+  getConnection,
+  withWriteConnection,
+} from '../src/db/connection';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -164,5 +171,44 @@ describe('closeDb CHECKPOINT behavior', () => {
     expect(consoleSpy).toHaveBeenCalledWith('[DB] Checkpoint completed');
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('resetDbAsync queue draining', () => {
+  it('waits for queued writes to settle before tearing down DB state', async () => {
+    await initDb();
+    await initSchema();
+
+    let releaseWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+
+    const pendingWrite = withWriteConnection(async (conn) => {
+      await writeGate;
+      await conn.run(
+        "INSERT INTO claims (id, text, kind, scope, boundary_class, content_hash) VALUES ('queued-write', 'queued', 'fact', 'project', 'internal', 'sha256:queued-write')"
+      );
+    });
+
+    let resetCompleted = false;
+    const resetPromise = resetDbAsync().then(() => {
+      resetCompleted = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(resetCompleted).toBe(false);
+
+    releaseWrite();
+    await expect(pendingWrite).resolves.toBeUndefined();
+    await expect(resetPromise).resolves.toBeUndefined();
+
+    process.env.PCE_DB = ':memory:';
+    await initDb();
+    await initSchema();
+    const conn = await getConnection();
+    const result = await conn.runAndReadAll('SELECT 1 as val');
+    const rows = result.getRowObjects() as { val: number }[];
+    expect(rows[0].val).toBe(1);
   });
 });

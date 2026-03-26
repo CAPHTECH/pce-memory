@@ -88,7 +88,7 @@ let globalEmbeddingService: EmbeddingService | null = null;
  * EmbeddingServiceを設定
  * MCP server初期化時に呼び出す
  */
-export function setEmbeddingService(service: EmbeddingService): void {
+export function setEmbeddingService(service: EmbeddingService | null): void {
   globalEmbeddingService = service;
 }
 

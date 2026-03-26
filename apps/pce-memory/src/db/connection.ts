@@ -9,6 +9,17 @@ let sharedConnectionQueue: Promise<void> = Promise.resolve();
 let writeQueue: Promise<void> = Promise.resolve();
 const WORKING_STATE_STALE_AFTER_DAYS = 14;
 
+async function drainPendingQueues(): Promise<void> {
+  while (true) {
+    const sharedSnapshot = sharedConnectionQueue;
+    const writeSnapshot = writeQueue;
+    await Promise.allSettled([sharedSnapshot, writeSnapshot]);
+    if (sharedSnapshot === sharedConnectionQueue && writeSnapshot === writeQueue) {
+      return;
+    }
+  }
+}
+
 async function getTableColumns(
   conn: DuckDBConnection,
   tableName: string
@@ -585,6 +596,8 @@ export function resetDb(): void {
  * コネクションを適切にクローズしてからリセット
  */
 export async function resetDbAsync(): Promise<void> {
+  await drainPendingQueues();
+
   if (cachedConnection) {
     try {
       cachedConnection.closeSync();
@@ -617,6 +630,8 @@ export async function resetDbAsync(): Promise<void> {
  * - 複数回呼び出しても安全（冪等）
  */
 export async function closeDb(): Promise<void> {
+  await drainPendingQueues();
+
   if (cachedConnection) {
     try {
       // WALをDBファイルにフラッシュしてからクローズ

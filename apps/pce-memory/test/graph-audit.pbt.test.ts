@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import { computeContentHash } from '@pce/embeddings';
 import { initDb, initSchema, resetDbAsync } from '../src/db/connection';
@@ -6,11 +6,9 @@ import { upsertClaim } from '../src/store/claims';
 import { linkClaimEntity, upsertEntity } from '../src/store/entities';
 import { auditGraph } from '../src/store/graphAudit';
 
-beforeEach(async () => {
+afterEach(async () => {
   await resetDbAsync();
   process.env.PCE_DB = ':memory:';
-  await initDb();
-  await initSchema();
 });
 
 async function createClaim(text: string): Promise<string> {
