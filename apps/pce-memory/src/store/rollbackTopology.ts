@@ -115,7 +115,6 @@ interface EntityRelationRow {
   dst_id: string;
   type: string;
   evidence_claim_id: string | null;
-  relation_direction: 'forward' | 'reverse';
 }
 
 interface ClaimRow {
@@ -197,9 +196,12 @@ function normalizeScore(value: number | string | null | undefined): number {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function buildInClause(values: readonly string[]): { clause: string; params: string[] } {
+function buildInClause(
+  values: readonly string[],
+  startIndex: number = 1
+): { clause: string; params: string[] } {
   const params = [...values];
-  const clause = params.map((_, index) => `$${index + 1}`).join(',');
+  const clause = params.map((_, index) => `$${startIndex + index}`).join(',');
   return { clause, params };
 }
 
@@ -360,18 +362,26 @@ async function fetchClaimIdsByEntityIds(entityIds: readonly string[]): Promise<E
   );
 }
 
-async function fetchEntitiesByIds(entityIds: readonly string[]): Promise<EntityRow[]> {
-  if (entityIds.length === 0) {
+async function fetchEntitiesByIds(
+  entityIds: readonly string[],
+  claimIds: readonly string[]
+): Promise<EntityRow[]> {
+  if (entityIds.length === 0 || claimIds.length === 0) {
     return [];
   }
 
-  const { clause, params } = buildInClause(entityIds);
+  const { clause: entityClause, params: entityParams } = buildInClause(entityIds, 1);
+  const { clause: claimClause, params: claimParams } = buildInClause(
+    claimIds,
+    entityParams.length + 1
+  );
   return fetchRows<EntityRow>(
     `SELECT e.id, e.type, e.name, e.canonical_key, e.attrs, ce.claim_id
      FROM entities e
      INNER JOIN claim_entities ce ON ce.entity_id = e.id
-     WHERE e.id IN (${clause})`,
-    params
+     WHERE e.id IN (${entityClause})
+       AND ce.claim_id IN (${claimClause})`,
+    [...entityParams, ...claimParams]
   );
 }
 
@@ -382,8 +392,7 @@ async function fetchEntityRelations(entityIds: readonly string[]): Promise<Entit
 
   const { clause, params } = buildInClause(entityIds);
   return fetchRows<EntityRelationRow>(
-    `SELECT id, src_id, dst_id, type, evidence_claim_id,
-            CASE WHEN src_id IN (${clause}) THEN 'forward' ELSE 'reverse' END AS relation_direction
+    `SELECT id, src_id, dst_id, type, evidence_claim_id
      FROM relations
      WHERE src_id IN (${clause})
         OR dst_id IN (${clause})`,
@@ -439,16 +448,18 @@ function buildEntityPathSegment(input: {
   relatedEntityId: string;
   relation: EntityRelationRow;
   weight: number;
+  confidence: number;
+  relationDirection: 'forward' | 'reverse';
 }): RollbackTopologyPathSegment {
   return {
     kind: 'entity_relation',
     from_claim_id: input.fromClaimId,
     to_claim_id: input.toClaimId,
     weight: input.weight,
-    confidence: DEFAULT_ENTITY_PATH_CONFIDENCE,
+    confidence: input.confidence,
     relation_id: input.relation.id,
     relation_type: input.relation.type,
-    relation_direction: input.relation.relation_direction,
+    relation_direction: input.relationDirection,
     via_entity_ids: [input.seedEntityId, input.relatedEntityId],
   };
 }
@@ -667,6 +678,7 @@ export async function collectRollbackTopologyBlastRadius(
           }
 
           const relatedEntityId = relation.src_id === seedEntityId ? relation.dst_id : relation.src_id;
+          const relationDirection = relation.src_id === seedEntityId ? 'forward' : 'reverse';
           const claimIds = claimIdsByEntityId.get(relatedEntityId) ?? [];
           for (const nextClaimId of claimIds) {
             if (nextClaimId === state.claimId || nextClaimId === rootClaim.id) {
@@ -682,6 +694,8 @@ export async function collectRollbackTopologyBlastRadius(
                 relatedEntityId,
                 relation,
                 weight: entityPathWeight,
+                confidence: entityPathConfidence,
+                relationDirection,
               }),
             ];
             const proposal: RollbackTopologyProposal = {
@@ -741,7 +755,8 @@ export async function collectRollbackTopologyBlastRadius(
   const impactedClaimIds = [rootClaim.id, ...connectedClaimIds];
 
   const linkedEntityRows = await fetchEntitiesByIds(
-    [...new Set((await fetchClaimEntities(impactedClaimIds)).map((row) => row.entity_id))]
+    [...new Set((await fetchClaimEntities(impactedClaimIds)).map((row) => row.entity_id))],
+    impactedClaimIds
   );
   const linkedEntitiesById = new Map<string, RollbackTopologyLinkedEntity>();
   for (const row of linkedEntityRows) {

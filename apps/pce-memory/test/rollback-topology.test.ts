@@ -43,6 +43,7 @@ describe('collectRollbackTopologyBlastRadius', () => {
     await upsertEntity({ id: 'ent_superseded', type: 'Concept', name: 'Old Entity' });
     await upsertEntity({ id: 'ent_entity', type: 'Artifact', name: 'Bridge Entity' });
     await upsertEntity({ id: 'ent_unrelated', type: 'Concept', name: 'Unrelated Entity' });
+    await upsertEntity({ id: 'ent_shared', type: 'Concept', name: 'Shared Entity' });
 
     await linkClaimEntity(root.id, 'ent_root');
     await linkClaimEntity(support.id, 'ent_support');
@@ -50,6 +51,8 @@ describe('collectRollbackTopologyBlastRadius', () => {
     await linkClaimEntity(superseded.id, 'ent_superseded');
     await linkClaimEntity(entityClaim.id, 'ent_entity');
     await linkClaimEntity(unrelated.id, 'ent_unrelated');
+    await linkClaimEntity(root.id, 'ent_shared');
+    await linkClaimEntity(unrelated.id, 'ent_shared');
 
     await upsertClaimLink({
       source_claim_id: support.id,
@@ -207,8 +210,18 @@ describe('collectRollbackTopologyBlastRadius', () => {
     expect(result.neighborhoods.supersession.map((item) => item.claim.id)).toContain(superseded.id);
 
     expect(result.linked_entities.map((item) => item.entity.id)).toEqual(
-      expect.arrayContaining(['ent_root', 'ent_support', 'ent_conflict', 'ent_superseded', 'ent_entity'])
+      expect.arrayContaining([
+        'ent_root',
+        'ent_support',
+        'ent_conflict',
+        'ent_superseded',
+        'ent_entity',
+        'ent_shared',
+      ])
     );
+    const sharedEntity = result.linked_entities.find((item) => item.entity.id === 'ent_shared');
+    expect(sharedEntity?.claim_ids).toEqual(expect.arrayContaining([root.id]));
+    expect(sharedEntity?.claim_ids).not.toContain(unrelated.id);
 
     expect(result.affected_active_contexts.map((item) => item.active_context_id)).toEqual(
       expect.arrayContaining(['ac_rollback_1', 'ac_rollback_2'])
@@ -218,11 +231,71 @@ describe('collectRollbackTopologyBlastRadius', () => {
     expect(result.summary).toEqual(
       expect.objectContaining({
         connected_claims: 4,
-        linked_entities: 5,
+        linked_entities: 6,
         affected_active_contexts: 2,
         support: 4,
         conflict: 1,
         supersession: 1,
+      })
+    );
+  });
+
+  it('records entity path metadata with actual traversal confidence and direction', async () => {
+    const root = await createClaim('root traversal claim', 'sha256:rollback-traversal-root');
+    const forward = await createClaim('forward traversal claim', 'sha256:rollback-traversal-forward');
+    const reverse = await createClaim('reverse traversal claim', 'sha256:rollback-traversal-reverse');
+
+    await upsertEntity({ id: 'ent_traversal_root', type: 'Artifact', name: 'Traversal Root' });
+    await upsertEntity({ id: 'ent_traversal_forward', type: 'Concept', name: 'Traversal Forward' });
+    await upsertEntity({ id: 'ent_traversal_reverse', type: 'Concept', name: 'Traversal Reverse' });
+
+    await linkClaimEntity(root.id, 'ent_traversal_root');
+    await linkClaimEntity(forward.id, 'ent_traversal_forward');
+    await linkClaimEntity(reverse.id, 'ent_traversal_reverse');
+
+    await upsertRelation({
+      id: 'rel_traversal_forward',
+      src_id: 'ent_traversal_root',
+      dst_id: 'ent_traversal_forward',
+      type: 'DEPENDS_ON',
+      evidence_claim_id: root.id,
+    });
+    await upsertRelation({
+      id: 'rel_traversal_reverse',
+      src_id: 'ent_traversal_reverse',
+      dst_id: 'ent_traversal_root',
+      type: 'DEPENDS_ON',
+      evidence_claim_id: reverse.id,
+    });
+
+    const result = await collectRollbackTopologyBlastRadius(root.id, {
+      includePaths: true,
+      entityPathWeight: 0.4,
+      entityPathConfidence: 0.25,
+      maxHops: 1,
+    });
+
+    const forwardRecord = result.connected_claims.find((item) => item.claim.id === forward.id);
+    const reverseRecord = result.connected_claims.find((item) => item.claim.id === reverse.id);
+
+    expect(forwardRecord?.source).toBe('entity_graph');
+    expect(reverseRecord?.source).toBe('entity_graph');
+    expect(forwardRecord?.path[0]).toEqual(
+      expect.objectContaining({
+        kind: 'entity_relation',
+        confidence: 0.25,
+        weight: 0.4,
+        relation_direction: 'forward',
+        via_entity_ids: ['ent_traversal_root', 'ent_traversal_forward'],
+      })
+    );
+    expect(reverseRecord?.path[0]).toEqual(
+      expect.objectContaining({
+        kind: 'entity_relation',
+        confidence: 0.25,
+        weight: 0.4,
+        relation_direction: 'reverse',
+        via_entity_ids: ['ent_traversal_root', 'ent_traversal_reverse'],
       })
     );
   });

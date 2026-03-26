@@ -20,6 +20,7 @@ export interface GraphAuditOptions {
   repeatedCoactivationThreshold?: number;
   genericHubDegreeThreshold?: number;
   maxFindingsPerKind?: number;
+  scanLimit?: number;
 }
 
 export interface GraphAuditFinding {
@@ -53,10 +54,18 @@ export interface GraphAuditSummary {
   scope_holes: number;
   repeated_coactivations: number;
   generic_hubs: number;
+  truncated?: boolean;
+}
+
+export interface GraphAuditTruncation {
+  claims: boolean;
+  entities: boolean;
+  relations: boolean;
 }
 
 export interface GraphAuditReport {
   summary: GraphAuditSummary;
+  truncation: GraphAuditTruncation;
   findings: GraphAuditFinding[];
   components: GraphAuditComponent[];
 }
@@ -92,6 +101,7 @@ const DEFAULT_MIN_SUPERSESSION_CHAIN_LENGTH = 3;
 const DEFAULT_REPEATED_COACTIVATION_THRESHOLD = 3;
 const DEFAULT_GENERIC_HUB_DEGREE_THRESHOLD = 4;
 const DEFAULT_MAX_FINDINGS_PER_KIND = 20;
+const DEFAULT_SCAN_LIMIT = 100_000;
 
 const GENERIC_LABELS = new Set([
   'general',
@@ -264,16 +274,26 @@ export async function auditGraph(
   const genericHubDegreeThreshold =
     options.genericHubDegreeThreshold ?? DEFAULT_GENERIC_HUB_DEGREE_THRESHOLD;
   const maxFindingsPerKind = options.maxFindingsPerKind ?? DEFAULT_MAX_FINDINGS_PER_KIND;
+  const scanLimit =
+    typeof options.scanLimit === 'number' && Number.isFinite(options.scanLimit) && options.scanLimit > 0
+      ? Math.floor(options.scanLimit)
+      : DEFAULT_SCAN_LIMIT;
 
-  const [claims, entities, relations, claimLinks, claimEntities, activeContextItems] =
+  const [claimsLoaded, entitiesLoaded, relationsLoaded, claimLinks, claimEntities, activeContextItems] =
     await Promise.all([
-      listClaimsByFilter({ includeInactive: true, limit: 100_000 }),
-      listAllEntities(100_000),
-      listAllRelations(100_000),
+      listClaimsByFilter({ includeInactive: true, limit: scanLimit + 1 }),
+      listAllEntities(scanLimit + 1),
+      listAllRelations(scanLimit + 1),
       readClaimLinks(),
       readClaimEntities(),
       readActiveContextItems(),
     ]);
+  const claimsTruncated = claimsLoaded.length > scanLimit;
+  const entitiesTruncated = entitiesLoaded.length > scanLimit;
+  const relationsTruncated = relationsLoaded.length > scanLimit;
+  const claims = claimsLoaded.slice(0, scanLimit);
+  const entities = entitiesLoaded.slice(0, scanLimit);
+  const relations = relationsLoaded.slice(0, scanLimit);
 
   const claimsById = new Map(claims.map((claim) => [claim.id, claim]));
   const entitiesById = new Map(entities.map((entity) => [entity.id, entity]));
@@ -364,7 +384,7 @@ export async function auditGraph(
     }
   }
 
-  const components = buildComponents(claims, claimAdjacency);
+  const components = buildComponents(claimsById, claimAdjacency);
   const orphanClaims = claims.filter(
     (claim) =>
       (claimAdjacency.get(claim.id)?.size ?? 0) === 0 &&
@@ -459,6 +479,12 @@ export async function auditGraph(
       scope_holes: scopeHoleFindings.length,
       repeated_coactivations: repeatedCoactivationFindings.length,
       generic_hubs: genericHubFindings.length,
+      truncated: claimsTruncated || entitiesTruncated || relationsTruncated,
+    },
+    truncation: {
+      claims: claimsTruncated,
+      entities: entitiesTruncated,
+      relations: relationsTruncated,
     },
     findings,
     components,
@@ -488,13 +514,13 @@ async function readActiveContextItems(): Promise<ActiveContextItemRow[]> {
 }
 
 function buildComponents(
-  claims: Claim[],
+  claimsById: Map<string, Claim>,
   adjacency: Map<string, Set<string>>
 ): GraphAuditComponent[] {
   const visited = new Set<string>();
   const components: GraphAuditComponent[] = [];
 
-  for (const claim of claims) {
+  for (const claim of claimsById.values()) {
     if (visited.has(claim.id)) {
       continue;
     }
@@ -519,7 +545,7 @@ function buildComponents(
     }
 
     const scopeCounts = members.reduce<Record<string, number>>((acc, claimId) => {
-      const scope = claims.find((item) => item.id === claimId)?.scope ?? 'unknown';
+      const scope = claimsById.get(claimId)?.scope ?? 'unknown';
       acc[scope] = (acc[scope] ?? 0) + 1;
       return acc;
     }, {});

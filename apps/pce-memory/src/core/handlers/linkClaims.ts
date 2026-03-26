@@ -7,7 +7,9 @@
 import {
   createToolResult,
   err,
-  validateRequiredProvenance,
+  ProvenanceValidationError,
+  requireValidatedProvenance,
+  toStructuredProvenance,
   type ToolResult,
 } from './shared.js';
 import { findClaimById } from '../../store/claims.js';
@@ -114,11 +116,7 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
         };
       }
 
-      const validated = validateRequiredProvenance(provenance);
-      if (!validated.ok) {
-        throw new Error(validated.message);
-      }
-      return validated.value;
+      return requireValidatedProvenance(provenance);
     })();
 
     const [sourceClaim, targetClaim] = await Promise.all([
@@ -153,7 +151,7 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
       link_type,
       ...(typeof confidence === 'number' ? { confidence } : {}),
       ...(typeof evidence_claim_id === 'string' ? { evidence_claim_id } : {}),
-      provenance: resolvedProvenance as unknown as Record<string, unknown>,
+      provenance: toStructuredProvenance(resolvedProvenance),
       created_by: 'client',
     });
 
@@ -183,7 +181,7 @@ export async function handleLinkClaims(args: Record<string, unknown>): Promise<T
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    if (message.includes('provenance.at')) {
+    if (e instanceof ProvenanceValidationError) {
       return createToolResult(
         { ...err('VALIDATION_ERROR', message, reqId), trace_id: traceId },
         { isError: true }

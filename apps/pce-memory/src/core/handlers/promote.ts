@@ -12,6 +12,7 @@ import {
   validateRequiredProvenance,
   acquirePromotionLock,
   getPromotionCandidateConflictMessage,
+  PromotionConflictValidationError,
   parseJsonObject,
   isDurableScope,
   isDurableBoundaryClass,
@@ -291,7 +292,7 @@ export async function handlePromote(args: Record<string, unknown>) {
 
         const promotedClaimConflict = getPromotionCandidateConflictMessage(candidate, claim);
         if (promotedClaimConflict) {
-          throw new Error(promotedClaimConflict);
+          throw new PromotionConflictValidationError(promotedClaimConflict);
         }
 
         if (isNew) {
@@ -428,7 +429,11 @@ export async function handlePromote(args: Record<string, unknown>) {
     return createToolResult(
       {
         ...err(
-          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION' ? 'VALIDATION_ERROR' : 'DB_ERROR',
+          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION'
+            ? 'VALIDATION_ERROR'
+            : e instanceof PromotionConflictValidationError
+              ? 'VALIDATION_ERROR'
+              : 'DB_ERROR',
           msg,
           reqId
         ),

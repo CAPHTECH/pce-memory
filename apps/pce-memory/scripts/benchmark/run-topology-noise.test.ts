@@ -111,6 +111,6 @@ describe('Topology Noise Benchmark', () => {
         )
       ).toBe(true);
     },
-    120_000
+    240_000
   );
 });

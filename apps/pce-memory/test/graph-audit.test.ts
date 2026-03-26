@@ -220,4 +220,21 @@ describe('auditGraph', () => {
 
     expect(orphanFindings).toHaveLength(1);
   });
+
+  it('signals truncation when the scan limit is exceeded', async () => {
+    await createClaim('Truncated claim 1');
+    await createClaim('Truncated claim 2');
+
+    const report = await auditGraph({ scanLimit: 1 });
+
+    expect(report.truncation).toEqual(
+      expect.objectContaining({
+        claims: true,
+        entities: false,
+        relations: false,
+      })
+    );
+    expect(report.summary.truncated).toBe(true);
+    expect(report.summary.claims).toBe(1);
+  });
 });

@@ -182,9 +182,24 @@ describe('Output Schema - ハンドラ出力検証', () => {
     await dispatchTool('pce_memory_policy_apply', {});
 
     const result = await dispatchTool('pce_memory_graph_audit', {});
-    const data = result.structuredContent!;
+    const data = result.structuredContent! as {
+      summary: { claims: number };
+      truncation: { claims: boolean; entities: boolean; relations: boolean };
+      findings: unknown[];
+      components: unknown[];
+      policy_version: string;
+      state: string;
+      request_id: string;
+      trace_id: string;
+    };
 
     expect(data.summary).toBeDefined();
+    expect(typeof data.summary.truncated === 'boolean' || data.summary.truncated === undefined).toBe(
+      true
+    );
+    expect(typeof data.truncation.claims).toBe('boolean');
+    expect(typeof data.truncation.entities).toBe('boolean');
+    expect(typeof data.truncation.relations).toBe('boolean');
     expect(Array.isArray(data.findings)).toBe(true);
     expect(Array.isArray(data.components)).toBe(true);
     expect(data.policy_version).toBeDefined();

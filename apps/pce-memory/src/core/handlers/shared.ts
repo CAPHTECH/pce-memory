@@ -166,6 +166,24 @@ export function validateProvenanceAt(
   return { ok: true, value };
 }
 
+export class ProvenanceValidationError extends Error {
+  readonly code = 'PROVENANCE_VALIDATION';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProvenanceValidationError';
+  }
+}
+
+export class PromotionConflictValidationError extends Error {
+  readonly code = 'PROMOTION_CONFLICT';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'PromotionConflictValidationError';
+  }
+}
+
 export function hasPathTraversal(value: string): boolean {
   const raw = value.replace(/\\/g, '/');
   const decoded = (() => {
@@ -808,6 +826,34 @@ export function validateRequiredProvenance(
     return { ok: false, message: 'provenance.at cannot be in the future' };
   }
   return { ok: true, value: { ...candidate, at: new Date(atMs).toISOString() } };
+}
+
+export function requireValidatedProvenance(provenance: unknown): Provenance {
+  const validated = validateRequiredProvenance(provenance);
+  if (!validated.ok) {
+    throw new ProvenanceValidationError(validated.message);
+  }
+  return validated.value;
+}
+
+export function toStructuredProvenance(provenance: Provenance): Record<string, unknown> {
+  return {
+    at: provenance.at,
+    ...(provenance.actor ? { actor: provenance.actor } : {}),
+    ...(provenance.git
+      ? {
+          git: {
+            ...(provenance.git.commit ? { commit: provenance.git.commit } : {}),
+            ...(provenance.git.repo ? { repo: provenance.git.repo } : {}),
+            ...(provenance.git.url ? { url: provenance.git.url } : {}),
+            ...(provenance.git.files ? { files: [...provenance.git.files] } : {}),
+          },
+        }
+      : {}),
+    ...(provenance.url ? { url: provenance.url } : {}),
+    ...(provenance.note ? { note: provenance.note } : {}),
+    ...(provenance.signed !== undefined ? { signed: provenance.signed } : {}),
+  };
 }
 
 export function resolveObservationSourceText(input: {

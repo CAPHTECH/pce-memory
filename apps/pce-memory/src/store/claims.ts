@@ -218,6 +218,9 @@ export async function upsertClaim(
       const rolledBack = parseClaimsProvenance(normalizeRowsTimestamps(rawRolledBack));
       if (rolledBack.length > 0 && rolledBack[0]) {
         const revived = rolledBack[0];
+        if (revived.text !== c.text) {
+          throw new ContentHashCollisionError();
+        }
         const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
         const memoryType = c.memory_type ?? null;
         const status = c.status ?? 'active';
@@ -575,37 +578,22 @@ export async function markStaleWorkingStateClaims(
        )`
     : '';
 
-  const claimIds = await withDedicatedConnection(async (conn) => {
-    const reader = await conn.runAndReadAll(
+  return withWriteConnection(async (writeConn) => {
+    const reader = await writeConn.runAndReadAll(
       `
-        SELECT c.id
-        FROM claims c
+        UPDATE claims c
+        SET status = 'stale',
+            updated_at = CURRENT_TIMESTAMP
         WHERE c.memory_type = 'working_state'
           AND COALESCE(c.status, 'active') = 'active'
           AND COALESCE(c.recency_anchor, c.created_at) < CURRENT_TIMESTAMP - INTERVAL '${staleAfterDays} days'
           ${recentFeedbackGuard}
+        RETURNING id
       `
     );
     const rows = reader.getRowObjects() as Array<{ id: string }>;
     return rows.map((row) => row.id);
   });
-
-  if (claimIds.length === 0) {
-    return [];
-  }
-
-  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
-  await withWriteConnection(async (writeConn) => {
-    await writeConn.run(
-      `UPDATE claims
-       SET status = 'stale',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id IN (${placeholders})`,
-      claimIds
-    );
-  });
-
-  return claimIds;
 }
 
 export interface RollbackClaimInput {

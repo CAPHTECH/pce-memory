@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { defaultPolicy, parsePolicy, validatePolicy } from '../src/index';
 
+function cloneDefaultPolicy(): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(defaultPolicy)) as Record<string, unknown>;
+}
+
 describe('topology policy validation', () => {
   it('accepts topology policy blocks during parse', () => {
     const result = parsePolicy(`
@@ -53,7 +57,7 @@ retrieval:
   });
 
   it('rejects invalid topology direction and action values', () => {
-    const policy = structuredClone(defaultPolicy) as Record<string, unknown>;
+    const policy = cloneDefaultPolicy();
     policy['retrieval'] = {
       hybrid: {
         topology: {
@@ -77,5 +81,59 @@ retrieval:
         expect.stringContaining('topology.edge_policy.contradicts.action'),
       ])
     );
+  });
+
+  it('rejects array-shaped retrieval and unknown topology keys', () => {
+    const policy = cloneDefaultPolicy();
+    policy['retrieval'] = [];
+
+    const arrayResult = validatePolicy(policy);
+    expect(arrayResult.ok).toBe(false);
+    expect(arrayResult.errors).toEqual(expect.arrayContaining(['retrieval must be object']));
+
+    const nestedPolicy = cloneDefaultPolicy();
+    nestedPolicy['retrieval'] = {
+      hybrid: {
+        topology: {
+          max_hops: 3,
+          seed_k: 1.5,
+          hop_decay: 1.5,
+          extra_key: true,
+          edge_policy: {
+            supports: {
+              weight: 0.9,
+              direction: 'forward',
+              action: 'boost',
+              unknown: true,
+            },
+            typo: {
+              action: 'boost',
+            },
+          },
+        },
+      },
+    };
+
+    const nestedResult = validatePolicy(nestedPolicy);
+    expect(nestedResult.ok).toBe(false);
+    expect(nestedResult.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('retrieval.hybrid.topology.extra_key'),
+        expect.stringContaining('topology.max_hops must be between 0 and 2'),
+        expect.stringContaining('topology.seed_k must be integer'),
+        expect.stringContaining('topology.hop_decay must be greater than 0 and at most 1'),
+        expect.stringContaining('topology.edge_policy.supports.unknown'),
+        expect.stringContaining('topology.edge_policy.typo is not allowed'),
+      ])
+    );
+  });
+
+  it('rejects array-shaped boundary blocks', () => {
+    const policy = cloneDefaultPolicy();
+    policy['boundary'] = [];
+
+    const result = validatePolicy(policy);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining(['boundary must be object']));
   });
 });

@@ -6,7 +6,14 @@ import { describe, it, expect } from 'vitest';
 import * as E from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { PCEMemory, stateError } from '../src/domain/stateMachine';
-import type { ClaimInput, ActivateInput, FeedbackInput } from '../src/domain/stateMachine';
+import type {
+  ClaimInput,
+  ActivateInput,
+  FeedbackInput,
+  HasClaims,
+  PolicyApplied,
+  Ready,
+} from '../src/domain/stateMachine';
 import { domainError } from '../src/domain/errors';
 
 describe('PCEMemory.applyPolicy', () => {
@@ -63,7 +70,7 @@ describe('PCEMemory.upsert', () => {
     });
     const upsertFn = () => TE.right({ id: 'clm_001', isNew: true });
 
-    const result = await (machine as PCEMemory<any>).upsert(claimInput, upsertFn)();
+    const result = await (machine as PCEMemory<PolicyApplied>).upsert(claimInput, upsertFn)();
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
       expect(result.right.result.id).toBe('clm_001');
@@ -82,7 +89,7 @@ describe('PCEMemory.upsert', () => {
     });
     const upsertFn = () => TE.right({ id: 'clm_002', isNew: false });
 
-    const result = await (machine as PCEMemory<any>).upsert(claimInput, upsertFn)();
+    const result = await (machine as PCEMemory<PolicyApplied>).upsert(claimInput, upsertFn)();
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
       expect(result.right.machine.getClaimCount()).toBe(5);
@@ -97,7 +104,7 @@ describe('PCEMemory.upsert', () => {
     });
     const upsertFn = () => TE.right({ id: 'clm_003', isNew: true });
 
-    const result = await (machine as PCEMemory<any>).upsert(claimInput, upsertFn)();
+    const result = await (machine as PCEMemory<PolicyApplied>).upsert(claimInput, upsertFn)();
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
       expect(result.right.machine.getClaimCount()).toBe(4);
@@ -111,7 +118,7 @@ describe('PCEMemory.upsert', () => {
     });
     const upsertFn = () => TE.left(domainError('UPSERT_FAILED', 'db error'));
 
-    const result = await (machine as PCEMemory<any>).upsert(claimInput, upsertFn)();
+    const result = await (machine as PCEMemory<PolicyApplied>).upsert(claimInput, upsertFn)();
     expect(E.isLeft(result)).toBe(true);
     if (E.isLeft(result)) {
       expect(result.left.code).toBe('UPSERT_FAILED');
@@ -125,7 +132,7 @@ describe('PCEMemory.upsert', () => {
     });
     const upsertFn = () => TE.right({ id: 'clm_dup', isNew: false });
 
-    const result = await (machine as PCEMemory<any>).upsert(claimInput, upsertFn)();
+    const result = await (machine as PCEMemory<PolicyApplied>).upsert(claimInput, upsertFn)();
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
       // Math.max(0, 1) = 1 for first duplicate from PolicyApplied (count=0)
@@ -149,7 +156,7 @@ describe('PCEMemory.activate', () => {
     });
     const activateFn = () => TE.right({ id: 'ac_001', claims: [{ id: 'clm_1' }] });
 
-    const result = await (machine as PCEMemory<any>).activate(activateInput, activateFn)();
+    const result = await (machine as PCEMemory<HasClaims>).activate(activateInput, activateFn)();
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
       expect(result.right.result.activeContextId).toBe('ac_001');
@@ -168,7 +175,7 @@ describe('PCEMemory.activate', () => {
     });
     const activateFn = () => TE.left(domainError('ACTIVATE_FAILED', 'search error'));
 
-    const result = await (machine as PCEMemory<any>).activate(activateInput, activateFn)();
+    const result = await (machine as PCEMemory<HasClaims>).activate(activateInput, activateFn)();
     expect(E.isLeft(result)).toBe(true);
   });
 });
@@ -187,7 +194,7 @@ describe('PCEMemory.feedback', () => {
     });
     const feedbackFn = () => TE.right({ id: 'fb_001' });
 
-    const result = await (machine as PCEMemory<any>).feedback(feedbackInput, feedbackFn)();
+    const result = await (machine as PCEMemory<Ready>).feedback(feedbackInput, feedbackFn)();
     expect(E.isRight(result)).toBe(true);
     if (E.isRight(result)) {
       expect(result.right.result.id).toBe('fb_001');
@@ -205,7 +212,7 @@ describe('PCEMemory.feedback', () => {
     });
     const feedbackFn = () => TE.left(domainError('FEEDBACK_FAILED', 'not found'));
 
-    const result = await (machine as PCEMemory<any>).feedback(feedbackInput, feedbackFn)();
+    const result = await (machine as PCEMemory<Ready>).feedback(feedbackInput, feedbackFn)();
     expect(E.isLeft(result)).toBe(true);
   });
 });
