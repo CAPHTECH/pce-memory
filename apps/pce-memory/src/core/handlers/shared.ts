@@ -837,19 +837,19 @@ export function requireValidatedProvenance(provenance: unknown): Provenance {
 export function toStructuredProvenance(provenance: Provenance): Record<string, unknown> {
   return {
     at: provenance.at,
-    ...(provenance.actor ? { actor: provenance.actor } : {}),
-    ...(provenance.git
+    ...(provenance.actor !== undefined ? { actor: provenance.actor } : {}),
+    ...(provenance.git !== undefined
       ? {
           git: {
-            ...(provenance.git.commit ? { commit: provenance.git.commit } : {}),
-            ...(provenance.git.repo ? { repo: provenance.git.repo } : {}),
-            ...(provenance.git.url ? { url: provenance.git.url } : {}),
-            ...(provenance.git.files ? { files: [...provenance.git.files] } : {}),
+            ...(provenance.git.commit !== undefined ? { commit: provenance.git.commit } : {}),
+            ...(provenance.git.repo !== undefined ? { repo: provenance.git.repo } : {}),
+            ...(provenance.git.url !== undefined ? { url: provenance.git.url } : {}),
+            ...(provenance.git.files !== undefined ? { files: [...provenance.git.files] } : {}),
           },
         }
       : {}),
-    ...(provenance.url ? { url: provenance.url } : {}),
-    ...(provenance.note ? { note: provenance.note } : {}),
+    ...(provenance.url !== undefined ? { url: provenance.url } : {}),
+    ...(provenance.note !== undefined ? { note: provenance.note } : {}),
     ...(provenance.signed !== undefined ? { signed: provenance.signed } : {}),
   };
 }

@@ -7,7 +7,22 @@ let cachedConnection: DuckDBConnection | null = null;
 let cachedConnectionProxy: DuckDBConnection | null = null;
 let sharedConnectionQueue: Promise<void> = Promise.resolve();
 let writeQueue: Promise<void> = Promise.resolve();
+let connectionTransitionCount = 0;
 const WORKING_STATE_STALE_AFTER_DAYS = 14;
+
+function assertConnectionAvailable(): void {
+  if (connectionTransitionCount > 0) {
+    throw new Error('Database connection is shutting down');
+  }
+}
+
+function beginConnectionTransition(): void {
+  connectionTransitionCount += 1;
+}
+
+function endConnectionTransition(): void {
+  connectionTransitionCount = Math.max(0, connectionTransitionCount - 1);
+}
 
 async function drainPendingQueues(): Promise<void> {
   while (true) {
@@ -440,6 +455,7 @@ async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> 
  * 起動時に一度だけ呼び出す
  */
 export async function initDb(): Promise<DuckDBInstance> {
+  assertConnectionAvailable();
   if (instance) return instance;
   const dbPath = process.env['PCE_DB'] ?? ':memory:';
   instance = await DuckDBInstance.create(dbPath);
@@ -457,11 +473,12 @@ export function getDb(): DuckDBInstance {
   return instance;
 }
 
-/**
- * コネクションを取得（非同期）
- * 単一コネクションを再利用してリーク防止
- */
-export async function getConnection(): Promise<DuckDBConnection> {
+async function getConnectionInternal(
+  options: { allowDuringTransition?: boolean } = {}
+): Promise<DuckDBConnection> {
+  if (!options.allowDuringTransition) {
+    assertConnectionAvailable();
+  }
   if (cachedConnection) {
     cachedConnectionProxy ??= createQueuedSharedConnection(cachedConnection);
     return cachedConnectionProxy;
@@ -471,9 +488,21 @@ export async function getConnection(): Promise<DuckDBConnection> {
   return cachedConnectionProxy;
 }
 
-export async function withDedicatedConnection<T>(
-  operation: (connection: DuckDBConnection) => Promise<T>
+/**
+ * コネクションを取得（非同期）
+ * 単一コネクションを再利用してリーク防止
+ */
+export async function getConnection(): Promise<DuckDBConnection> {
+  return getConnectionInternal();
+}
+
+async function withDedicatedConnectionInternal<T>(
+  operation: (connection: DuckDBConnection) => Promise<T>,
+  options: { allowDuringTransition?: boolean } = {}
 ): Promise<T> {
+  if (!options.allowDuringTransition) {
+    assertConnectionAvailable();
+  }
   const connection = await getDb().connect();
   try {
     return await operation(connection);
@@ -486,7 +515,14 @@ export async function withDedicatedConnection<T>(
   }
 }
 
+export async function withDedicatedConnection<T>(
+  operation: (connection: DuckDBConnection) => Promise<T>
+): Promise<T> {
+  return withDedicatedConnectionInternal(operation);
+}
+
 function enqueueSharedConnection<T>(operation: () => Promise<T>): Promise<T> {
+  assertConnectionAvailable();
   const result = sharedConnectionQueue.then(operation);
   sharedConnectionQueue = result.then(
     () => {},
@@ -513,6 +549,7 @@ function createQueuedSharedConnection(connection: DuckDBConnection): DuckDBConne
 }
 
 function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+  assertConnectionAvailable();
   const result = writeQueue.then(operation);
   writeQueue = result.then(
     () => {},
@@ -524,14 +561,16 @@ function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
 export function withWriteConnection<T>(
   operation: (connection: DuckDBConnection) => Promise<T>
 ): Promise<T> {
-  return enqueueWrite(() => withDedicatedConnection(operation));
+  return enqueueWrite(() =>
+    withDedicatedConnectionInternal(operation, { allowDuringTransition: true })
+  );
 }
 
 export function withQueuedConnection<T>(
   operation: (connection: DuckDBConnection) => Promise<T>
 ): Promise<T> {
   return enqueueWrite(async () => {
-    const connection = await getConnection();
+    const connection = await getConnectionInternal({ allowDuringTransition: true });
     return operation(connection);
   });
 }
@@ -583,27 +622,32 @@ export function resetDb(): void {
  * コネクションを適切にクローズしてからリセット
  */
 export async function resetDbAsync(): Promise<void> {
-  await drainPendingQueues();
+  beginConnectionTransition();
+  try {
+    await drainPendingQueues();
 
-  if (cachedConnection) {
-    try {
-      cachedConnection.closeSync();
-    } catch {
-      // クローズエラーは無視（既にクローズされている可能性）
+    if (cachedConnection) {
+      try {
+        cachedConnection.closeSync();
+      } catch {
+        // クローズエラーは無視（既にクローズされている可能性）
+      }
     }
-  }
-  cachedConnectionProxy = null;
-  cachedConnection = null;
-  sharedConnectionQueue = Promise.resolve();
-  writeQueue = Promise.resolve();
-  if (instance) {
-    try {
-      instance.closeSync();
-    } catch {
-      // クローズエラーは無視
+    cachedConnectionProxy = null;
+    cachedConnection = null;
+    sharedConnectionQueue = Promise.resolve();
+    writeQueue = Promise.resolve();
+    if (instance) {
+      try {
+        instance.closeSync();
+      } catch {
+        // クローズエラーは無視
+      }
     }
+    instance = null;
+  } finally {
+    endConnectionTransition();
   }
-  instance = null;
 }
 
 /**
@@ -617,44 +661,49 @@ export async function resetDbAsync(): Promise<void> {
  * - 複数回呼び出しても安全（冪等）
  */
 export async function closeDb(): Promise<void> {
-  await drainPendingQueues();
+  beginConnectionTransition();
+  try {
+    await drainPendingQueues();
 
-  if (cachedConnection) {
-    try {
-      // WALをDBファイルにフラッシュしてからクローズ
-      // これにより、シャットダウン後の再起動時にWALリプレイ問題を回避
-      await cachedConnection.run('CHECKPOINT');
-      console.error('[DB] Checkpoint completed');
-    } catch (err) {
-      // :memory:DBの場合はCHECKPOINT不要なのでスキップ扱い
-      // ファイルベースDBの場合はデータ永続化に影響する可能性があるため警告
-      const dbPath = process.env['PCE_DB'] ?? ':memory:';
-      if (dbPath === ':memory:') {
-        // in-memory DBではCHECKPOINTは不要（WALが存在しない）
-      } else {
-        console.error(
-          `[DB] Checkpoint failed (non-fatal, data may not be fully persisted): ${err}`
-        );
+    if (cachedConnection) {
+      try {
+        // WALをDBファイルにフラッシュしてからクローズ
+        // これにより、シャットダウン後の再起動時にWALリプレイ問題を回避
+        await cachedConnection.run('CHECKPOINT');
+        console.error('[DB] Checkpoint completed');
+      } catch (err) {
+        // :memory:DBの場合はCHECKPOINT不要なのでスキップ扱い
+        // ファイルベースDBの場合はデータ永続化に影響する可能性があるため警告
+        const dbPath = process.env['PCE_DB'] ?? ':memory:';
+        if (dbPath === ':memory:') {
+          // in-memory DBではCHECKPOINTは不要（WALが存在しない）
+        } else {
+          console.error(
+            `[DB] Checkpoint failed (non-fatal, data may not be fully persisted): ${err}`
+          );
+        }
+      }
+
+      try {
+        cachedConnection.closeSync();
+      } catch (err) {
+        console.error(`[DB] Failed to close connection: ${err}`);
+      }
+      cachedConnectionProxy = null;
+      cachedConnection = null;
+    }
+    sharedConnectionQueue = Promise.resolve();
+    writeQueue = Promise.resolve();
+
+    if (instance) {
+      try {
+        instance.closeSync();
+      } catch {
+        // クローズエラーは無視
       }
     }
-
-    try {
-      cachedConnection.closeSync();
-    } catch (err) {
-      console.error(`[DB] Failed to close connection: ${err}`);
-    }
-    cachedConnectionProxy = null;
-    cachedConnection = null;
+    instance = null;
+  } finally {
+    endConnectionTransition();
   }
-  sharedConnectionQueue = Promise.resolve();
-  writeQueue = Promise.resolve();
-
-  if (instance) {
-    try {
-      instance.closeSync();
-    } catch {
-      // クローズエラーは無視
-    }
-  }
-  instance = null;
 }

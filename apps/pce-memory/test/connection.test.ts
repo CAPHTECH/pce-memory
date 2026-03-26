@@ -211,4 +211,34 @@ describe('resetDbAsync queue draining', () => {
     const rows = result.getRowObjects() as { val: number }[];
     expect(rows[0].val).toBe(1);
   });
+
+  it('rejects new queued work while resetDbAsync is draining pending operations', async () => {
+    await initDb();
+    await initSchema();
+
+    const sharedConn = await getConnection();
+
+    let releaseWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+
+    const pendingWrite = withWriteConnection(async () => {
+      await writeGate;
+    });
+
+    const resetPromise = resetDbAsync();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(() => withWriteConnection(async () => undefined)).toThrow(
+      'Database connection is shutting down'
+    );
+    expect(() => sharedConn.runAndReadAll('SELECT 1 as val')).toThrow(
+      'Database connection is shutting down'
+    );
+
+    releaseWrite();
+    await expect(pendingWrite).resolves.toBeUndefined();
+    await expect(resetPromise).resolves.toBeUndefined();
+  });
 });
