@@ -21,9 +21,7 @@ export async function handleGraphAudit(args: Record<string, unknown> = {}): Prom
     }
 
     const options: GraphAuditOptions = {};
-    const minSupersessionChainLength = readPositiveInteger(
-      args['min_supersession_chain_length']
-    );
+    const minSupersessionChainLength = readPositiveInteger(args['min_supersession_chain_length']);
     const repeatedCoactivationThreshold = readPositiveInteger(
       args['repeated_coactivation_threshold']
     );
@@ -40,11 +38,7 @@ export async function handleGraphAudit(args: Record<string, unknown> = {}): Prom
     ) {
       return createToolResult(
         {
-          ...err(
-            'VALIDATION_ERROR',
-            'graph audit thresholds must be positive integers',
-            reqId
-          ),
+          ...err('VALIDATION_ERROR', 'graph audit thresholds must be positive integers', reqId),
           trace_id: traceId,
         },
         { isError: true }
@@ -74,13 +68,16 @@ export async function handleGraphAudit(args: Record<string, unknown> = {}): Prom
       policy_version: getPolicyVersion(),
     });
 
-    return createToolResult({
-      ...report,
-      policy_version: getPolicyVersion(),
-      state: getStateType(),
-      request_id: reqId,
-      trace_id: traceId,
-    }, { useSafeStringify: true });
+    return createToolResult(
+      {
+        ...report,
+        policy_version: getPolicyVersion(),
+        state: getStateType(),
+        request_id: reqId,
+        trace_id: traceId,
+      },
+      { useSafeStringify: true }
+    );
   } catch (error: unknown) {
     await appendLog({
       id: `log_${reqId}`,

@@ -244,7 +244,12 @@ async function runInternalActivate(
       topK * CONNECTIVITY_SEED_MULTIPLIER,
       (topologyConfig?.seedK ?? 0) * CONNECTIVITY_SEED_MULTIPLIER
     );
-    const durableResults = await hybridSearchWithScores(['project'], directCandidateLimit, query, searchConfig);
+    const durableResults = await hybridSearchWithScores(
+      ['project'],
+      directCandidateLimit,
+      query,
+      searchConfig
+    );
     const expandedDurableResults = await expandActivateResultsWithClaimLinks(
       durableResults.map((item) => ({ ...item, source: 'search' as const })),
       {
@@ -316,10 +321,14 @@ function buildDelta(left: VariantMetrics, right: VariantMetrics): VariantDelta {
 }
 
 function avg(values: number[]): number {
-  return Number((values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)).toFixed(3));
+  return Number(
+    (values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)).toFixed(3)
+  );
 }
 
-async function runScenario(definition: ScenarioDefinition): Promise<TopologyNoiseAttributionScenarioReport> {
+async function runScenario(
+  definition: ScenarioDefinition
+): Promise<TopologyNoiseAttributionScenarioReport> {
   await resetBenchmarkState();
   await applyPolicy(false);
   const seededBaseline = await definition.seed();
@@ -377,8 +386,8 @@ async function runScenario(definition: ScenarioDefinition): Promise<TopologyNois
     .filter((id) => !naturalIds.has(id) && !relevantIds.has(id))
     .map((id) => seededInjected.labelById[id] ?? id);
   const forcedNoiseLabelsSet = new Set(forcedNoiseLabels);
-  const injectedOnlyPathEvidence = topologyInjected.path_evidence.filter(
-    (evidence) => forcedNoiseLabelsSet.has(evidence.label)
+  const injectedOnlyPathEvidence = topologyInjected.path_evidence.filter((evidence) =>
+    forcedNoiseLabelsSet.has(evidence.label)
   );
 
   return {
@@ -404,9 +413,21 @@ async function seedRelatedInjectionScenario(): Promise<ScenarioSeed> {
   const { idsByLabel, labelById } = await createBenchmarkClaims({
     queryText: RELATED_QUERY,
     claims: [
-      { label: 'seed', text: 'Issuer rotation anchor for partner access policy.', similarity: 0.995 },
-      { label: 'direct-relevant', text: 'Partner issuer rotation playbook for access rollout.', similarity: 0.92 },
-      { label: 'related-noise-1', text: 'Quarterly catering schedule for regional office seating.', similarity: -0.1 },
+      {
+        label: 'seed',
+        text: 'Issuer rotation anchor for partner access policy.',
+        similarity: 0.995,
+      },
+      {
+        label: 'direct-relevant',
+        text: 'Partner issuer rotation playbook for access rollout.',
+        similarity: 0.92,
+      },
+      {
+        label: 'related-noise-1',
+        text: 'Quarterly catering schedule for regional office seating.',
+        similarity: -0.1,
+      },
     ],
   });
 
@@ -429,10 +450,26 @@ async function seedHubInjectionScenario(): Promise<ScenarioSeed> {
   const { idsByLabel, labelById } = await createBenchmarkClaims({
     queryText: HUB_QUERY,
     claims: [
-      { label: 'seed', text: 'OAuth issuer validation anchor for mobile auth service.', similarity: 0.995 },
-      { label: 'direct-relevant-1', text: 'OAuth issuer validation deployment guide for mobile auth service.', similarity: 0.95 },
-      { label: 'direct-relevant-2', text: 'Mobile auth service issuer validation runbook.', similarity: 0.84 },
-      { label: 'hub-noise-1', text: 'Poster sponsorship budget and catering vendor checklist.', similarity: -0.1 },
+      {
+        label: 'seed',
+        text: 'OAuth issuer validation anchor for mobile auth service.',
+        similarity: 0.995,
+      },
+      {
+        label: 'direct-relevant-1',
+        text: 'OAuth issuer validation deployment guide for mobile auth service.',
+        similarity: 0.95,
+      },
+      {
+        label: 'direct-relevant-2',
+        text: 'Mobile auth service issuer validation runbook.',
+        similarity: 0.84,
+      },
+      {
+        label: 'hub-noise-1',
+        text: 'Poster sponsorship budget and catering vendor checklist.',
+        similarity: -0.1,
+      },
     ],
   });
 
@@ -461,7 +498,11 @@ async function seedHubInjectionScenario(): Promise<ScenarioSeed> {
   return {
     query: HUB_QUERY,
     topK: 3,
-    relevantIds: [idsByLabel['seed'], idsByLabel['direct-relevant-1'], idsByLabel['direct-relevant-2']],
+    relevantIds: [
+      idsByLabel['seed'],
+      idsByLabel['direct-relevant-1'],
+      idsByLabel['direct-relevant-2'],
+    ],
     labelById,
   };
 }
@@ -470,10 +511,26 @@ async function seedTwoHopInjectionScenario(): Promise<ScenarioSeed> {
   const { idsByLabel, labelById } = await createBenchmarkClaims({
     queryText: TWO_HOP_QUERY,
     claims: [
-      { label: 'seed', text: 'Session revocation anchor for device theft replay defense.', similarity: 0.995 },
-      { label: 'direct-relevant-1', text: 'Session revocation rollout for device theft response.', similarity: 0.82 },
-      { label: 'relevant-bridge', text: 'Refresh token family revocation prevents replay after device theft.', similarity: 0.68 },
-      { label: 'two-hop-noise-1', text: 'Facilities keycard replacement for office visitors.', similarity: -0.1 },
+      {
+        label: 'seed',
+        text: 'Session revocation anchor for device theft replay defense.',
+        similarity: 0.995,
+      },
+      {
+        label: 'direct-relevant-1',
+        text: 'Session revocation rollout for device theft response.',
+        similarity: 0.82,
+      },
+      {
+        label: 'relevant-bridge',
+        text: 'Refresh token family revocation prevents replay after device theft.',
+        similarity: 0.68,
+      },
+      {
+        label: 'two-hop-noise-1',
+        text: 'Facilities keycard replacement for office visitors.',
+        similarity: -0.1,
+      },
     ],
   });
 
@@ -509,7 +566,11 @@ async function seedTwoHopInjectionScenario(): Promise<ScenarioSeed> {
   return {
     query: TWO_HOP_QUERY,
     topK: 3,
-    relevantIds: [idsByLabel['seed'], idsByLabel['direct-relevant-1'], idsByLabel['relevant-bridge']],
+    relevantIds: [
+      idsByLabel['seed'],
+      idsByLabel['direct-relevant-1'],
+      idsByLabel['relevant-bridge'],
+    ],
     labelById,
   };
 }
@@ -610,8 +671,12 @@ export function generateTopologyNoiseAttributionMarkdown(
     lines.push(`- Description: ${scenario.description}`);
     lines.push(`- Relevant labels: ${scenario.relevant_labels.join(', ')}`);
     lines.push(`- Baseline top labels: ${scenario.baseline.top_claim_labels.join(', ')}`);
-    lines.push(`- Natural topology top labels: ${scenario.topology_natural.top_claim_labels.join(', ')}`);
-    lines.push(`- Injected topology top labels: ${scenario.topology_injected.top_claim_labels.join(', ')}`);
+    lines.push(
+      `- Natural topology top labels: ${scenario.topology_natural.top_claim_labels.join(', ')}`
+    );
+    lines.push(
+      `- Injected topology top labels: ${scenario.topology_injected.top_claim_labels.join(', ')}`
+    );
     lines.push(`- Natural noise labels: ${scenario.natural_noise_labels.join(', ') || '(none)'}`);
     lines.push(`- Forced noise labels: ${scenario.forced_noise_labels.join(', ') || '(none)'}`);
     lines.push(

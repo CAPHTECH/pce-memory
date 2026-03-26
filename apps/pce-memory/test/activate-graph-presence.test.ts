@@ -140,10 +140,7 @@ describe('ensureClaimLinkPresence', () => {
         confidence: 1,
       },
     });
-    const pageResults = [
-      makeItem({ id: 'seed', score: 0.9, source: 'search' }),
-      graphItem,
-    ];
+    const pageResults = [makeItem({ id: 'seed', score: 0.9, source: 'search' }), graphItem];
 
     const result = ensureClaimLinkPresence(pageResults, pageResults, 2);
 

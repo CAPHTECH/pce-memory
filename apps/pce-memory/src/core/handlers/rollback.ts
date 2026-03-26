@@ -144,15 +144,18 @@ export async function handleRollback(args: Record<string, unknown>): Promise<Too
       policy_version: getPolicyVersion(),
     });
 
-    return createToolResult({
-      rollback_id: rollbackId,
-      superseded_claim_id: claim.id,
-      blast_radius: blastRadius,
-      policy_version: getPolicyVersion(),
-      state: getStateType(),
-      request_id: reqId,
-      trace_id: traceId,
-    }, { useSafeStringify: true });
+    return createToolResult(
+      {
+        rollback_id: rollbackId,
+        superseded_claim_id: claim.id,
+        blast_radius: blastRadius,
+        policy_version: getPolicyVersion(),
+        state: getStateType(),
+        request_id: reqId,
+        trace_id: traceId,
+      },
+      { useSafeStringify: true }
+    );
   } catch (e: unknown) {
     await appendLog({
       id: `log_${reqId}`,

@@ -313,9 +313,7 @@ describe('topology-aware activate', () => {
       expect.arrayContaining([aId, bId, cId])
     );
     expect(activate.claims.map((item) => item.claim.id)).not.toContain(dId);
-    expect(
-      activate.claims.find((item) => item.claim.id === cId)?.topology?.path?.length
-    ).toBe(2);
+    expect(activate.claims.find((item) => item.claim.id === cId)?.topology?.path?.length).toBe(2);
 
     const conn = await getConnection();
     const reader = await conn.runAndReadAll(

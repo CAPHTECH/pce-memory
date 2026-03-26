@@ -86,7 +86,10 @@ describe('activate pagination with graph presence', () => {
       results,
       topK: 2,
     });
-    expect(firstPage.searchResults.map((item) => item.claim.id)).toEqual(['graph-early', 'direct-1']);
+    expect(firstPage.searchResults.map((item) => item.claim.id)).toEqual([
+      'graph-early',
+      'direct-1',
+    ]);
 
     const secondPage = pageActivateResults({
       results,

@@ -195,9 +195,7 @@ function canonicalizeCycle(nodes: string[]): string {
     rotations.push([...nodes.slice(index), ...nodes.slice(0, index)]);
   }
 
-  return rotations
-    .map((rotation) => rotation.join(' -> '))
-    .sort()[0] as string;
+  return rotations.map((rotation) => rotation.join(' -> ')).sort()[0] as string;
 }
 
 function componentIdForIndex(index: number): string {
@@ -264,9 +262,7 @@ function chooseLongestPathFromRoot(
   return best;
 }
 
-export async function auditGraph(
-  options: GraphAuditOptions = {}
-): Promise<GraphAuditReport> {
+export async function auditGraph(options: GraphAuditOptions = {}): Promise<GraphAuditReport> {
   const minSupersessionChainLength =
     options.minSupersessionChainLength ?? DEFAULT_MIN_SUPERSESSION_CHAIN_LENGTH;
   const repeatedCoactivationThreshold =
@@ -275,19 +271,27 @@ export async function auditGraph(
     options.genericHubDegreeThreshold ?? DEFAULT_GENERIC_HUB_DEGREE_THRESHOLD;
   const maxFindingsPerKind = options.maxFindingsPerKind ?? DEFAULT_MAX_FINDINGS_PER_KIND;
   const scanLimit =
-    typeof options.scanLimit === 'number' && Number.isFinite(options.scanLimit) && options.scanLimit > 0
+    typeof options.scanLimit === 'number' &&
+    Number.isFinite(options.scanLimit) &&
+    options.scanLimit > 0
       ? Math.floor(options.scanLimit)
       : DEFAULT_SCAN_LIMIT;
 
-  const [claimsLoaded, entitiesLoaded, relationsLoaded, claimLinks, claimEntities, activeContextItems] =
-    await Promise.all([
-      listClaimsByFilter({ includeInactive: true, limit: scanLimit + 1 }),
-      listAllEntities(scanLimit + 1),
-      listAllRelations(scanLimit + 1),
-      readClaimLinks(),
-      readClaimEntities(),
-      readActiveContextItems(),
-    ]);
+  const [
+    claimsLoaded,
+    entitiesLoaded,
+    relationsLoaded,
+    claimLinks,
+    claimEntities,
+    activeContextItems,
+  ] = await Promise.all([
+    listClaimsByFilter({ includeInactive: true, limit: scanLimit + 1 }),
+    listAllEntities(scanLimit + 1),
+    listAllRelations(scanLimit + 1),
+    readClaimLinks(),
+    readClaimEntities(),
+    readActiveContextItems(),
+  ]);
   const claimsTruncated = claimsLoaded.length > scanLimit;
   const entitiesTruncated = entitiesLoaded.length > scanLimit;
   const relationsTruncated = relationsLoaded.length > scanLimit;
@@ -397,10 +401,7 @@ export async function auditGraph(
   });
 
   const contradictionCycles = findContradictionCycles(contradictionGraph);
-  const supersessionChains = findSupersessionChains(
-    supersedesGraph,
-    minSupersessionChainLength
-  );
+  const supersessionChains = findSupersessionChains(supersedesGraph, minSupersessionChainLength);
   const scopeHoleFindings = buildScopeHoleFindings(components);
   const repeatedCoactivationFindings = findRepeatedCoactivations(
     activeContextItems,
@@ -418,49 +419,49 @@ export async function auditGraph(
 
   const findings = limitFindingsPerKind(
     [
-    ...orphanClaims.map((claim) => ({
-      kind: 'orphan_claim' as const,
-      severity: 'warning' as const,
-      message: `Claim ${claim.id} is disconnected from the graph substrate`,
-      node_ids: [claim.id],
-      details: {
-        scope: claim.scope,
-        kind: claim.kind,
-      },
-    })),
-    ...orphanEntities.map((entity) => ({
-      kind: 'orphan_entity' as const,
-      severity: 'warning' as const,
-      message: `Entity ${entity.id} has no claim or relation attachments`,
-      node_ids: [entity.id],
-      details: {
-        name: entity.name,
-        type: entity.type,
-      },
-    })),
-    ...contradictionCycles.map((cycle) => ({
-      kind: 'contradiction_cycle' as const,
-      severity: 'critical' as const,
-      message: `Contradiction cycle detected across ${cycle.nodes.length} claims`,
-      node_ids: cycle.nodes,
-      edge_ids: cycle.edge_ids,
-      details: {
-        cycle: cycle.nodes,
-      },
-    })),
-    ...supersessionChains.map((chain) => ({
-      kind: 'supersession_chain' as const,
-      severity: 'warning' as const,
-      message: `Supersession chain length ${chain.edge_ids.length} exceeds the audit threshold`,
-      node_ids: chain.nodes,
-      edge_ids: chain.edge_ids,
-      details: {
-        chain_length: chain.edge_ids.length,
-      },
-    })),
-    ...scopeHoleFindings,
-    ...repeatedCoactivationFindings,
-    ...genericHubFindings,
+      ...orphanClaims.map((claim) => ({
+        kind: 'orphan_claim' as const,
+        severity: 'warning' as const,
+        message: `Claim ${claim.id} is disconnected from the graph substrate`,
+        node_ids: [claim.id],
+        details: {
+          scope: claim.scope,
+          kind: claim.kind,
+        },
+      })),
+      ...orphanEntities.map((entity) => ({
+        kind: 'orphan_entity' as const,
+        severity: 'warning' as const,
+        message: `Entity ${entity.id} has no claim or relation attachments`,
+        node_ids: [entity.id],
+        details: {
+          name: entity.name,
+          type: entity.type,
+        },
+      })),
+      ...contradictionCycles.map((cycle) => ({
+        kind: 'contradiction_cycle' as const,
+        severity: 'critical' as const,
+        message: `Contradiction cycle detected across ${cycle.nodes.length} claims`,
+        node_ids: cycle.nodes,
+        edge_ids: cycle.edge_ids,
+        details: {
+          cycle: cycle.nodes,
+        },
+      })),
+      ...supersessionChains.map((chain) => ({
+        kind: 'supersession_chain' as const,
+        severity: 'warning' as const,
+        message: `Supersession chain length ${chain.edge_ids.length} exceeds the audit threshold`,
+        node_ids: chain.nodes,
+        edge_ids: chain.edge_ids,
+        details: {
+          chain_length: chain.edge_ids.length,
+        },
+      })),
+      ...scopeHoleFindings,
+      ...repeatedCoactivationFindings,
+      ...genericHubFindings,
     ],
     maxFindingsPerKind
   );
@@ -764,7 +765,8 @@ function findGenericHubs(input: {
 
   for (const entity of input.entities) {
     const degree =
-      (input.entitiesByClaimId.get(entity.id)?.length ?? 0) + (input.entityDegree.get(entity.id) ?? 0);
+      (input.entitiesByClaimId.get(entity.id)?.length ?? 0) +
+      (input.entityDegree.get(entity.id) ?? 0);
     if (degree < input.genericHubDegreeThreshold) {
       continue;
     }

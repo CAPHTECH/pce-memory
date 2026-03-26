@@ -355,7 +355,9 @@ async function migrateClaimLinksProvenance(conn: DuckDBConnection): Promise<void
     console.error('[DB] Migrating claim_links: adding provenance column...');
     await conn.run('ALTER TABLE claim_links ADD COLUMN provenance JSON');
   }
-  await conn.run('CREATE INDEX IF NOT EXISTS idx_claim_links_evidence ON claim_links(evidence_claim_id)');
+  await conn.run(
+    'CREATE INDEX IF NOT EXISTS idx_claim_links_evidence ON claim_links(evidence_claim_id)'
+  );
 }
 
 async function migrateClaimVectorsDropFK(conn: DuckDBConnection): Promise<void> {

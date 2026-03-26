@@ -194,9 +194,9 @@ describe('Output Schema - ハンドラ出力検証', () => {
     };
 
     expect(data.summary).toBeDefined();
-    expect(typeof data.summary.truncated === 'boolean' || data.summary.truncated === undefined).toBe(
-      true
-    );
+    expect(
+      typeof data.summary.truncated === 'boolean' || data.summary.truncated === undefined
+    ).toBe(true);
     expect(typeof data.truncation.claims).toBe('boolean');
     expect(typeof data.truncation.entities).toBe('boolean');
     expect(typeof data.truncation.relations).toBe('boolean');

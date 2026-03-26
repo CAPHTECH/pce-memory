@@ -509,10 +509,10 @@ export async function updateClaimSyncMetadata(
 
   assignments.push('updated_at = CURRENT_TIMESTAMP');
   await withWriteConnection(async (conn) => {
-    await conn.run(
-      `UPDATE claims SET ${assignments.join(', ')} WHERE id = $${values.length + 1}`,
-      [...values, id]
-    );
+    await conn.run(`UPDATE claims SET ${assignments.join(', ')} WHERE id = $${values.length + 1}`, [
+      ...values,
+      id,
+    ]);
   });
 }
 
@@ -534,10 +534,10 @@ function resolveStaleAfterDays(staleAfterDays: number | undefined): number {
 
 export async function updateClaimStatus(id: string, status: ClaimStatus): Promise<void> {
   await withWriteConnection(async (conn) => {
-    await conn.run(
-      'UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [status, id]
-    );
+    await conn.run('UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
+      status,
+      id,
+    ]);
   });
 }
 

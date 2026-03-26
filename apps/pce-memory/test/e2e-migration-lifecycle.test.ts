@@ -533,9 +533,13 @@ describe('v2 migration lifecycle E2E', () => {
       .map((result) => result.structuredContent);
     for (const errorResult of errorResults) {
       const error = errorResult as ErrorResult;
-      expect(['ACTIVATE_FAILED', 'DB_ERROR', 'UPSERT_FAILED', 'RATE_LIMIT', 'STATE_ERROR']).toContain(
-        error.error.code
-      );
+      expect([
+        'ACTIVATE_FAILED',
+        'DB_ERROR',
+        'UPSERT_FAILED',
+        'RATE_LIMIT',
+        'STATE_ERROR',
+      ]).toContain(error.error.code);
     }
     expect(results.every((result) => result.structuredContent !== undefined)).toBe(true);
 

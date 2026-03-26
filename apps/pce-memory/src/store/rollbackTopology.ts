@@ -316,7 +316,9 @@ async function fetchClaimsByIds(claimIds: readonly string[]): Promise<Claim[]> {
     params
   );
   const claimsById = new Map(rows.map((row) => [row.id, parseClaimRow(row)]));
-  return claimIds.map((claimId) => claimsById.get(claimId)).filter((claim): claim is Claim => claim !== undefined);
+  return claimIds
+    .map((claimId) => claimsById.get(claimId))
+    .filter((claim): claim is Claim => claim !== undefined);
 }
 
 async function fetchClaimLinks(claimIds: readonly string[]): Promise<ClaimLinkEdgeRow[]> {
@@ -481,10 +483,7 @@ interface ConnectedClaimRecord {
   bestByKind: Partial<Record<RollbackTopologyNeighborhoodKind, KindRecord>>;
 }
 
-function upsertKindRecord(
-  record: ConnectedClaimRecord,
-  proposal: RollbackTopologyProposal
-): void {
+function upsertKindRecord(record: ConnectedClaimRecord, proposal: RollbackTopologyProposal): void {
   record.kinds.add(proposal.kind);
   const nextRecord: KindRecord = {
     kind: proposal.kind,
@@ -509,7 +508,10 @@ function upsertKindRecord(
   }
 }
 
-function buildConnectedClaimRecord(claim: Claim, proposal: RollbackTopologyProposal): ConnectedClaimRecord {
+function buildConnectedClaimRecord(
+  claim: Claim,
+  proposal: RollbackTopologyProposal
+): ConnectedClaimRecord {
   return {
     claim,
     kinds: new Set([proposal.kind]),
@@ -532,7 +534,10 @@ function buildConnectedClaimRecord(claim: Claim, proposal: RollbackTopologyPropo
   };
 }
 
-function sortConnectedClaimRecords(left: ConnectedClaimRecord, right: ConnectedClaimRecord): number {
+function sortConnectedClaimRecords(
+  left: ConnectedClaimRecord,
+  right: ConnectedClaimRecord
+): number {
   if (right.best.score !== left.best.score) {
     return right.best.score - left.best.score;
   }
@@ -542,7 +547,10 @@ function sortConnectedClaimRecords(left: ConnectedClaimRecord, right: ConnectedC
   return left.claim.id.localeCompare(right.claim.id);
 }
 
-function sortNeighborhoodItems(left: RollbackTopologyNeighborhoodItem, right: RollbackTopologyNeighborhoodItem): number {
+function sortNeighborhoodItems(
+  left: RollbackTopologyNeighborhoodItem,
+  right: RollbackTopologyNeighborhoodItem
+): number {
   if (right.score !== left.score) {
     return right.score - left.score;
   }
@@ -566,7 +574,10 @@ export async function collectRollbackTopologyBlastRadius(
       ? Math.min(DEFAULT_MAX_HOPS, Math.floor(options.maxHops))
       : DEFAULT_MAX_HOPS;
   const hopDecay =
-    typeof options.hopDecay === 'number' && Number.isFinite(options.hopDecay) && options.hopDecay > 0 && options.hopDecay <= 1
+    typeof options.hopDecay === 'number' &&
+    Number.isFinite(options.hopDecay) &&
+    options.hopDecay > 0 &&
+    options.hopDecay <= 1
       ? options.hopDecay
       : DEFAULT_HOP_DECAY;
   const entityPathWeight =
@@ -641,7 +652,10 @@ export async function collectRollbackTopologyBlastRadius(
 
         const kind = classifyLinkType(edge.link_type);
         const nextScore =
-          state.score * edgeWeightForLinkType(edge.link_type) * normalizeConfidence(edge.confidence) * hopDecay;
+          state.score *
+          edgeWeightForLinkType(edge.link_type) *
+          normalizeConfidence(edge.confidence) *
+          hopDecay;
         const nextPath = [
           ...state.path,
           buildClaimLinkPathSegment({
@@ -677,7 +691,8 @@ export async function collectRollbackTopologyBlastRadius(
             continue;
           }
 
-          const relatedEntityId = relation.src_id === seedEntityId ? relation.dst_id : relation.src_id;
+          const relatedEntityId =
+            relation.src_id === seedEntityId ? relation.dst_id : relation.src_id;
           const relationDirection = relation.src_id === seedEntityId ? 'forward' : 'reverse';
           const claimIds = claimIdsByEntityId.get(relatedEntityId) ?? [];
           for (const nextClaimId of claimIds) {
@@ -762,7 +777,9 @@ export async function collectRollbackTopologyBlastRadius(
   for (const row of linkedEntityRows) {
     const entity = parseEntityRow(row);
     const existing = linkedEntitiesById.get(entity.id);
-    const nextClaimIds = existing ? [...new Set([...existing.claim_ids, row.claim_id])] : [row.claim_id];
+    const nextClaimIds = existing
+      ? [...new Set([...existing.claim_ids, row.claim_id])]
+      : [row.claim_id];
     const nextScore = existing ? Math.max(existing.score, 1) : 1;
     linkedEntitiesById.set(entity.id, {
       entity,
@@ -775,11 +792,15 @@ export async function collectRollbackTopologyBlastRadius(
   const activeContextsById = new Map<string, RollbackTopologyActiveContext>();
   for (const row of activeContextRows) {
     const existing = activeContextsById.get(row.active_context_id);
-    const nextClaimIds = existing ? [...new Set([...existing.claim_ids, row.claim_id])] : [row.claim_id];
+    const nextClaimIds = existing
+      ? [...new Set([...existing.claim_ids, row.claim_id])]
+      : [row.claim_id];
     const nextSourceLayers = existing
       ? [...new Set([...existing.source_layers, row.source_layer ?? 'unknown'])]
       : [row.source_layer ?? 'unknown'];
-    const nextMaxScore = existing ? Math.max(existing.max_score, normalizeScore(row.score)) : normalizeScore(row.score);
+    const nextMaxScore = existing
+      ? Math.max(existing.max_score, normalizeScore(row.score))
+      : normalizeScore(row.score);
     const nextItemCount = existing ? existing.item_count + 1 : 1;
     activeContextsById.set(row.active_context_id, {
       active_context_id: row.active_context_id,

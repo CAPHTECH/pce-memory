@@ -70,7 +70,10 @@ describe('Property: topology-aware activate invariants', () => {
         fc.stringMatching(/^[a-z0-9]{1,12}$/),
         async (chainLength, token) => {
           await resetTopologyHarness();
-          const texts = Array.from({ length: chainLength }, (_, index) => `chain-${token}-${index}`);
+          const texts = Array.from(
+            { length: chainLength },
+            (_, index) => `chain-${token}-${index}`
+          );
           const queryText = `query-${token}`;
           setEmbeddingService(
             createEmbeddingService({
@@ -112,7 +115,7 @@ describe('Property: topology-aware activate invariants', () => {
             expect(returnedIds).not.toContain(ids[index]);
           }
           for (const item of activate.claims) {
-            expect((item.topology?.path?.length ?? 0)).toBeLessThanOrEqual(2);
+            expect(item.topology?.path?.length ?? 0).toBeLessThanOrEqual(2);
           }
         }
       ),

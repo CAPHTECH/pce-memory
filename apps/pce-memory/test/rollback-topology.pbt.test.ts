@@ -76,7 +76,9 @@ describe('Property: rollback topology invariants', () => {
         }
 
         const blastRadius = await collectRollbackTopologyBlastRadius(rootId);
-        const affectedIds = blastRadius.affected_active_contexts.map((item) => item.active_context_id);
+        const affectedIds = blastRadius.affected_active_contexts.map(
+          (item) => item.active_context_id
+        );
 
         expect(affectedIds).toEqual(expect.arrayContaining(['ac_root', 'ac_support']));
         for (const contextId of unrelatedContextIds) {

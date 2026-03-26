@@ -25,13 +25,13 @@ const DEFAULT_LINK_PROVENANCE_ACTOR = 'pce_memory_link_claims';
 export async function handleLinkClaims(args: Record<string, unknown>): Promise<ToolResult> {
   const { source_claim_id, target_claim_id, link_type, confidence, evidence_claim_id, provenance } =
     args as {
-    source_claim_id?: unknown;
-    target_claim_id?: unknown;
-    link_type?: unknown;
-    confidence?: unknown;
-    evidence_claim_id?: unknown;
-    provenance?: unknown;
-  };
+      source_claim_id?: unknown;
+      target_claim_id?: unknown;
+      link_type?: unknown;
+      confidence?: unknown;
+      evidence_claim_id?: unknown;
+      provenance?: unknown;
+    };
 
   const reqId = crypto.randomUUID();
   const traceId = crypto.randomUUID();

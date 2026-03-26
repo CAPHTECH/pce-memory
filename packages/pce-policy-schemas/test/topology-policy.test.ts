@@ -7,7 +7,8 @@ function cloneDefaultPolicy(): Record<string, unknown> {
 
 describe('topology policy validation', () => {
   it('accepts topology policy blocks during parse', () => {
-    const result = parsePolicy(`
+    const result = parsePolicy(
+      `
 version: '0.1'
 boundary:
   version: '0.1'
@@ -41,7 +42,8 @@ retrieval:
           action: flag_conflict
         supersedes:
           action: shadow_old
-`.trim());
+`.trim()
+    );
 
     expect(result.ok).toBe(true);
     expect(result.value?.retrieval?.hybrid?.topology).toEqual(

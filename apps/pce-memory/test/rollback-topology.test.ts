@@ -34,7 +34,10 @@ describe('collectRollbackTopologyBlastRadius', () => {
     const support = await createClaim('supporting topology claim', 'sha256:rollback-support');
     const conflict = await createClaim('conflicting topology claim', 'sha256:rollback-conflict');
     const superseded = await createClaim('superseded topology claim', 'sha256:rollback-old');
-    const entityClaim = await createClaim('entity-connected topology claim', 'sha256:rollback-entity');
+    const entityClaim = await createClaim(
+      'entity-connected topology claim',
+      'sha256:rollback-entity'
+    );
     const unrelated = await createClaim('unrelated claim', 'sha256:rollback-unrelated');
 
     await upsertEntity({ id: 'ent_root', type: 'Artifact', name: 'Root Entity' });
@@ -226,7 +229,9 @@ describe('collectRollbackTopologyBlastRadius', () => {
     expect(result.affected_active_contexts.map((item) => item.active_context_id)).toEqual(
       expect.arrayContaining(['ac_rollback_1', 'ac_rollback_2'])
     );
-    expect(result.affected_active_contexts.some((item) => item.active_context_id === 'ac_rollback_3')).toBe(false);
+    expect(
+      result.affected_active_contexts.some((item) => item.active_context_id === 'ac_rollback_3')
+    ).toBe(false);
 
     expect(result.summary).toEqual(
       expect.objectContaining({
@@ -242,8 +247,14 @@ describe('collectRollbackTopologyBlastRadius', () => {
 
   it('records entity path metadata with actual traversal confidence and direction', async () => {
     const root = await createClaim('root traversal claim', 'sha256:rollback-traversal-root');
-    const forward = await createClaim('forward traversal claim', 'sha256:rollback-traversal-forward');
-    const reverse = await createClaim('reverse traversal claim', 'sha256:rollback-traversal-reverse');
+    const forward = await createClaim(
+      'forward traversal claim',
+      'sha256:rollback-traversal-forward'
+    );
+    const reverse = await createClaim(
+      'reverse traversal claim',
+      'sha256:rollback-traversal-reverse'
+    );
 
     await upsertEntity({ id: 'ent_traversal_root', type: 'Artifact', name: 'Traversal Root' });
     await upsertEntity({ id: 'ent_traversal_forward', type: 'Concept', name: 'Traversal Forward' });

@@ -113,7 +113,11 @@ describe('ensureClaimLinkPresence properties', () => {
             })
           );
 
-          const result = ensureClaimLinkPresence(pageResults, [...pageResults, ...graphResults], topK);
+          const result = ensureClaimLinkPresence(
+            pageResults,
+            [...pageResults, ...graphResults],
+            topK
+          );
 
           expect(result).toEqual(pageResults);
         }
@@ -161,7 +165,11 @@ describe('ensureClaimLinkPresence properties', () => {
           );
           const winner = graphResults[graphResults.length - 1]!;
 
-          const result = ensureClaimLinkPresence(pageResults, [...pageResults, ...graphResults], topK);
+          const result = ensureClaimLinkPresence(
+            pageResults,
+            [...pageResults, ...graphResults],
+            topK
+          );
 
           expect(result).toHaveLength(pageResults.length + 1);
           expect(new Set(ids(result))).toEqual(new Set([...ids(pageResults), winner.claim.id]));
@@ -227,7 +235,11 @@ describe('ensureClaimLinkPresence properties', () => {
             })
           );
 
-          const result = ensureClaimLinkPresence(pageResults, [...pageResults, ...extraGraphResults], topK);
+          const result = ensureClaimLinkPresence(
+            pageResults,
+            [...pageResults, ...extraGraphResults],
+            topK
+          );
 
           expect(result).toEqual(pageResults);
         }

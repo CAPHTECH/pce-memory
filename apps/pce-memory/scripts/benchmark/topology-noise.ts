@@ -268,7 +268,11 @@ async function runMeasuredActivate(
   repeats: number,
   options: ActivateVariantOptions = {},
   probeTopK?: number
-): Promise<{ claims: ActivateClaimResult[]; avgLatencyMs: number; probeClaims: ActivateClaimResult[] }> {
+): Promise<{
+  claims: ActivateClaimResult[];
+  avgLatencyMs: number;
+  probeClaims: ActivateClaimResult[];
+}> {
   const first = (await dispatchTool('pce_memory_activate', {
     scope: ['project'],
     allow: ['answer:task'],
@@ -298,17 +302,19 @@ async function runMeasuredActivate(
 
   const probeClaims =
     typeof probeTopK === 'number' && probeTopK > topK
-      ? (((await dispatchTool('pce_memory_activate', {
-          scope: ['project'],
-          allow: ['answer:task'],
-          q: query,
-          top_k: probeTopK,
-          ...(options.disableGraphPresenceInjection
-            ? { debug_disable_graph_presence_injection: true }
-            : {}),
-        }).then((result) => result.structuredContent)) as {
-          claims: ActivateClaimResult[];
-        }).claims ?? first.claims)
+      ? ((
+          (await dispatchTool('pce_memory_activate', {
+            scope: ['project'],
+            allow: ['answer:task'],
+            q: query,
+            top_k: probeTopK,
+            ...(options.disableGraphPresenceInjection
+              ? { debug_disable_graph_presence_injection: true }
+              : {}),
+          }).then((result) => result.structuredContent)) as {
+            claims: ActivateClaimResult[];
+          }
+        ).claims ?? first.claims)
       : first.claims;
 
   return {
@@ -372,10 +378,7 @@ function measureTopK(
   };
 }
 
-function computeDeltas(
-  baseline: VariantMetrics,
-  topology: VariantMetrics
-): DeltaMetrics {
+function computeDeltas(baseline: VariantMetrics, topology: VariantMetrics): DeltaMetrics {
   return {
     precision_at_k: Number((topology.precision_at_k - baseline.precision_at_k).toFixed(3)),
     recall_at_k: Number((topology.recall_at_k - baseline.recall_at_k).toFixed(3)),
@@ -388,7 +391,9 @@ function computeDeltas(
   };
 }
 
-function summarizeSweepCases(cases: TopologyNoiseSweepCaseReport[]): TopologyNoiseSweepReport['summary'] {
+function summarizeSweepCases(
+  cases: TopologyNoiseSweepCaseReport[]
+): TopologyNoiseSweepReport['summary'] {
   const precisionDrops = cases.map((caseReport) => Math.min(0, caseReport.deltas.precision_at_k));
   const injectionPrecisionDrops = cases.map((caseReport) =>
     Math.min(0, caseReport.injection_deltas.precision_at_k)
@@ -399,9 +404,12 @@ function summarizeSweepCases(cases: TopologyNoiseSweepCaseReport[]): TopologyNoi
     precision_drop_cases: cases.filter((caseReport) => caseReport.deltas.precision_at_k < 0).length,
     recall_drop_cases: cases.filter((caseReport) => caseReport.deltas.recall_at_k < 0).length,
     increased_noise_cases: cases.filter((caseReport) => caseReport.deltas.noise_count > 0).length,
-    injection_worsened_cases: cases.filter((caseReport) => caseReport.injection_deltas.precision_at_k < 0)
-      .length,
-    max_precision_drop: Number(Math.max(...precisionDrops.map((value) => Math.abs(value)), 0).toFixed(3)),
+    injection_worsened_cases: cases.filter(
+      (caseReport) => caseReport.injection_deltas.precision_at_k < 0
+    ).length,
+    max_precision_drop: Number(
+      Math.max(...precisionDrops.map((value) => Math.abs(value)), 0).toFixed(3)
+    ),
     max_injection_precision_drop: Number(
       Math.max(...injectionPrecisionDrops.map((value) => Math.abs(value)), 0).toFixed(3)
     ),
@@ -411,9 +419,7 @@ function summarizeSweepCases(cases: TopologyNoiseSweepCaseReport[]): TopologyNoi
   };
 }
 
-function expandParameterGrid(
-  dimensions: Record<string, readonly number[]>
-): SweepCaseParams[] {
+function expandParameterGrid(dimensions: Record<string, readonly number[]>): SweepCaseParams[] {
   const entries = Object.entries(dimensions);
   return entries.reduce<SweepCaseParams[]>(
     (rows, [name, values]) =>
@@ -432,7 +438,12 @@ async function runScenarioVariant(
   topologyEnabled: boolean,
   repeats: number,
   options: ActivateVariantOptions = {}
-): Promise<{ metrics: VariantMetrics; topK: number; relevantLabels: string[]; diagnostics?: Record<string, unknown> }> {
+): Promise<{
+  metrics: VariantMetrics;
+  topK: number;
+  relevantLabels: string[];
+  diagnostics?: Record<string, unknown>;
+}> {
   await resetBenchmarkState();
   await applyPolicy(topologyEnabled);
   const seeded = await definition.seed();
@@ -465,7 +476,12 @@ async function runSweepCaseVariant(
   topologyEnabled: boolean,
   repeats: number,
   options: ActivateVariantOptions = {}
-): Promise<{ metrics: VariantMetrics; topK: number; relevantLabels: string[]; diagnostics?: Record<string, unknown> }> {
+): Promise<{
+  metrics: VariantMetrics;
+  topK: number;
+  relevantLabels: string[];
+  diagnostics?: Record<string, unknown>;
+}> {
   await resetBenchmarkState();
   await applyPolicy(topologyEnabled);
   const seeded = await definition.seed();
@@ -495,7 +511,8 @@ async function runSweepCaseVariant(
 
 async function seedForcedPresenceNoiseScenario(): Promise<ScenarioSeed> {
   const seedText = 'Issuer validation anchor for partner authentication policy.';
-  const directRelevantText = 'Issuer validation reference checklist for partner authentication rollout.';
+  const directRelevantText =
+    'Issuer validation reference checklist for partner authentication rollout.';
   const noisyRelatedText = 'Quarterly offsite catering schedule for office events and seating.';
   const queryText = 'issuer validation partner authentication';
 
@@ -711,8 +728,7 @@ async function seedGenericHubSweepCase(params: SweepCaseParams): Promise<Scenari
   const queryText = 'oauth issuer validation mobile auth service';
   const directTexts = Array.from(
     { length: 10 },
-    (_, index) =>
-      `OAuth issuer validation control ${index} for mobile auth service release safety.`
+    (_, index) => `OAuth issuer validation control ${index} for mobile auth service release safety.`
   );
   const noiseTexts = Array.from(
     { length: fanout },
@@ -1003,15 +1019,22 @@ export async function runTopologyNoiseBenchmark(): Promise<TopologyNoiseBenchmar
       scenario_count: scenarios.length,
       sweep_count: sweeps.length,
       sweep_case_count: sweepCases.length,
-      precision_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.precision_at_k < 0).length,
+      precision_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.precision_at_k < 0)
+        .length,
       recall_drop_scenarios: scenarios.filter((scenario) => scenario.deltas.recall_at_k < 0).length,
-      increased_noise_scenarios: scenarios.filter((scenario) => scenario.deltas.noise_count > 0).length,
+      increased_noise_scenarios: scenarios.filter((scenario) => scenario.deltas.noise_count > 0)
+        .length,
       injection_worsened_scenarios: scenarios.filter(
         (scenario) => scenario.injection_deltas.precision_at_k < 0
       ).length,
-      precision_drop_sweep_cases: sweepCases.filter((caseReport) => caseReport.deltas.precision_at_k < 0).length,
-      recall_drop_sweep_cases: sweepCases.filter((caseReport) => caseReport.deltas.recall_at_k < 0).length,
-      increased_noise_sweep_cases: sweepCases.filter((caseReport) => caseReport.deltas.noise_count > 0).length,
+      precision_drop_sweep_cases: sweepCases.filter(
+        (caseReport) => caseReport.deltas.precision_at_k < 0
+      ).length,
+      recall_drop_sweep_cases: sweepCases.filter((caseReport) => caseReport.deltas.recall_at_k < 0)
+        .length,
+      increased_noise_sweep_cases: sweepCases.filter(
+        (caseReport) => caseReport.deltas.noise_count > 0
+      ).length,
       injection_worsened_sweep_cases: sweepCases.filter(
         (caseReport) => caseReport.injection_deltas.precision_at_k < 0
       ).length,
@@ -1081,11 +1104,15 @@ export function generateTopologyNoiseBenchmarkMarkdown(
     lines.push('');
     lines.push(`- Description: ${scenario.description}`);
     lines.push(`- Relevant labels: ${scenario.relevant_labels.join(', ')}`);
-    lines.push(`- Baseline top labels: ${scenario.baseline.top_claim_labels.join(', ') || '(none)'}`);
+    lines.push(
+      `- Baseline top labels: ${scenario.baseline.top_claim_labels.join(', ') || '(none)'}`
+    );
     lines.push(
       `- Natural topology top labels: ${scenario.natural_topology.top_claim_labels.join(', ') || '(none)'}`
     );
-    lines.push(`- Topology top labels: ${scenario.topology.top_claim_labels.join(', ') || '(none)'}`);
+    lines.push(
+      `- Topology top labels: ${scenario.topology.top_claim_labels.join(', ') || '(none)'}`
+    );
     lines.push(`- Baseline noise labels: ${scenario.baseline.noise_labels.join(', ') || '(none)'}`);
     lines.push(
       `- Natural topology noise labels: ${scenario.natural_topology.noise_labels.join(', ') || '(none)'}`
@@ -1115,8 +1142,9 @@ export function generateTopologyNoiseBenchmarkMarkdown(
     if (scenario.topology.graph_claim_details.length > 0) {
       lines.push(
         `- Topology graph details: ${scenario.topology.graph_claim_details
-          .map((detail) =>
-            `${detail.label}[depth=${detail.depth ?? 'null'}; path=${detail.path_kinds.join('>') || 'none'}]`
+          .map(
+            (detail) =>
+              `${detail.label}[depth=${detail.depth ?? 'null'}; path=${detail.path_kinds.join('>') || 'none'}]`
           )
           .join(', ')}`
       );
@@ -1124,8 +1152,9 @@ export function generateTopologyNoiseBenchmarkMarkdown(
     if (scenario.topology.probe_graph_claim_details.length > 0) {
       lines.push(
         `- Topology probe graph details: ${scenario.topology.probe_graph_claim_details
-          .map((detail) =>
-            `${detail.label}[depth=${detail.depth ?? 'null'}; path=${detail.path_kinds.join('>') || 'none'}]`
+          .map(
+            (detail) =>
+              `${detail.label}[depth=${detail.depth ?? 'null'}; path=${detail.path_kinds.join('>') || 'none'}]`
           )
           .join(', ')}`
       );
@@ -1197,7 +1226,10 @@ export function generateTopologyNoiseBenchmarkMarkdown(
     for (const caseReport of sweep.cases) {
       const pathSummary =
         caseReport.topology.probe_graph_claim_details
-          .map((detail) => `${detail.label}:${detail.depth ?? 'null'}:${detail.path_kinds.join('>') || 'none'}`)
+          .map(
+            (detail) =>
+              `${detail.label}:${detail.depth ?? 'null'}:${detail.path_kinds.join('>') || 'none'}`
+          )
           .join(', ') || '(none)';
       const values = [
         ...formatParams(caseReport.params, paramKeys),

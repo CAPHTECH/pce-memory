@@ -215,7 +215,12 @@ async function runScenarioVariant(
   await applyPolicy(topologyEnabled);
   const seeded = await definition.seed();
   const measured = await runMeasuredActivate(seeded.query, seeded.topK);
-  const metrics = measureActivateTopK(measured.claims, seeded.relevantIds, seeded.labelById, seeded.topK);
+  const metrics = measureActivateTopK(
+    measured.claims,
+    seeded.relevantIds,
+    seeded.labelById,
+    seeded.topK
+  );
   metrics.avg_latency_ms = Number(measured.avgLatencyMs.toFixed(3));
   return {
     metrics,
@@ -319,8 +324,10 @@ async function seedEntityRelationScenario(): Promise<ScenarioSeed> {
 
 async function seedSupersessionScenario(): Promise<ScenarioSeed> {
   const oldText = 'Legacy issuer validation runbook version one applies static partner secrets.';
-  const newText = 'Replacement issuer validation runbook version two rotates partner secrets hourly.';
-  const distractorText = 'Cafeteria seating plan and office badge checklist for facilities coordination.';
+  const newText =
+    'Replacement issuer validation runbook version two rotates partner secrets hourly.';
+  const distractorText =
+    'Cafeteria seating plan and office badge checklist for facilities coordination.';
   const queryText = 'legacy issuer validation static partner secrets';
 
   setEmbeddingService(
@@ -357,19 +364,22 @@ async function seedSupersessionScenario(): Promise<ScenarioSeed> {
 const SCENARIOS: ScenarioDefinition[] = [
   {
     name: 'claim-link recall',
-    description: 'Recover a semantically related claim that is only reachable through explicit claim links.',
+    description:
+      'Recover a semantically related claim that is only reachable through explicit claim links.',
     pathKind: 'claim_link',
     seed: seedClaimLinkScenario,
   },
   {
     name: 'entity-bridge recall',
-    description: 'Recover a relevant claim through claim -> entity -> relation -> entity -> claim traversal.',
+    description:
+      'Recover a relevant claim through claim -> entity -> relation -> entity -> claim traversal.',
     pathKind: 'entity_relation',
     seed: seedEntityRelationScenario,
   },
   {
     name: 'supersession refresh',
-    description: 'Replace a stale directly matched claim with the superseding claim when topology is enabled.',
+    description:
+      'Replace a stale directly matched claim with the superseding claim when topology is enabled.',
     pathKind: 'supersession',
     seed: seedSupersessionScenario,
   },
@@ -454,8 +464,12 @@ export function generateTopologyBenchmarkMarkdown(report: TopologyBenchmarkRepor
     lines.push(`- Path kind: ${scenario.path_kind}`);
     lines.push(`- Description: ${scenario.description}`);
     lines.push(`- Relevant labels: ${scenario.relevant_labels.join(', ')}`);
-    lines.push(`- Baseline top labels: ${scenario.baseline.top_claim_labels.join(', ') || '(none)'}`);
-    lines.push(`- Topology top labels: ${scenario.topology.top_claim_labels.join(', ') || '(none)'}`);
+    lines.push(
+      `- Baseline top labels: ${scenario.baseline.top_claim_labels.join(', ') || '(none)'}`
+    );
+    lines.push(
+      `- Topology top labels: ${scenario.topology.top_claim_labels.join(', ') || '(none)'}`
+    );
     lines.push(
       `- Precision@${scenario.top_k}: ${scenario.baseline.precision_at_k.toFixed(3)} -> ${scenario.topology.precision_at_k.toFixed(3)}`
     );

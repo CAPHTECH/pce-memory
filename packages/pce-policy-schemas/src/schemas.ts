@@ -1,9 +1,4 @@
-import type {
-  PolicyDocument,
-  BoundaryPolicy,
-  TopologyPolicy,
-  ValidationResult,
-} from './types.js';
+import type { PolicyDocument, BoundaryPolicy, TopologyPolicy, ValidationResult } from './types.js';
 
 function isString(x: unknown): x is string {
   return typeof x === 'string';
@@ -66,7 +61,15 @@ function validateTopologyPolicy(input: Record<string, unknown>): ValidationResul
     return { ok: false, errors };
   }
 
-  const allowedKeys = ['enabled', 'mode', 'seed_k', 'max_hops', 'hop_decay', 'include_paths', 'edge_policy'];
+  const allowedKeys = [
+    'enabled',
+    'mode',
+    'seed_k',
+    'max_hops',
+    'hop_decay',
+    'include_paths',
+    'edge_policy',
+  ];
   rejectUnknownKeys('retrieval.hybrid.topology', input, allowedKeys, errors);
 
   if (input['enabled'] !== undefined) ensureBoolean('topology.enabled', input['enabled'], errors);
@@ -86,7 +89,10 @@ function validateTopologyPolicy(input: Record<string, unknown>): ValidationResul
   }
   if (input['hop_decay'] !== undefined) {
     ensureNumber('topology.hop_decay', input['hop_decay'], errors);
-    if (typeof input['hop_decay'] === 'number' && (input['hop_decay'] <= 0 || input['hop_decay'] > 1)) {
+    if (
+      typeof input['hop_decay'] === 'number' &&
+      (input['hop_decay'] <= 0 || input['hop_decay'] > 1)
+    ) {
       errors.push('topology.hop_decay must be greater than 0 and at most 1');
     }
   }
@@ -165,7 +171,14 @@ function validateHybridPolicy(input: Record<string, unknown>, errors: string[]):
     ],
     errors
   );
-  for (const field of ['alpha', 'threshold', 'k_txt', 'k_vec', 'k_final', 'recency_half_life_days']) {
+  for (const field of [
+    'alpha',
+    'threshold',
+    'k_txt',
+    'k_vec',
+    'k_final',
+    'recency_half_life_days',
+  ]) {
     if (hybridRecord[field] !== undefined) {
       ensureNumber(`retrieval.hybrid.${field}`, hybridRecord[field], errors);
     }
@@ -175,7 +188,9 @@ function validateHybridPolicy(input: Record<string, unknown>, errors: string[]):
   for (const field of objectFields) {
     if (
       hybridRecord[field] !== undefined &&
-      (!hybridRecord[field] || typeof hybridRecord[field] !== 'object' || Array.isArray(hybridRecord[field]))
+      (!hybridRecord[field] ||
+        typeof hybridRecord[field] !== 'object' ||
+        Array.isArray(hybridRecord[field]))
     ) {
       errors.push(`retrieval.hybrid.${field} must be object`);
     }
@@ -234,14 +249,22 @@ export function validatePolicy(input: Record<string, unknown>): ValidationResult
     if (!boundaryResult.ok) errors.push(...(boundaryResult.errors ?? []));
   }
   if (input['retrieval'] !== undefined) {
-    if (!input['retrieval'] || typeof input['retrieval'] !== 'object' || Array.isArray(input['retrieval'])) {
+    if (
+      !input['retrieval'] ||
+      typeof input['retrieval'] !== 'object' ||
+      Array.isArray(input['retrieval'])
+    ) {
       errors.push('retrieval must be object');
     } else {
       validateHybridPolicy(input['retrieval'] as Record<string, unknown>, errors);
     }
   }
   if (input['maintenance'] !== undefined) {
-    if (!input['maintenance'] || typeof input['maintenance'] !== 'object' || Array.isArray(input['maintenance'])) {
+    if (
+      !input['maintenance'] ||
+      typeof input['maintenance'] !== 'object' ||
+      Array.isArray(input['maintenance'])
+    ) {
       errors.push('maintenance must be object');
     } else {
       const maint = input['maintenance'] as Record<string, unknown>;

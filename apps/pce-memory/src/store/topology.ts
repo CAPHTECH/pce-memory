@@ -117,7 +117,9 @@ function claimMatchesFilters(claim: Claim, input: TopologyFilters): boolean {
   return true;
 }
 
-async function fetchClaimLinkEdges(frontierClaimIds: readonly string[]): Promise<ClaimLinkEdgeRow[]> {
+async function fetchClaimLinkEdges(
+  frontierClaimIds: readonly string[]
+): Promise<ClaimLinkEdgeRow[]> {
   if (frontierClaimIds.length === 0) {
     return [];
   }
@@ -134,7 +136,9 @@ async function fetchClaimLinkEdges(frontierClaimIds: readonly string[]): Promise
   return reader.getRowObjects() as unknown as ClaimLinkEdgeRow[];
 }
 
-async function fetchEntityPathEdges(frontierClaimIds: readonly string[]): Promise<EntityPathEdgeRow[]> {
+async function fetchEntityPathEdges(
+  frontierClaimIds: readonly string[]
+): Promise<EntityPathEdgeRow[]> {
   if (frontierClaimIds.length === 0) {
     return [];
   }
@@ -231,7 +235,9 @@ function resolveClaimLinkNeighbor(input: {
   return {};
 }
 
-function classifyClaimLinkSource(path: readonly TopologyPathSegmentBreakdown[]): 'claim_link' | 'topology' {
+function classifyClaimLinkSource(
+  path: readonly TopologyPathSegmentBreakdown[]
+): 'claim_link' | 'topology' {
   return path.length === 1 && path[0]?.kind === 'claim_link' ? 'claim_link' : 'topology';
 }
 
@@ -272,7 +278,10 @@ export async function walkTopologyFromSeeds(
     const proposals: CandidateProposal[] = [];
     for (const state of currentFrontier) {
       for (const edge of claimLinkEdges) {
-        if (edge.source_claim_id !== state.currentClaimId && edge.target_claim_id !== state.currentClaimId) {
+        if (
+          edge.source_claim_id !== state.currentClaimId &&
+          edge.target_claim_id !== state.currentClaimId
+        ) {
           continue;
         }
 
@@ -355,7 +364,10 @@ export async function walkTopologyFromSeeds(
       }
 
       for (const edge of entityPathEdges) {
-        if (edge.from_claim_id !== state.currentClaimId || state.visitedClaimIds.has(edge.to_claim_id)) {
+        if (
+          edge.from_claim_id !== state.currentClaimId ||
+          state.visitedClaimIds.has(edge.to_claim_id)
+        ) {
           continue;
         }
 
@@ -373,7 +385,8 @@ export async function walkTopologyFromSeeds(
             via_entity_ids: [edge.seed_entity_id, edge.related_entity_id],
           },
         ];
-        const edgeProduct = state.edgeProduct * config.entityPathWeight * config.entityPathConfidence;
+        const edgeProduct =
+          state.edgeProduct * config.entityPathWeight * config.entityPathConfidence;
         proposals.push({
           claimId: edge.to_claim_id,
           source: 'topology',
@@ -402,10 +415,9 @@ export async function walkTopologyFromSeeds(
     }
 
     const claimsById = new Map(
-      (await findClaimsByIds([...new Set(proposals.map((proposal) => proposal.claimId))])).map((claim) => [
-        claim.id,
-        claim,
-      ])
+      (await findClaimsByIds([...new Set(proposals.map((proposal) => proposal.claimId))])).map(
+        (claim) => [claim.id, claim]
+      )
     );
     const nextFrontierByClaimId = new Map<string, FrontierState>();
 

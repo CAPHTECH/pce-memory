@@ -623,29 +623,32 @@ export function resolveTopologyConfig(
 
   const resolvedEdgePolicy = (Object.keys(defaultEdgePolicy) as ClaimLinkType[]).reduce<
     ResolvedTopologyConfig['edgePolicy']
-  >((acc, linkType) => {
-    const override = topology?.edgePolicy?.[linkType];
-    const defaultEntry = defaultEdgePolicy[linkType];
-    acc[linkType] = {
-      weight:
-        typeof override?.weight === 'number' &&
-        Number.isFinite(override.weight) &&
-        override.weight >= 0
-          ? override.weight
-          : defaultEntry.weight,
-      direction:
-        override?.direction === 'both' || override?.direction === 'forward'
-          ? override.direction
-          : defaultEntry.direction,
-      action:
-        override?.action === 'flag_conflict' ||
-        override?.action === 'shadow_old' ||
-        override?.action === 'boost'
-          ? override.action
-          : defaultEntry.action,
-    };
-    return acc;
-  }, {} as ResolvedTopologyConfig['edgePolicy']);
+  >(
+    (acc, linkType) => {
+      const override = topology?.edgePolicy?.[linkType];
+      const defaultEntry = defaultEdgePolicy[linkType];
+      acc[linkType] = {
+        weight:
+          typeof override?.weight === 'number' &&
+          Number.isFinite(override.weight) &&
+          override.weight >= 0
+            ? override.weight
+            : defaultEntry.weight,
+        direction:
+          override?.direction === 'both' || override?.direction === 'forward'
+            ? override.direction
+            : defaultEntry.direction,
+        action:
+          override?.action === 'flag_conflict' ||
+          override?.action === 'shadow_old' ||
+          override?.action === 'boost'
+            ? override.action
+            : defaultEntry.action,
+      };
+      return acc;
+    },
+    {} as ResolvedTopologyConfig['edgePolicy']
+  );
 
   return {
     enabled: true,
