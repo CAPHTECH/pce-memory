@@ -92,16 +92,28 @@ Uninitialized → PolicyApplied → HasClaims → Ready
 
 ### MCP Tools
 
-| Tool                           | Description                                        |
-| ------------------------------ | -------------------------------------------------- |
-| `pce_memory_policy_apply`      | Apply policy (initialization)                      |
-| `pce_memory_upsert`            | Register claim with entities/relations             |
-| `pce_memory_upsert_entity`     | Register graph entity                              |
-| `pce_memory_upsert_relation`   | Register graph relation                            |
-| `pce_memory_activate`          | Build active context (hybrid search)               |
-| `pce_memory_feedback`          | Update critic (helpful/harmful/outdated/duplicate) |
-| `pce_memory_boundary_validate` | Pre-generation boundary check                      |
-| `pce_memory_state`             | Get current state                                  |
+| Tool                           | Description                                                        |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `pce_memory_policy_apply`      | Apply policy (initialization)                                      |
+| `pce_memory_observe`           | Record raw micro memory (session scratchpad)                       |
+| `pce_memory_distill`           | Distill raw observations into durable candidates                   |
+| `pce_memory_promote`           | Promote candidates to meso/macro memory                            |
+| `pce_memory_upsert`            | Register already-distilled claim with entities/relations           |
+| `pce_memory_upsert_entity`     | Register graph entity                                              |
+| `pce_memory_upsert_relation`   | Register graph relation                                            |
+| `pce_memory_activate`          | Build active context (hybrid search + topology walk)               |
+| `pce_memory_link_claims`       | Create claim-to-claim links (supports/extends/contradicts/related) |
+| `pce_memory_rollback`          | Rollback claim with topology-based blast radius analysis           |
+| `pce_memory_graph_audit`       | Audit knowledge graph (orphans, cycles, scope holes, hubs)         |
+| `pce_memory_feedback`          | Update critic (helpful/harmful/outdated/duplicate/completed)       |
+| `pce_memory_query_entity`      | Query entities by id/type/canonical_key/claim_id                   |
+| `pce_memory_query_relation`    | Query relations by src_id/dst_id/type                              |
+| `pce_memory_boundary_validate` | Pre-generation boundary check                                      |
+| `pce_memory_health`            | Health check with diagnostics                                      |
+| `pce_memory_state`             | Get current state                                                  |
+| `pce_memory_sync_push`         | Export local DB to shared directory                                |
+| `pce_memory_sync_pull`         | Import from shared directory                                       |
+| `pce_memory_sync_status`       | Check sync status                                                  |
 
 ## Testing Approach
 

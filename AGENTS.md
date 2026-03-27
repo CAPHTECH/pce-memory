@@ -7,12 +7,14 @@
 ## 利用フロー
 
 ```
-1. activate   → タスク開始前に intent-aware な想起を行う
-2. observe    → 会話ログ・作業メモ・機密を raw micro memory として一時記録
-3. distill    → raw 観測を durable 候補に蒸留
-4. promote    → reviewable candidate を meso/macro memory に昇格
-5. feedback   → 想起した知識の有用性をフィードバック
-6. rollback   → 無効になった durable memory を append-only で修復
+1. activate     → タスク開始前に intent-aware な想起を行う（topology walk で関連 claim を自動展開）
+2. observe      → 会話ログ・作業メモ・機密を raw micro memory として一時記録
+3. distill      → raw 観測を durable 候補に蒸留
+4. promote      → reviewable candidate を meso/macro memory に昇格
+5. feedback     → 想起した知識の有用性をフィードバック
+6. rollback     → 無効になった durable memory を append-only で修復（topology-based blast radius 付き）
+7. link_claims  → claim 間のリンク作成（supports/extends/contradicts/supersedes/related）
+8. graph_audit  → knowledge graph の健全性監査（orphan/cycle/scope hole/hub 検出）
 ```
 
 `upsert` は **already-distilled な durable knowledge の escape hatch** としてのみ使ってください。通常の raw -> durable 変換経路では使いません。
@@ -293,6 +295,67 @@ Agent:
 
 ---
 
+## いつ link_claims するか
+
+claim 間に意味的な関係がある場合に `pce_memory_link_claims` で接続してください：
+
+| link_type      | 意味                               | activate での挙動           |
+| -------------- | ---------------------------------- | --------------------------- |
+| `supports`     | 根拠・裏付けとなる claim           | forward、weight 0.9         |
+| `extends`      | 拡張・詳細化する claim             | forward、weight 0.7         |
+| `related`      | 関連する claim（方向性なし）       | both、weight 0.35           |
+| `contradicts`  | 矛盾する claim                     | conflict として flag        |
+| `supersedes`   | 古い claim を置き換える            | 古い claim を shadow        |
+
+```json
+// 例: claim 間のリンク
+{
+  "source_claim_id": "clm_abc",
+  "target_claim_id": "clm_def",
+  "link_type": "supports",
+  "confidence": 0.9
+}
+```
+
+---
+
+## いつ graph_audit するか
+
+knowledge graph の健全性を確認したい場合に `pce_memory_graph_audit` を呼び出してください：
+
+- **定期的なメンテナンス** — orphan claim/entity の検出
+- **大量の upsert 後** — contradiction cycle や supersession chain の確認
+- **scope 設計の確認** — principle/project 間の scope hole 検出
+- **hub 依存の確認** — 特定ノードへの過度な依存の検出
+
+```json
+// 返却される findings 例
+{
+  "summary": {
+    "claims": 10, "entities": 8, "relations": 5, "claim_links": 3,
+    "orphan_claims": 1, "contradiction_cycles": 0, "scope_holes": 2
+  },
+  "findings": [
+    { "kind": "scope_hole", "severity": "warning", "message": "..." }
+  ]
+}
+```
+
+---
+
+## rollback の blast radius
+
+`pce_memory_rollback` は topology を走査して影響範囲を返します：
+
+- **connected_claims** — link で接続された claim（depth, path 情報付き）
+- **linked_entities** — 関連する entity 一覧
+- **neighborhoods** — support/conflict/supersession の分類
+- **affected_active_contexts** — 影響を受ける active context
+
+blast radius を確認してから rollback するかどうかを判断してください。
+
+---
+
 ## 注意事項
 
 - **secret は upsert しない**: APIキー、パスワード等は durable claim にせず、必要なら observe で最小限に扱ってください
@@ -300,3 +363,4 @@ Agent:
 - **content_hash は必須**: 重複防止のため、テキストのSHA256ハッシュを含めてください
 - **provenance を明記**: いつ、誰が、なぜその知識を記録したか追跡可能にしてください
 - **過度な記録は避ける**: 全ての会話を記録するのではなく、重要な決定のみを厳選してください
+- **link_claims で graph を育てる**: upsert 時の entities/relations だけでなく、claim 間の意味的関係も link_claims で明示してください
