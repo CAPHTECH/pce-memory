@@ -16,7 +16,7 @@ milestones:
     issues: [57, 58]
   - title: Wave 3 - v2 Architecture Decision
     due_on: 2026-04-30
-    issues: [49, 56]
+    issues: [49, 56, 100]
   - title: Deferred - Non-v2 Backlog
     due_on:
     issues: [6, 7, 8, 15]
@@ -85,6 +85,30 @@ issue_settings:
     size: L
     start_date: 2026-03-24
     target_date: 2026-04-30
+  "100":
+    status: Backlog
+    priority: P1
+    size: L
+    start_date: 2026-03-26
+    target_date: 2026-04-30
+  "6":
+    status: Done
+  "7":
+    status: Done
+  "8":
+    status: Done
+  "40":
+    status: Done
+  "41":
+    status: Done
+  "42":
+    status: Done
+  "43":
+    status: Done
+  "44":
+    status: Done
+  "45":
+    status: Done
 
 defaults:
   status: Backlog
