@@ -244,6 +244,21 @@ export function transitionToHasClaims(isNew: boolean): void {
 }
 
 /**
+ * DBの実数に合わせてclaim数を同期しつつHasClaimsへ遷移
+ * 並行handler完了順に依存したlost updateを防ぐため、永続化済み件数を基準にする。
+ */
+export async function transitionToHasClaimsFromDb(minClaimCount: number = 1): Promise<void> {
+  await enqueue(async () => {
+    const dbCount = await countClaims();
+    currentMachine = PCEMemory.restore({
+      type: 'HasClaims',
+      policyVersion: currentMachine.getPolicyVersion(),
+      claimCount: Math.max(currentMachine.getClaimCount(), dbCount, minClaimCount),
+    });
+  });
+}
+
+/**
  * 状態遷移: HasClaims | Ready → Ready
  * activate成功後に呼び出し
  */

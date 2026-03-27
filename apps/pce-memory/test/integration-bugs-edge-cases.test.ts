@@ -323,6 +323,33 @@ describe('APPROACH 3: Edge Case Workflows', () => {
     expect(result.isError).toBe(true);
   });
 
+  it('invalid provenance on claim links returns a validation error', async () => {
+    await applyPolicy();
+
+    const source = expectSuccess<{ id: string }>(
+      await upsertClaimViaTool({ text: 'source claim for invalid provenance link test' })
+    );
+    const target = expectSuccess<{ id: string }>(
+      await upsertClaimViaTool({ text: 'target claim for invalid provenance link test' })
+    );
+
+    const result = await dispatchTool('pce_memory_link_claims', {
+      source_claim_id: source.id,
+      target_claim_id: target.id,
+      link_type: 'related',
+      provenance: {
+        actor: 'integration-test',
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    const error = result.structuredContent?.error as
+      | { code?: string; message?: string }
+      | undefined;
+    expect(error?.code).toBe('VALIDATION_ERROR');
+    expect(error?.message).toContain('provenance.at is required');
+  });
+
   it('health endpoint reflects accurate counts after lifecycle operations', async () => {
     await applyPolicy();
 

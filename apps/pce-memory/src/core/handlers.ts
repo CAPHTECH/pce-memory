@@ -18,6 +18,7 @@ export { handleObserve } from './handlers/observe.js';
 export { handleDistill } from './handlers/distill.js';
 export { handlePromote } from './handlers/promote.js';
 export { handleRollback } from './handlers/rollback.js';
+export { handleGraphAudit } from './handlers/graphAudit.js';
 export { handleLinkClaims } from './handlers/linkClaims.js';
 export { handleActivate } from './handlers/activate.js';
 export { handleBoundaryValidate, handleFeedback } from './handlers/feedback.js';
@@ -44,6 +45,7 @@ import { handleObserve } from './handlers/observe.js';
 import { handleDistill } from './handlers/distill.js';
 import { handlePromote } from './handlers/promote.js';
 import { handleRollback } from './handlers/rollback.js';
+import { handleGraphAudit } from './handlers/graphAudit.js';
 import { handleLinkClaims } from './handlers/linkClaims.js';
 import { handleActivate } from './handlers/activate.js';
 import { handleBoundaryValidate, handleFeedback } from './handlers/feedback.js';
@@ -76,6 +78,8 @@ export async function dispatchTool(
       return handlePromote(args);
     case 'pce_memory_rollback':
       return handleRollback(args);
+    case 'pce_memory_graph_audit':
+      return handleGraphAudit(args);
     case 'pce_memory_upsert':
       return handleUpsert(args);
     case 'pce_memory_link_claims':

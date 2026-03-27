@@ -86,6 +86,36 @@ export interface UsageTermBreakdown {
   multiplier: number;
 }
 
+export interface TopologyPathSegmentBreakdown {
+  kind: 'claim_link' | 'entity_relation';
+  from_claim_id: string;
+  to_claim_id: string;
+  weight: number;
+  confidence: number;
+  link_id?: string;
+  link_type?: string;
+  relation_id?: string;
+  relation_type?: string;
+  relation_direction?: 'forward' | 'reverse';
+  via_entity_ids?: string[];
+}
+
+export interface TopologyScoreBreakdown {
+  seed_claim_id: string;
+  kind: 'support' | 'conflict' | 'supersession';
+  depth: number;
+  hop_decay: number;
+  multiplier: number;
+  path_score: number;
+  shadowed_claim_ids?: string[];
+  path?: TopologyPathSegmentBreakdown[];
+  conflicts?: Array<{
+    claim_id: string;
+    link_type: string;
+    via_claim_id: string;
+  }>;
+}
+
 /** Hybrid Searchスコアの完全内訳 */
 export interface ScoreBreakdown {
   /** テキスト検索スコア */
@@ -104,6 +134,8 @@ export interface ScoreBreakdown {
   feedback_boost?: FeedbackBoostBreakdown;
   /** activate使用履歴由来の品質補正 */
   usage_term?: UsageTermBreakdown;
+  /** graph topology由来の補正 */
+  topology?: TopologyScoreBreakdown;
   /** 最終スコア: score_final = S × g × intent_boost × provenance_quality × feedback_boost × usage_term */
   score_final: number;
 }

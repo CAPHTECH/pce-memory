@@ -1,3 +1,4 @@
+import type { DuckDBConnection } from '@duckdb/node-api';
 import { getConnection } from '../db/connection.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
 import type { MemoryType } from '../domain/types.js';
@@ -140,9 +141,10 @@ export interface AcceptPromotionQueueInput {
 
 export async function acceptPromotionQueueRow(
   id: string,
-  input: AcceptPromotionQueueInput
+  input: AcceptPromotionQueueInput,
+  connection?: DuckDBConnection
 ): Promise<boolean> {
-  const conn = await getConnection();
+  const conn = connection ?? (await getConnection());
   if (input.provenance !== undefined) {
     const reader = await conn.runAndReadAll(
       `UPDATE promotion_queue

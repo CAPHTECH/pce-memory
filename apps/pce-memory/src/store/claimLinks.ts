@@ -1,5 +1,5 @@
 import type { DuckDBConnection } from '@duckdb/node-api';
-import { withDedicatedConnection } from '../db/connection.js';
+import { withDedicatedConnection, withWriteConnection } from '../db/connection.js';
 import type { ClaimKind, ClaimStatus, MemoryType } from '../domain/types.js';
 import { normalizeRowsTimestamps } from '../utils/serialization.js';
 
@@ -20,6 +20,8 @@ export interface ClaimLink {
   target_claim_id: string;
   link_type: ClaimLinkType;
   confidence: number;
+  evidence_claim_id?: string | null;
+  provenance?: Record<string, unknown> | null;
   created_at: string;
   created_by?: ClaimLinkCreatedBy | null;
 }
@@ -69,12 +71,25 @@ function normalizeConfidence(value: number | undefined): number {
 
 function normalizeClaimLinkRow(row: ClaimLinkRow): ClaimLink {
   const normalized = normalizeRowsTimestamps([row], ['created_at'])[0]!;
+  const provenanceValue = normalized.provenance;
+  let parsedProvenance: Record<string, unknown> | null = null;
+  if (typeof provenanceValue === 'string') {
+    try {
+      parsedProvenance = JSON.parse(provenanceValue) as Record<string, unknown>;
+    } catch {
+      parsedProvenance = null;
+    }
+  } else if (provenanceValue && typeof provenanceValue === 'object') {
+    parsedProvenance = provenanceValue as Record<string, unknown>;
+  }
   return {
     id: normalized.id,
     source_claim_id: normalized.source_claim_id,
     target_claim_id: normalized.target_claim_id,
     link_type: normalized.link_type,
     confidence: Number(normalized.confidence),
+    evidence_claim_id: normalized.evidence_claim_id ?? null,
+    provenance: parsedProvenance,
     created_at: String(normalized.created_at),
     created_by: normalized.created_by ?? null,
   };
@@ -120,26 +135,31 @@ export async function upsertClaimLink(input: {
   target_claim_id: string;
   link_type: ClaimLinkType;
   confidence?: number;
+  evidence_claim_id?: string;
+  provenance?: Record<string, unknown>;
   created_by?: ClaimLinkCreatedBy;
 }): Promise<{ link: ClaimLink; isNew: boolean }> {
   const confidence = normalizeConfidence(input.confidence);
   const createdBy = input.created_by ?? 'client';
+  const provenanceJson = input.provenance ? JSON.stringify(input.provenance) : null;
 
-  return withDedicatedConnection(async (conn) => {
+  return withWriteConnection(async (conn) => {
     try {
       // Attempt INSERT first
       const id = `clk_${crypto.randomUUID().slice(0, 8)}`;
       const createdAt = new Date().toISOString();
       await conn.run(
         `INSERT INTO claim_links (
-          id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          id, source_claim_id, target_claim_id, link_type, confidence, evidence_claim_id, provenance, created_at, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           id,
           input.source_claim_id,
           input.target_claim_id,
           input.link_type,
           confidence,
+          input.evidence_claim_id ?? null,
+          provenanceJson,
           createdAt,
           createdBy,
         ]
@@ -152,6 +172,8 @@ export async function upsertClaimLink(input: {
           target_claim_id: input.target_claim_id,
           link_type: input.link_type,
           confidence,
+          evidence_claim_id: input.evidence_claim_id ?? null,
+          provenance: input.provenance ?? null,
           created_at: createdAt,
           created_by: createdBy,
         },
@@ -172,35 +194,43 @@ export async function upsertClaimLink(input: {
       }
     }
 
-    // Re-read on a fresh connection to avoid poisoned transaction state
-    return withDedicatedConnection(async (freshConn) => {
-      await freshConn.run(
-        `UPDATE claim_links
-         SET confidence = $1, created_by = $2
-         WHERE source_claim_id = $3
-           AND target_claim_id = $4
-           AND link_type = $5`,
-        [confidence, createdBy, input.source_claim_id, input.target_claim_id, input.link_type]
+    await conn.run(
+      `UPDATE claim_links
+       SET confidence = $1,
+           created_by = $2,
+           evidence_claim_id = COALESCE($3, evidence_claim_id),
+           provenance = COALESCE($4, provenance)
+       WHERE source_claim_id = $5
+         AND target_claim_id = $6
+         AND link_type = $7`,
+      [
+        confidence,
+        createdBy,
+        input.evidence_claim_id ?? null,
+        provenanceJson,
+        input.source_claim_id,
+        input.target_claim_id,
+        input.link_type,
+      ]
+    );
+    const reader = await conn.runAndReadAll(
+      `SELECT id, source_claim_id, target_claim_id, link_type, confidence, evidence_claim_id, provenance, created_at, created_by
+       FROM claim_links
+       WHERE source_claim_id = $1
+         AND target_claim_id = $2
+         AND link_type = $3`,
+      [input.source_claim_id, input.target_claim_id, input.link_type]
+    );
+    const rows = reader.getRowObjects() as unknown as ClaimLinkRow[];
+    if (!rows[0]) {
+      throw new Error(
+        `claim_link not found after constraint conflict: ${input.source_claim_id} -> ${input.target_claim_id} (${input.link_type})`
       );
-      const reader = await freshConn.runAndReadAll(
-        `SELECT id, source_claim_id, target_claim_id, link_type, confidence, created_at, created_by
-         FROM claim_links
-         WHERE source_claim_id = $1
-           AND target_claim_id = $2
-           AND link_type = $3`,
-        [input.source_claim_id, input.target_claim_id, input.link_type]
-      );
-      const rows = reader.getRowObjects() as unknown as ClaimLinkRow[];
-      if (!rows[0]) {
-        throw new Error(
-          `claim_link not found after constraint conflict: ${input.source_claim_id} -> ${input.target_claim_id} (${input.link_type})`
-        );
-      }
-      return {
-        link: normalizeClaimLinkRow(rows[0]),
-        isNew: false,
-      };
-    });
+    }
+    return {
+      link: normalizeClaimLinkRow(rows[0]),
+      isNew: false,
+    };
   });
 }
 

@@ -8,13 +8,12 @@ import { allowTagMatches as boundaryAllowTagMatches } from '@pce/boundary';
 import { computeContentHash } from '@pce/embeddings';
 import type { BoundaryPolicy } from '@pce/policy-schemas';
 import type { Claim, Provenance } from '../../store/claims.js';
-import { findClaimsByIds } from '../../store/claims.js';
 import { upsertEntity, linkClaimEntity } from '../../store/entities.js';
 import type { EntityInput } from '../../store/entities.js';
 import { upsertRelation } from '../../store/relations.js';
 import type { RelationInput } from '../../store/relations.js';
 import type { ClaimLinkType } from '../../store/claimLinks.js';
-import { findOneHopClaimLinks } from '../../store/claimLinks.js';
+import { walkTopologyFromSeeds } from '../../store/topology.js';
 import type { ErrorCode } from '../../domain/errors.js';
 import type { DomainError } from '../../domain/errors.js';
 import { validationError } from '../../domain/errors.js';
@@ -26,7 +25,8 @@ import { isInActiveScope } from '../../state/layerScopeState.js';
 import { safeJsonStringify } from '../../utils/serialization.js';
 import { checkAndConsume } from '../../store/rate.js';
 import { stateError } from '../../domain/stateMachine.js';
-import type { ScoreBreakdown } from '../../store/rerank.js';
+import type { ScoreBreakdown, TopologyScoreBreakdown } from '../../store/rerank.js';
+import type { ResolvedTopologyConfig } from '../../store/search/types.js';
 
 // ========== Validation Functions ==========
 // (Previously in domain/validation.ts, now deleted — inlined here)
@@ -166,6 +166,24 @@ export function validateProvenanceAt(
   return { ok: true, value };
 }
 
+export class ProvenanceValidationError extends Error {
+  readonly code = 'PROVENANCE_VALIDATION';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProvenanceValidationError';
+  }
+}
+
+export class PromotionConflictValidationError extends Error {
+  readonly code = 'PROMOTION_CONFLICT';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'PromotionConflictValidationError';
+  }
+}
+
 export function hasPathTraversal(value: string): boolean {
   const raw = value.replace(/\\/g, '/');
   const decoded = (() => {
@@ -277,12 +295,13 @@ export function buildSelectionReason(item: {
   source_layer?: string;
   rank: number;
   intent?: ActivateIntent;
-  source?: 'search' | 'observation' | 'claim_link';
+  source?: 'search' | 'observation' | 'claim_link' | 'topology';
   link?: {
     via_claim_id: string;
     link_type: ClaimLinkType;
     confidence: number;
   };
+  topology?: TopologyScoreBreakdown;
 }): string {
   const parts = [
     `rank=${item.rank}`,
@@ -310,11 +329,22 @@ export function buildSelectionReason(item: {
     parts.push(`link_type=${item.link.link_type}`);
     parts.push(`link_confidence=${formatScore(item.link.confidence)}`);
   }
+  if (item.topology) {
+    parts.push(`topology_kind=${item.topology.kind}`);
+    parts.push(`topology_seed=${item.topology.seed_claim_id}`);
+    parts.push(`topology_depth=${item.topology.depth}`);
+    parts.push(`topology_multiplier=${formatScore(item.topology.multiplier)}`);
+    if (item.topology.conflicts && item.topology.conflicts.length > 0) {
+      parts.push(`topology_conflicts=${item.topology.conflicts.length}`);
+    }
+    if (item.topology.shadowed_claim_ids && item.topology.shadowed_claim_ids.length > 0) {
+      parts.push(`shadowed=${item.topology.shadowed_claim_ids.join(',')}`);
+    }
+  }
 
   return parts.join('; ');
 }
 
-export const CLAIM_LINK_SCORE_PENALTY = 0.7;
 export const CONNECTIVITY_SEED_MULTIPLIER = 3;
 
 export type ActivateSearchItem = {
@@ -322,13 +352,14 @@ export type ActivateSearchItem = {
   score: number;
   source_layer?: string;
   score_breakdown?: ScoreBreakdown;
-  source?: 'search' | 'observation' | 'claim_link';
+  source?: 'search' | 'observation' | 'claim_link' | 'topology';
   link?: {
     id: string;
     via_claim_id: string;
     link_type: ClaimLinkType;
     confidence: number;
   };
+  topology?: TopologyScoreBreakdown;
 };
 
 export type FreshnessMetadata = {
@@ -454,62 +485,83 @@ export async function expandActivateResultsWithClaimLinks(
     kindFilter?: ClaimKind[];
     memoryTypeFilter?: MemoryType[];
     excludedWorkingStateStatuses: ClaimStatus[];
+    topology?: ResolvedTopologyConfig;
   }
 ): Promise<ActivateSearchItem[]> {
   if (durableResults.length === 0) {
     return durableResults;
   }
+  if (!input.topology?.enabled) {
+    return [...durableResults].sort(compareActivateSearchItems);
+  }
 
   const merged = new Map<string, ActivateSearchItem>(
     durableResults.map((item) => [item.claim.id, { ...item, source: item.source ?? 'search' }])
   );
-  const oneHopLinks = await findOneHopClaimLinks(durableResults.map((item) => item.claim.id));
-  if (oneHopLinks.length === 0) {
-    return [...merged.values()].sort(compareActivateSearchItems);
+  const walkResult = await walkTopologyFromSeeds(
+    durableResults.map((item) => ({
+      claim: item.claim,
+      score: item.score,
+    })),
+    {
+      scopes: input.scopes,
+      boundaryClasses: input.boundaryClasses,
+      ...(input.kindFilter ? { kindFilter: input.kindFilter } : {}),
+      ...(input.memoryTypeFilter ? { memoryTypeFilter: input.memoryTypeFilter } : {}),
+      excludedWorkingStateStatuses: input.excludedWorkingStateStatuses,
+    },
+    input.topology
+  );
+
+  for (const shadowedClaimId of walkResult.shadowedClaimIds) {
+    merged.delete(shadowedClaimId);
   }
 
-  const connectedClaimIds = dedupeStrings(oneHopLinks.map((link) => link.connected_claim_id));
-  const connectedClaims = await findClaimsByIds(connectedClaimIds);
-  const connectedClaimsById = new Map(connectedClaims.map((claim) => [claim.id, claim]));
-  const directResultsById = new Map(durableResults.map((item) => [item.claim.id, item]));
-
-  for (const hop of oneHopLinks) {
-    const connectedClaim = connectedClaimsById.get(hop.connected_claim_id);
-    if (!connectedClaim) {
+  for (const [seedClaimId, conflicts] of walkResult.seedConflicts.entries()) {
+    const existing = merged.get(seedClaimId);
+    if (!existing) {
       continue;
     }
-    if (!claimMatchesActivateFilters(connectedClaim, input)) {
-      continue;
-    }
-
-    const viaResult = directResultsById.get(hop.seed_claim_id);
-    if (!viaResult) {
-      continue;
-    }
-
-    const score =
-      viaResult.score * CLAIM_LINK_SCORE_PENALTY * Math.max(0, Math.min(1, hop.confidence));
-    if (!Number.isFinite(score) || score <= 0) {
-      continue;
-    }
-
-    const existing = merged.get(connectedClaim.id);
-    const nextScore = existing === undefined ? score : combineActivateScores(existing.score, score);
-    if (existing && existing.score >= nextScore) {
-      continue;
-    }
-
-    merged.set(connectedClaim.id, {
-      claim: connectedClaim,
-      score: nextScore,
-      source_layer: existing?.source_layer ?? mapScopeToLayer(connectedClaim.scope),
-      source: 'claim_link',
-      link: {
-        id: hop.link_id,
-        via_claim_id: hop.seed_claim_id,
-        link_type: hop.link_type,
-        confidence: Number(hop.confidence.toFixed(4)),
+    merged.set(seedClaimId, {
+      ...existing,
+      topology: {
+        ...(existing.topology ?? {
+          seed_claim_id: seedClaimId,
+          kind: 'support',
+          depth: 0,
+          hop_decay: input.topology.hopDecay,
+          multiplier: 1,
+          path_score: existing.score,
+        }),
+        conflicts,
       },
+    });
+  }
+
+  for (const item of walkResult.derivedItems) {
+    const existing = merged.get(item.claim.id);
+    if (existing) {
+      const shouldUpdateTopology =
+        existing.topology === undefined || item.topology.path_score > existing.topology.path_score;
+      if (!shouldUpdateTopology) {
+        continue;
+      }
+
+      merged.set(item.claim.id, {
+        ...existing,
+        ...(item.link ? { link: item.link } : {}),
+        topology: item.topology,
+      });
+      continue;
+    }
+
+    merged.set(item.claim.id, {
+      claim: item.claim,
+      score: item.score,
+      source_layer: mapScopeToLayer(item.claim.scope),
+      source: item.source,
+      ...(item.link ? { link: item.link } : {}),
+      topology: item.topology,
     });
   }
 
@@ -546,39 +598,51 @@ export function getActivateObservationSlotCap(topK: number): number {
   return Math.max(0, Math.floor(topK * ACTIVATE_OBSERVATION_SLOT_FRACTION));
 }
 
+export function shouldEnforceGraphPresence(): boolean {
+  return process.env['PCE_ACTIVATE_FORCE_GRAPH_PRESENCE'] !== '0';
+}
+
 export function ensureClaimLinkPresence(
   pageResults: ActivateSearchItem[],
   allResults: ActivateSearchItem[],
   topK: number
 ): ActivateSearchItem[] {
-  if (topK < 2 || pageResults.some((item) => item.source === 'claim_link')) {
+  if (
+    !shouldEnforceGraphPresence() ||
+    topK < 2 ||
+    pageResults.length >= topK ||
+    pageResults.some((item) => item.source === 'claim_link' || item.source === 'topology')
+  ) {
     return pageResults;
   }
 
-  const fallbackClaimLink = allResults.find(
-    (item) =>
-      item.source === 'claim_link' &&
-      !pageResults.some((pageItem) => pageItem.claim.id === item.claim.id)
-  );
+  const fallbackClaimLink = [...allResults]
+    .filter(
+      (item) =>
+        (item.source === 'claim_link' || item.source === 'topology') &&
+        !pageResults.some((pageItem) => pageItem.claim.id === item.claim.id)
+    )
+    .sort((left, right) => {
+      const topologyScoreDiff =
+        (right.topology?.path_score ?? Number.NEGATIVE_INFINITY) -
+        (left.topology?.path_score ?? Number.NEGATIVE_INFINITY);
+      if (topologyScoreDiff !== 0) {
+        return topologyScoreDiff;
+      }
+      return compareActivateSearchItems(left, right);
+    })[0];
   if (!fallbackClaimLink) {
     return pageResults;
   }
 
-  const replacementIndex = (() => {
-    for (let index = pageResults.length - 1; index >= 0; index--) {
-      if (pageResults[index]?.source !== 'claim_link') {
-        return index;
-      }
-    }
-    return -1;
-  })();
-  if (replacementIndex < 0) {
-    return pageResults;
-  }
-
-  const nextPage = [...pageResults];
-  nextPage[replacementIndex] = fallbackClaimLink;
-  return nextPage.sort(compareActivateSearchItems);
+  const nextItem: ActivateSearchItem =
+    fallbackClaimLink.source === 'search' && fallbackClaimLink.topology
+      ? {
+          ...fallbackClaimLink,
+          source: fallbackClaimLink.link ? ('claim_link' as const) : ('topology' as const),
+        }
+      : fallbackClaimLink;
+  return [...pageResults, nextItem].sort(compareActivateSearchItems);
 }
 
 export function pageActivateResultsWithObservationCap(input: {
@@ -586,6 +650,7 @@ export function pageActivateResultsWithObservationCap(input: {
   observationResults: ActivateSearchItem[];
   topK: number;
   cursor?: string;
+  disableGraphPresenceInjection?: boolean;
 }): {
   searchResults: ActivateSearchItem[];
   nextCursor: string | undefined;
@@ -620,20 +685,22 @@ export function pageActivateResultsWithObservationCap(input: {
     observationIndex + Math.min(observationSlotCap, remainingSlots)
   );
 
-  const allResults = [...durableResults, ...observationResults].sort(compareActivateSearchItems);
-  const searchResults = ensureClaimLinkPresence(
-    [...durablePage, ...observationPage],
-    allResults,
-    input.topK
-  );
+  const remainingResults = [
+    ...durableResults.slice(durableIndex),
+    ...observationResults.slice(observationIndex),
+  ].sort(compareActivateSearchItems);
+  const pagedResults = [...durablePage, ...observationPage];
+  const searchResults = input.disableGraphPresenceInjection
+    ? pagedResults
+    : ensureClaimLinkPresence(pagedResults, remainingResults, input.topK);
   const nextDurableIndex = durableIndex + durablePage.length;
   const nextObservationIndex = observationIndex + observationPage.length;
   const hasMore =
     nextDurableIndex < durableResults.length ||
     (observationSlotCap > 0 && nextObservationIndex < observationResults.length);
   const nextCursor =
-    hasMore && searchResults.length > 0
-      ? searchResults[searchResults.length - 1]!.claim.id
+    hasMore && pagedResults.length > 0
+      ? pagedResults[pagedResults.length - 1]!.claim.id
       : undefined;
 
   return {
@@ -647,6 +714,7 @@ export function pageActivateResults(input: {
   results: ActivateSearchItem[];
   topK: number;
   cursor?: string;
+  disableGraphPresenceInjection?: boolean;
 }): {
   searchResults: ActivateSearchItem[];
   nextCursor: string | undefined;
@@ -661,15 +729,15 @@ export function pageActivateResults(input: {
     }
   }
 
-  const searchResults = ensureClaimLinkPresence(
-    results.slice(startIndex, startIndex + input.topK),
-    results,
-    input.topK
-  );
-  const hasMore = startIndex + searchResults.length < results.length;
+  const pagedResults = results.slice(startIndex, startIndex + input.topK);
+  const remainingResults = results.slice(startIndex);
+  const searchResults = input.disableGraphPresenceInjection
+    ? pagedResults
+    : ensureClaimLinkPresence(pagedResults, remainingResults, input.topK);
+  const hasMore = startIndex + pagedResults.length < results.length;
   const nextCursor =
-    hasMore && searchResults.length > 0
-      ? searchResults[searchResults.length - 1]!.claim.id
+    hasMore && pagedResults.length > 0
+      ? pagedResults[pagedResults.length - 1]!.claim.id
       : undefined;
 
   return {
@@ -756,6 +824,34 @@ export function validateRequiredProvenance(
     return { ok: false, message: 'provenance.at cannot be in the future' };
   }
   return { ok: true, value: { ...candidate, at: new Date(atMs).toISOString() } };
+}
+
+export function requireValidatedProvenance(provenance: unknown): Provenance {
+  const validated = validateRequiredProvenance(provenance);
+  if (!validated.ok) {
+    throw new ProvenanceValidationError(validated.message);
+  }
+  return validated.value;
+}
+
+export function toStructuredProvenance(provenance: Provenance): Record<string, unknown> {
+  return {
+    at: provenance.at,
+    ...(provenance.actor !== undefined ? { actor: provenance.actor } : {}),
+    ...(provenance.git !== undefined
+      ? {
+          git: {
+            ...(provenance.git.commit !== undefined ? { commit: provenance.git.commit } : {}),
+            ...(provenance.git.repo !== undefined ? { repo: provenance.git.repo } : {}),
+            ...(provenance.git.url !== undefined ? { url: provenance.git.url } : {}),
+            ...(provenance.git.files !== undefined ? { files: [...provenance.git.files] } : {}),
+          },
+        }
+      : {}),
+    ...(provenance.url !== undefined ? { url: provenance.url } : {}),
+    ...(provenance.note !== undefined ? { note: provenance.note } : {}),
+    ...(provenance.signed !== undefined ? { signed: provenance.signed } : {}),
+  };
 }
 
 export function resolveObservationSourceText(input: {

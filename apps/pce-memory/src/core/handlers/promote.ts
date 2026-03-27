@@ -5,6 +5,7 @@
 import * as crypto from 'node:crypto';
 import { boundaryValidate } from '@pce/boundary';
 import * as E from 'fp-ts/Either';
+import type { SensitivityLevel } from '@pce/embeddings';
 
 import {
   createToolResult,
@@ -12,18 +13,19 @@ import {
   validateRequiredProvenance,
   acquirePromotionLock,
   getPromotionCandidateConflictMessage,
+  PromotionConflictValidationError,
   parseJsonObject,
   isDurableScope,
   isDurableBoundaryClass,
 } from './shared.js';
 
-import {
-  upsertClaim,
-  upsertClaimWithEmbedding,
-  findClaimByContentHash,
-} from '../../store/claims.js';
+import { upsertClaim, findClaimByContentHash } from '../../store/claims.js';
 import type { Provenance } from '../../store/claims.js';
-import { findSimilarActiveClaims, getEmbeddingService } from '../../store/hybridSearch.js';
+import {
+  findSimilarActiveClaims,
+  getEmbeddingService,
+  saveClaimVector,
+} from '../../store/hybridSearch.js';
 import { suggestRelatedClaimLinks } from '../../store/claimLinks.js';
 import { insertEvidence } from '../../store/evidence.js';
 import { acceptPromotionQueueRow, findPromotionQueueRowById } from '../../store/promotionQueue.js';
@@ -37,14 +39,14 @@ import {
   getPolicyVersion,
   getStateType,
   canDoUpsert,
-  transitionToHasClaims,
+  transitionToHasClaimsFromDb,
 } from '../../state/memoryState.js';
 import {
   enterRequestScope,
   exitRequestScope,
   isInActiveScope,
 } from '../../state/layerScopeState.js';
-import { getConnection } from '../../db/connection.js';
+import { withDedicatedConnection } from '../../db/connection.js';
 
 export async function handlePromote(args: Record<string, unknown>) {
   const { candidate_id, provenance, reviewers, review_note } = args as {
@@ -67,7 +69,6 @@ export async function handlePromote(args: Record<string, unknown>) {
     );
   }
   const scopeId = scopeResult.right;
-  let transactionOpen = false;
   let releasePromotionLock: (() => void) | null = null;
 
   try {
@@ -255,13 +256,12 @@ export async function handlePromote(args: Record<string, unknown>) {
       }
     }
 
-    const conn = await getConnection();
-    await conn.run('BEGIN TRANSACTION');
-    transactionOpen = true;
-
     const embeddingService = getEmbeddingService();
-    const { claim, isNew } = embeddingService
-      ? await upsertClaimWithEmbedding(
+
+    const transactionalResult = await withDedicatedConnection(async (conn) => {
+      await conn.run('BEGIN TRANSACTION');
+      try {
+        const { claim, isNew } = await upsertClaim(
           {
             text: candidate.distilled_text,
             kind: candidate.proposed_kind,
@@ -273,77 +273,94 @@ export async function handlePromote(args: Record<string, unknown>) {
             content_hash: candidate.candidate_hash,
             provenance: promotionProvenance,
           },
-          embeddingService
-        )
-      : await upsertClaim({
-          text: candidate.distilled_text,
-          kind: candidate.proposed_kind,
-          scope: candidate.proposed_scope,
-          boundary_class: candidate.proposed_boundary_class,
-          ...(candidate.proposed_memory_type
-            ? { memory_type: candidate.proposed_memory_type }
-            : {}),
-          content_hash: candidate.candidate_hash,
-          provenance: promotionProvenance,
-        });
+          conn
+        );
 
-    const promotedClaimConflict = getPromotionCandidateConflictMessage(candidate, claim);
-    if (promotedClaimConflict) {
-      throw new Error(promotedClaimConflict);
-    }
+        const promotedClaimConflict = getPromotionCandidateConflictMessage(candidate, claim);
+        if (promotedClaimConflict) {
+          throw new PromotionConflictValidationError(promotedClaimConflict);
+        }
 
-    if (isNew) {
-      const evidenceSources = new Set(sourceObservationIds);
-      for (const observationId of evidenceSources) {
-        await insertEvidence({
-          id: `evd_${crypto.randomUUID().slice(0, 8)}`,
-          claim_id: claim.id,
-          source_type: 'observation',
-          source_id: observationId,
-          snippet: `promotion candidate ${candidate.id}`,
-          at: validatedProvenance.value.at,
-        });
+        if (isNew) {
+          const evidenceSources = new Set(sourceObservationIds);
+          for (const observationId of evidenceSources) {
+            await insertEvidence(
+              {
+                id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+                claim_id: claim.id,
+                source_type: 'observation',
+                source_id: observationId,
+                snippet: `promotion candidate ${candidate.id}`,
+                at: validatedProvenance.value.at,
+              },
+              conn
+            );
+          }
+
+          for (const sourceClaimId of new Set(sourceClaimIds)) {
+            await insertEvidence(
+              {
+                id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+                claim_id: claim.id,
+                source_type: 'claim',
+                source_id: sourceClaimId,
+                snippet: `promotion candidate ${candidate.id}`,
+                at: validatedProvenance.value.at,
+              },
+              conn
+            );
+          }
+
+          if (lineageActiveContextId) {
+            await insertEvidence(
+              {
+                id: `evd_${crypto.randomUUID().slice(0, 8)}`,
+                claim_id: claim.id,
+                source_type: 'active_context',
+                source_id: lineageActiveContextId,
+                snippet: `promotion candidate ${candidate.id}`,
+                at: validatedProvenance.value.at,
+              },
+              conn
+            );
+          }
+        }
+
+        const accepted = await acceptPromotionQueueRow(
+          candidate.id,
+          {
+            accepted_claim_id: claim.id,
+            reviewers: reviewers ? JSON.stringify(reviewers as string[]) : null,
+            resolved_at: validatedProvenance.value.at,
+            provenance: JSON.stringify({
+              ...candidateLineage,
+              promotion: {
+                provenance: validatedProvenance.value,
+                reviewers: reviewers ?? [],
+                review_note: review_note ?? null,
+              },
+            }),
+          },
+          conn
+        );
+        if (!accepted) {
+          await conn.run('ROLLBACK');
+          return { claim, isNew, accepted: false as const };
+        }
+
+        await conn.run('COMMIT');
+        return { claim, isNew, accepted: true as const };
+      } catch (error) {
+        try {
+          await conn.run('ROLLBACK');
+        } catch {
+          // best-effort rollback
+        }
+        throw error;
       }
-
-      for (const sourceClaimId of new Set(sourceClaimIds)) {
-        await insertEvidence({
-          id: `evd_${crypto.randomUUID().slice(0, 8)}`,
-          claim_id: claim.id,
-          source_type: 'claim',
-          source_id: sourceClaimId,
-          snippet: `promotion candidate ${candidate.id}`,
-          at: validatedProvenance.value.at,
-        });
-      }
-
-      if (lineageActiveContextId) {
-        await insertEvidence({
-          id: `evd_${crypto.randomUUID().slice(0, 8)}`,
-          claim_id: claim.id,
-          source_type: 'active_context',
-          source_id: lineageActiveContextId,
-          snippet: `promotion candidate ${candidate.id}`,
-          at: validatedProvenance.value.at,
-        });
-      }
-    }
-
-    const accepted = await acceptPromotionQueueRow(candidate.id, {
-      accepted_claim_id: claim.id,
-      reviewers: reviewers ? JSON.stringify(reviewers as string[]) : null,
-      resolved_at: validatedProvenance.value.at,
-      provenance: JSON.stringify({
-        ...candidateLineage,
-        promotion: {
-          provenance: validatedProvenance.value,
-          reviewers: reviewers ?? [],
-          review_note: review_note ?? null,
-        },
-      }),
     });
-    if (!accepted) {
-      await conn.run('ROLLBACK');
-      transactionOpen = false;
+
+    if (!transactionalResult.accepted) {
       return createToolResult(
         {
           ...err('VALIDATION_ERROR', 'candidate was resolved concurrently', reqId),
@@ -353,7 +370,36 @@ export async function handlePromote(args: Record<string, unknown>) {
       );
     }
 
+    const { claim, isNew } = transactionalResult;
+
+    if (isNew && embeddingService) {
+      const sensitivity: SensitivityLevel =
+        candidate.proposed_boundary_class === 'public'
+          ? 'public'
+          : candidate.proposed_boundary_class === 'internal'
+            ? 'internal'
+            : 'confidential';
+
+      const embedResult = await embeddingService.embed({
+        text: candidate.distilled_text,
+        sensitivity,
+      })();
+      if (E.isRight(embedResult)) {
+        try {
+          await saveClaimVector(
+            claim.id,
+            embedResult.right.embedding,
+            embedResult.right.modelVersion
+          );
+        } catch {
+          // Best-effort: durable claim promotion remains successful without vector persistence.
+        }
+      }
+    }
+
+    await transitionToHasClaimsFromDb(isNew ? 1 : 0);
     const similarExisting = await findSimilarActiveClaims(claim.id).catch(() => []);
+    const suggestedLinks = isNew ? await suggestRelatedClaimLinks(claim.id) : [];
 
     await appendLog({
       id: `log_${reqId}`,
@@ -363,12 +409,6 @@ export async function handlePromote(args: Record<string, unknown>) {
       trace: traceId,
       policy_version: getPolicyVersion(),
     });
-
-    await conn.run('COMMIT');
-    transactionOpen = false;
-
-    transitionToHasClaims(isNew);
-    const suggestedLinks = isNew ? await suggestRelatedClaimLinks(claim.id) : [];
 
     return createToolResult({
       claim_id: claim.id,
@@ -384,14 +424,6 @@ export async function handlePromote(args: Record<string, unknown>) {
       trace_id: traceId,
     });
   } catch (e: unknown) {
-    if (transactionOpen) {
-      try {
-        const conn = await getConnection();
-        await conn.run('ROLLBACK');
-      } catch {
-        // best-effort rollback
-      }
-    }
     try {
       await appendLog({
         id: `log_${reqId}`,
@@ -408,7 +440,11 @@ export async function handlePromote(args: Record<string, unknown>) {
     return createToolResult(
       {
         ...err(
-          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION' ? 'VALIDATION_ERROR' : 'DB_ERROR',
+          isDomainError(e) && e.code === 'CONTENT_HASH_COLLISION'
+            ? 'VALIDATION_ERROR'
+            : e instanceof PromotionConflictValidationError
+              ? 'VALIDATION_ERROR'
+              : 'DB_ERROR',
           msg,
           reqId
         ),

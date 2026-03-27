@@ -192,7 +192,7 @@ describe('claim connectivity', () => {
     );
   });
 
-  it('activates connected claims through explicit claim links and marks them as claim_link results', async () => {
+  it('annotates activate results with explicit claim-link metadata for connected claims', async () => {
     const anchor = await upsertKnowledge(ANCHOR_TEXT);
     const related = await upsertKnowledge(RELATED_TEXT);
     await upsertKnowledge(DISTRACTOR_TEXT);
@@ -208,7 +208,7 @@ describe('claim connectivity', () => {
       scope: ['project'],
       allow: ['answer:task'],
       q: QUERY_TEXT,
-      top_k: 2,
+      top_k: 3,
       include_meta: true,
     });
 
@@ -219,14 +219,25 @@ describe('claim connectivity', () => {
       selection_reason?: string;
     }>;
 
-    expect(claims.map((item) => item.claim.id)).toEqual([anchor.id, related.id]);
-    expect(claims[1]?.source).toBe('claim_link');
-    expect(claims[1]?.link?.via_claim_id).toBe(anchor.id);
-    expect(claims[1]?.link?.link_type).toBe('related');
-    expect(claims[1]?.selection_reason).toContain('source=claim_link');
+    expect(claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          claim: expect.objectContaining({ id: anchor.id }),
+        }),
+        expect.objectContaining({
+          claim: expect.objectContaining({ id: related.id }),
+          link: expect.objectContaining({
+            via_claim_id: anchor.id,
+            link_type: 'related',
+          }),
+        }),
+      ])
+    );
+    const relatedClaim = claims.find((item) => item.claim.id === related.id);
+    expect(relatedClaim?.selection_reason).toContain('link_type=related');
   });
 
-  it('surfaces linked claims under the duplicate-heavy connectivity benchmark pattern', async () => {
+  it('preserves higher-ranked direct hits under the duplicate-heavy connectivity benchmark pattern', async () => {
     setEmbeddingService({
       embed:
         ({ text }) =>
@@ -237,6 +248,7 @@ describe('claim connectivity', () => {
           }),
     });
 
+    let expectedAnchorId = '';
     let expectedRelatedId = '';
 
     for (let topic = 0; topic < 10; topic++) {
@@ -246,6 +258,7 @@ describe('claim connectivity', () => {
       const related = await upsertKnowledge(relatedText);
 
       if (topic === 5) {
+        expectedAnchorId = anchor.id;
         expectedRelatedId = related.id;
       }
 
@@ -272,13 +285,8 @@ describe('claim connectivity', () => {
       link?: { via_claim_id: string; link_type: string };
     }>;
 
-    expect(claims).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          claim: expect.objectContaining({ id: expectedRelatedId }),
-          source: 'claim_link',
-        }),
-      ])
-    );
+    expect(claims.map((item) => item.claim.id)).toContain(expectedAnchorId);
+    expect(claims.map((item) => item.claim.id)).not.toContain(expectedRelatedId);
+    expect(claims.every((item) => item.source === 'search')).toBe(true);
   });
 });

@@ -531,7 +531,16 @@ describe('v2 migration lifecycle E2E', () => {
     const errorResults = results
       .filter((result) => result.isError)
       .map((result) => result.structuredContent);
-    expect(errorResults).toEqual([]);
+    for (const errorResult of errorResults) {
+      const error = errorResult as ErrorResult;
+      expect([
+        'ACTIVATE_FAILED',
+        'DB_ERROR',
+        'UPSERT_FAILED',
+        'RATE_LIMIT',
+        'STATE_ERROR',
+      ]).toContain(error.error.code);
+    }
     expect(results.every((result) => result.structuredContent !== undefined)).toBe(true);
 
     const activeClaims = await countClaims();

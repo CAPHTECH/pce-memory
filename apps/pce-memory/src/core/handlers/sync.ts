@@ -9,7 +9,7 @@ import {
   canDoQuery,
   getPolicyVersion,
   getStateType,
-  transitionToHasClaims,
+  transitionToHasClaimsFromDb,
 } from '../../state/memoryState.js';
 import { stateError } from '../../domain/stateMachine.js';
 import { checkAndConsume } from '../../store/rate.js';
@@ -244,10 +244,7 @@ export async function handleSyncPull(args: Record<string, unknown>): Promise<Too
     const totalNewClaims = result.right.imported.claims.new;
 
     if (totalNewClaims > 0 && !result.right.dryRun) {
-      // totalNewClaims回分、状態遷移を行う（claimCountを増加させるため）
-      for (let i = 0; i < totalNewClaims; i++) {
-        transitionToHasClaims(true);
-      }
+      await transitionToHasClaimsFromDb(totalNewClaims);
     }
 
     await appendLog({

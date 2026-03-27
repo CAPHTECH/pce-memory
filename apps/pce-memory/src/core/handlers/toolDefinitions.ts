@@ -3,6 +3,273 @@ import { CLAIM_LINK_TYPES } from '../../store/claimLinks.js';
 
 // ========== Tool Definitions ==========
 
+const PROVENANCE_SCHEMA = {
+  type: 'object',
+  properties: {
+    at: { type: 'string', format: 'date-time' },
+    actor: { type: 'string' },
+    git: {
+      type: 'object',
+      properties: {
+        commit: { type: 'string' },
+        repo: { type: 'string' },
+        url: { type: 'string' },
+        files: { type: 'array', items: { type: 'string' } },
+      },
+    },
+    url: { type: 'string' },
+    note: { type: 'string' },
+    signed: { type: 'boolean' },
+  },
+  required: ['at'],
+} as const;
+
+export const TOPOLOGY_PATH_SEGMENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    kind: { type: 'string', enum: ['claim_link', 'entity_relation'] },
+    from_claim_id: { type: 'string' },
+    to_claim_id: { type: 'string' },
+    weight: { type: 'number' },
+    confidence: { type: 'number' },
+    link_id: { type: 'string' },
+    link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
+    relation_id: { type: 'string' },
+    relation_type: { type: 'string' },
+    relation_direction: { type: 'string', enum: ['forward', 'reverse'] },
+    via_entity_ids: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['kind', 'from_claim_id', 'to_claim_id', 'weight', 'confidence'],
+} as const;
+
+export const TOPOLOGY_BREAKDOWN_SCHEMA = {
+  type: 'object',
+  description: 'Graph-topology explanation for graph-derived or graph-adjusted items',
+  properties: {
+    seed_claim_id: { type: 'string' },
+    kind: { type: 'string', enum: ['support', 'conflict', 'supersession'] },
+    depth: { type: 'integer', minimum: 0 },
+    hop_decay: { type: 'number' },
+    multiplier: { type: 'number' },
+    path_score: { type: 'number' },
+    shadowed_claim_ids: { type: 'array', items: { type: 'string' } },
+    path: { type: 'array', items: TOPOLOGY_PATH_SEGMENT_SCHEMA },
+    conflicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          claim_id: { type: 'string' },
+          link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
+          via_claim_id: { type: 'string' },
+        },
+        required: ['claim_id', 'link_type', 'via_claim_id'],
+      },
+    },
+  },
+  required: ['seed_claim_id', 'kind', 'depth', 'hop_decay', 'multiplier', 'path_score'],
+} as const;
+
+export const GRAPH_AUDIT_FINDING_SCHEMA = {
+  type: 'object',
+  properties: {
+    kind: {
+      type: 'string',
+      enum: [
+        'orphan_claim',
+        'orphan_entity',
+        'contradiction_cycle',
+        'supersession_chain',
+        'scope_hole',
+        'repeated_coactivation',
+        'generic_hub',
+      ],
+    },
+    severity: { type: 'string', enum: ['info', 'warning', 'critical'] },
+    message: { type: 'string' },
+    node_ids: { type: 'array', items: { type: 'string' } },
+    edge_ids: { type: 'array', items: { type: 'string' } },
+    related_ids: { type: 'array', items: { type: 'string' } },
+    context_ids: { type: 'array', items: { type: 'string' } },
+    details: { type: 'object' },
+  },
+  required: ['kind', 'severity', 'message'],
+} as const;
+
+export const GRAPH_AUDIT_COMPONENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    claim_ids: { type: 'array', items: { type: 'string' } },
+    scope_counts: { type: 'object' },
+    missing_scopes: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['id', 'claim_ids', 'scope_counts', 'missing_scopes'],
+} as const;
+
+export const GRAPH_AUDIT_SUMMARY_SCHEMA = {
+  type: 'object',
+  properties: {
+    claims: { type: 'integer', minimum: 0 },
+    entities: { type: 'integer', minimum: 0 },
+    relations: { type: 'integer', minimum: 0 },
+    claim_links: { type: 'integer', minimum: 0 },
+    components: { type: 'integer', minimum: 0 },
+    orphan_claims: { type: 'integer', minimum: 0 },
+    orphan_entities: { type: 'integer', minimum: 0 },
+    contradiction_cycles: { type: 'integer', minimum: 0 },
+    supersession_chains: { type: 'integer', minimum: 0 },
+    scope_holes: { type: 'integer', minimum: 0 },
+    repeated_coactivations: { type: 'integer', minimum: 0 },
+    generic_hubs: { type: 'integer', minimum: 0 },
+    truncated: { type: 'boolean' },
+  },
+  required: [
+    'claims',
+    'entities',
+    'relations',
+    'claim_links',
+    'components',
+    'orphan_claims',
+    'orphan_entities',
+    'contradiction_cycles',
+    'supersession_chains',
+    'scope_holes',
+    'repeated_coactivations',
+    'generic_hubs',
+  ],
+} as const;
+
+export const ROLLBACK_NEIGHBORHOOD_ITEM_SCHEMA = {
+  type: 'object',
+  properties: {
+    claim: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+      },
+      required: ['id'],
+    },
+    kind: { type: 'string', enum: ['support', 'conflict', 'supersession'] },
+    score: { type: 'number' },
+    depth: { type: 'integer', minimum: 0 },
+    source: { type: 'string', enum: ['claim_links', 'entity_graph'] },
+    path: { type: 'array', items: TOPOLOGY_PATH_SEGMENT_SCHEMA },
+  },
+  required: ['claim', 'kind', 'score', 'depth', 'source', 'path'],
+} as const;
+
+export const ROLLBACK_BLAST_RADIUS_SCHEMA = {
+  type: 'object',
+  properties: {
+    scope: { type: 'string' },
+    target_layer: { type: 'string', enum: ['micro', 'meso', 'macro'] },
+    root_claim: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+      },
+      required: ['id'],
+    },
+    connected_claims: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          claim: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+            },
+            required: ['id'],
+          },
+          kinds: {
+            type: 'array',
+            items: { type: 'string', enum: ['support', 'conflict', 'supersession'] },
+          },
+          score: { type: 'number' },
+          depth: { type: 'integer', minimum: 0 },
+          source: { type: 'string', enum: ['claim_links', 'entity_graph'] },
+          path: { type: 'array', items: TOPOLOGY_PATH_SEGMENT_SCHEMA },
+        },
+        required: ['claim', 'kinds', 'score', 'depth', 'source', 'path'],
+      },
+    },
+    linked_entities: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          entity: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              type: { type: 'string' },
+              name: { type: 'string' },
+            },
+            required: ['id', 'type', 'name'],
+          },
+          claim_ids: { type: 'array', items: { type: 'string' } },
+          score: { type: 'number' },
+        },
+        required: ['entity', 'claim_ids', 'score'],
+      },
+    },
+    affected_active_contexts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          active_context_id: { type: 'string' },
+          claim_ids: { type: 'array', items: { type: 'string' } },
+          item_count: { type: 'integer', minimum: 0 },
+          source_layers: { type: 'array', items: { type: 'string' } },
+          max_score: { type: 'number' },
+        },
+        required: ['active_context_id', 'claim_ids', 'item_count', 'source_layers', 'max_score'],
+      },
+    },
+    neighborhoods: {
+      type: 'object',
+      properties: {
+        support: { type: 'array', items: ROLLBACK_NEIGHBORHOOD_ITEM_SCHEMA },
+        conflict: { type: 'array', items: ROLLBACK_NEIGHBORHOOD_ITEM_SCHEMA },
+        supersession: { type: 'array', items: ROLLBACK_NEIGHBORHOOD_ITEM_SCHEMA },
+      },
+      required: ['support', 'conflict', 'supersession'],
+    },
+    summary: {
+      type: 'object',
+      properties: {
+        connected_claims: { type: 'integer', minimum: 0 },
+        linked_entities: { type: 'integer', minimum: 0 },
+        affected_active_contexts: { type: 'integer', minimum: 0 },
+        support: { type: 'integer', minimum: 0 },
+        conflict: { type: 'integer', minimum: 0 },
+        supersession: { type: 'integer', minimum: 0 },
+      },
+      required: [
+        'connected_claims',
+        'linked_entities',
+        'affected_active_contexts',
+        'support',
+        'conflict',
+        'supersession',
+      ],
+    },
+  },
+  required: [
+    'scope',
+    'target_layer',
+    'root_claim',
+    'connected_claims',
+    'linked_entities',
+    'affected_active_contexts',
+    'neighborhoods',
+    'summary',
+  ],
+} as const;
+
 export const TOOL_DEFINITIONS = [
   {
     name: 'pce_memory_policy_apply',
@@ -42,26 +309,7 @@ export const TOOL_DEFINITIONS = [
         boundary_class: { type: 'string', enum: ['public', 'internal', 'pii', 'secret'] },
         actor: { type: 'string' },
         tags: { type: 'array', items: { type: 'string' } },
-        provenance: {
-          type: 'object',
-          properties: {
-            at: { type: 'string', format: 'date-time' },
-            actor: { type: 'string' },
-            git: {
-              type: 'object',
-              properties: {
-                commit: { type: 'string' },
-                repo: { type: 'string' },
-                url: { type: 'string' },
-                files: { type: 'array', items: { type: 'string' } },
-              },
-            },
-            url: { type: 'string' },
-            note: { type: 'string' },
-            signed: { type: 'boolean' },
-          },
-          required: ['at'],
-        },
+        provenance: PROVENANCE_SCHEMA,
         ttl_days: { type: 'number', minimum: 1 },
         extract: {
           type: 'object',
@@ -171,26 +419,7 @@ export const TOOL_DEFINITIONS = [
       type: 'object',
       properties: {
         candidate_id: { type: 'string' },
-        provenance: {
-          type: 'object',
-          properties: {
-            at: { type: 'string', format: 'date-time' },
-            actor: { type: 'string' },
-            git: {
-              type: 'object',
-              properties: {
-                commit: { type: 'string' },
-                repo: { type: 'string' },
-                url: { type: 'string' },
-                files: { type: 'array', items: { type: 'string' } },
-              },
-            },
-            url: { type: 'string' },
-            note: { type: 'string' },
-            signed: { type: 'boolean' },
-          },
-          required: ['at'],
-        },
+        provenance: PROVENANCE_SCHEMA,
         reviewers: { type: 'array', items: { type: 'string' } },
         review_note: { type: 'string' },
       },
@@ -288,7 +517,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         rollback_id: { type: 'string' },
         superseded_claim_id: { type: 'string' },
-        blast_radius: { type: 'object' },
+        blast_radius: ROLLBACK_BLAST_RADIUS_SCHEMA,
         policy_version: { type: 'string' },
         state: {
           type: 'string',
@@ -301,6 +530,54 @@ export const TOOL_DEFINITIONS = [
         'rollback_id',
         'superseded_claim_id',
         'blast_radius',
+        'policy_version',
+        'state',
+        'request_id',
+        'trace_id',
+      ],
+    },
+  },
+  {
+    name: 'pce_memory_graph_audit',
+    description:
+      'Audit the claim/entity graph for orphan nodes, contradiction cycles, supersession debt, missing edges, scope holes, and generic hubs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        min_supersession_chain_length: { type: 'integer', minimum: 1 },
+        repeated_coactivation_threshold: { type: 'integer', minimum: 1 },
+        generic_hub_degree_threshold: { type: 'integer', minimum: 1 },
+        max_findings_per_kind: { type: 'integer', minimum: 1 },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        summary: GRAPH_AUDIT_SUMMARY_SCHEMA,
+        truncation: {
+          type: 'object',
+          properties: {
+            claims: { type: 'boolean' },
+            entities: { type: 'boolean' },
+            relations: { type: 'boolean' },
+          },
+          required: ['claims', 'entities', 'relations'],
+        },
+        findings: { type: 'array', items: GRAPH_AUDIT_FINDING_SCHEMA },
+        components: { type: 'array', items: GRAPH_AUDIT_COMPONENT_SCHEMA },
+        policy_version: { type: 'string' },
+        state: {
+          type: 'string',
+          enum: ['Uninitialized', 'PolicyApplied', 'HasClaims', 'Ready'],
+        },
+        request_id: { type: 'string' },
+        trace_id: { type: 'string' },
+      },
+      required: [
+        'summary',
+        'truncation',
+        'findings',
+        'components',
         'policy_version',
         'state',
         'request_id',
@@ -479,6 +756,15 @@ export const TOOL_DEFINITIONS = [
           maximum: 1,
           description: 'Optional confidence override. Defaults to 1.0.',
         },
+        evidence_claim_id: {
+          type: 'string',
+          description: 'Optional claim id that evidences why this explicit link exists.',
+        },
+        provenance: {
+          ...PROVENANCE_SCHEMA,
+          description:
+            'Optional structured provenance for the explicit link. If omitted, the server records a minimal confirmation provenance.',
+        },
       },
       required: ['source_claim_id', 'target_claim_id', 'link_type'],
     },
@@ -491,6 +777,8 @@ export const TOOL_DEFINITIONS = [
         target_claim_id: { type: 'string' },
         link_type: { type: 'string', enum: [...CLAIM_LINK_TYPES] },
         confidence: { type: 'number' },
+        evidence_claim_id: { type: 'string' },
+        provenance: PROVENANCE_SCHEMA,
         created_by: { type: 'string', enum: ['client', 'auto_similarity'] },
         policy_version: { type: 'string' },
         state: {
@@ -602,7 +890,7 @@ export const TOOL_DEFINITIONS = [
               },
               source: {
                 type: 'string',
-                enum: ['search', 'observation', 'claim_link'],
+                enum: ['search', 'observation', 'claim_link', 'topology'],
                 description: 'How the item entered the activate result set',
               },
               link: {
@@ -620,6 +908,7 @@ export const TOOL_DEFINITIONS = [
                 type: 'object',
                 description: 'Hybrid and rerank score breakdown',
               },
+              topology: TOPOLOGY_BREAKDOWN_SCHEMA,
               selection_reason: {
                 type: 'string',
                 description: 'Compact explanation of why the item was selected',

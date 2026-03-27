@@ -1,4 +1,4 @@
-import { getConnection } from '../db/connection.js';
+import { withWriteConnection } from '../db/connection.js';
 
 /**
  * Criticスコアを原子的に更新
@@ -18,19 +18,17 @@ export async function updateCritic(
   min: number,
   max: number
 ): Promise<number> {
-  const conn = await getConnection();
+  return withWriteConnection(async (conn) => {
+    const reader = await conn.runAndReadAll(
+      `INSERT INTO critic (claim_id, score)
+       VALUES ($1, LEAST($2::DOUBLE, GREATEST($3::DOUBLE, $4::DOUBLE)))
+       ON CONFLICT (claim_id)
+       DO UPDATE SET score = LEAST($2::DOUBLE, GREATEST($3::DOUBLE, critic.score + $4::DOUBLE))
+       RETURNING score`,
+      [claimId, max, min, delta]
+    );
 
-  // 原子的UPSERT: INSERT時は delta をクランプ、UPDATE時は (current + delta) をクランプ
-  // Note: criticテーブルにはFK制約がないため、ON CONFLICTは安全に使用可能
-  const reader = await conn.runAndReadAll(
-    `INSERT INTO critic (claim_id, score)
-     VALUES ($1, LEAST($2::DOUBLE, GREATEST($3::DOUBLE, $4::DOUBLE)))
-     ON CONFLICT (claim_id)
-     DO UPDATE SET score = LEAST($2::DOUBLE, GREATEST($3::DOUBLE, critic.score + $4::DOUBLE))
-     RETURNING score`,
-    [claimId, max, min, delta]
-  );
-
-  const rows = reader.getRowObjects() as { score: number }[];
-  return rows[0]?.score ?? 0;
+    const rows = reader.getRowObjects() as { score: number }[];
+    return rows[0]?.score ?? 0;
+  });
 }

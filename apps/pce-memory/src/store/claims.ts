@@ -1,4 +1,5 @@
-import { getConnection } from '../db/connection.js';
+import type { DuckDBConnection } from '@duckdb/node-api';
+import { getConnection, withDedicatedConnection, withWriteConnection } from '../db/connection.js';
 import type { EmbeddingService, SensitivityLevel } from '@pce/embeddings';
 import * as E from 'fp-ts/Either';
 import { saveClaimVector, splitQueryWords, buildWordOrCondition } from './hybridSearch.js';
@@ -179,111 +180,111 @@ function parseClaimsProvenance(claims: ClaimRow[]): Claim[] {
   return claims.map((claim) => parseClaimProvenance(claim));
 }
 
-export async function upsertClaim(c: ClaimInput): Promise<UpsertResult> {
-  const conn = await getConnection();
-  try {
-    // 既存レコードをチェック
-    const reader = await conn.runAndReadAll(
-      `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
-      [c.content_hash]
-    );
-    const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
-    const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
-    if (existing.length > 0 && existing[0]) {
-      if (existing[0].text !== c.text) {
-        throw new ContentHashCollisionError();
-      }
-      return { claim: existing[0], isNew: false };
-    }
+async function withClaimWriteConnection<T>(
+  connection: DuckDBConnection | undefined,
+  operation: (conn: DuckDBConnection) => Promise<T>
+): Promise<T> {
+  if (connection) {
+    return operation(connection);
+  }
+  return withWriteConnection(operation);
+}
 
-    // ロールバック済みまたはtombstone済みの同一content_hashが存在する場合、復活させる
-    const rolledBackReader = await conn.runAndReadAll(
-      `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1
-       AND (COALESCE(c.tombstone, FALSE) = TRUE OR ${rollbackRecordExistsFilter('c')})`,
-      [c.content_hash]
-    );
-    const rawRolledBack = rolledBackReader.getRowObjects() as unknown as ClaimRow[];
-    const rolledBack = parseClaimsProvenance(normalizeRowsTimestamps(rawRolledBack));
-    if (rolledBack.length > 0 && rolledBack[0]) {
-      const revived = rolledBack[0];
+export async function upsertClaim(
+  c: ClaimInput,
+  connection?: DuckDBConnection
+): Promise<UpsertResult> {
+  return withClaimWriteConnection(connection, async (conn) => {
+    try {
+      const reader = await conn.runAndReadAll(
+        `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
+        [c.content_hash]
+      );
+      const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
+      const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
+      if (existing.length > 0 && existing[0]) {
+        if (existing[0].text !== c.text) {
+          throw new ContentHashCollisionError();
+        }
+        return { claim: existing[0], isNew: false };
+      }
+
+      const rolledBackReader = await conn.runAndReadAll(
+        `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1
+         AND (COALESCE(c.tombstone, FALSE) = TRUE OR ${rollbackRecordExistsFilter('c')})`,
+        [c.content_hash]
+      );
+      const rawRolledBack = rolledBackReader.getRowObjects() as unknown as ClaimRow[];
+      const rolledBack = parseClaimsProvenance(normalizeRowsTimestamps(rawRolledBack));
+      if (rolledBack.length > 0 && rolledBack[0]) {
+        const revived = rolledBack[0];
+        if (revived.text !== c.text) {
+          throw new ContentHashCollisionError();
+        }
+        await conn.run(
+          `UPDATE claims
+           SET tombstone = FALSE,
+               tombstone_at = NULL,
+               rollback_reason = NULL,
+               superseded_by = NULL,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [revived.id]
+        );
+        await conn.run(
+          `DELETE FROM promotion_queue WHERE accepted_claim_id = $1 AND status = 'rolled_back'`,
+          [revived.id]
+        );
+        const revivedReader = await conn.runAndReadAll(
+          `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
+          [revived.id]
+        );
+        const rawRevived = revivedReader.getRowObjects() as unknown as ClaimRow[];
+        const parsed = parseClaimsProvenance(normalizeRowsTimestamps(rawRevived));
+        return { claim: parsed[0]!, isNew: true };
+      }
+
+      const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
       const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
       const memoryType = c.memory_type ?? null;
       const status = c.status ?? 'active';
-      // ロールバック済みclaimを復活: tombstone解除、メタデータ更新
       await conn.run(
-        `UPDATE claims
-         SET tombstone = FALSE,
-             tombstone_at = NULL,
-             rollback_reason = NULL,
-             superseded_by = NULL,
-             kind = $1,
-             scope = $2,
-             boundary_class = $3,
-             memory_type = $4,
-             status = $5,
-             provenance = $6,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $7`,
-        [c.kind, c.scope, c.boundary_class, memoryType, status, provenanceJson, revived.id]
+        'INSERT INTO claims (id, text, kind, scope, boundary_class, memory_type, status, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [
+          id,
+          c.text,
+          c.kind,
+          c.scope,
+          c.boundary_class,
+          memoryType,
+          status,
+          c.content_hash,
+          provenanceJson,
+        ]
       );
-      // ロールバック記録も削除して復活を完了
-      await conn.run(
-        `DELETE FROM promotion_queue WHERE accepted_claim_id = $1 AND status = 'rolled_back'`,
-        [revived.id]
-      );
-      // 復活後のレコードを取得
-      const revivedReader = await conn.runAndReadAll(
+      const insertedReader = await conn.runAndReadAll(
         `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
-        [revived.id]
+        [id]
       );
-      const rawRevived = revivedReader.getRowObjects() as unknown as ClaimRow[];
-      const parsed = parseClaimsProvenance(normalizeRowsTimestamps(rawRevived));
-      return { claim: parsed[0]!, isNew: true };
-    }
-
-    // 新規レコード挿入（utility/confidence/timestampsはDEFAULT値を使用）
-    const id = `clm_${crypto.randomUUID().slice(0, 8)}`;
-    const provenanceJson = c.provenance ? JSON.stringify(c.provenance) : null;
-    const memoryType = c.memory_type ?? null;
-    const status = c.status ?? 'active';
-    await conn.run(
-      'INSERT INTO claims (id, text, kind, scope, boundary_class, memory_type, status, content_hash, provenance) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [
-        id,
-        c.text,
-        c.kind,
-        c.scope,
-        c.boundary_class,
-        memoryType,
-        status,
-        c.content_hash,
-        provenanceJson,
-      ]
-    );
-    // 挿入後のレコードを取得（DEFAULT値を含む）
-    const insertedReader = await conn.runAndReadAll(
-      `SELECT ${CLAIM_COLUMNS} FROM claims WHERE id = $1`,
-      [id]
-    );
-    const rawInserted = insertedReader.getRowObjects() as unknown as ClaimRow[];
-    const inserted = parseClaimsProvenance(normalizeRowsTimestamps(rawInserted));
-    return { claim: inserted[0]!, isNew: true };
-  } catch (e: unknown) {
-    // UNIQUE 制約違反などは既存レコードを返す（idempotent upsert）
-    const reader = await conn.runAndReadAll(
-      `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
-      [c.content_hash]
-    );
-    const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
-    const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
-    if (existing.length > 0 && existing[0]) {
-      if (existing[0].text !== c.text) {
-        throw new ContentHashCollisionError();
+      const rawInserted = insertedReader.getRowObjects() as unknown as ClaimRow[];
+      const inserted = parseClaimsProvenance(normalizeRowsTimestamps(rawInserted));
+      return { claim: inserted[0]!, isNew: true };
+    } catch (e: unknown) {
+      const reader = await conn.runAndReadAll(
+        `SELECT ${CLAIM_COLUMNS} FROM claims c WHERE c.content_hash = $1 AND ${activeClaimFilter('c')}`,
+        [c.content_hash]
+      );
+      const rawExisting = reader.getRowObjects() as unknown as ClaimRow[];
+      const existing = parseClaimsProvenance(normalizeRowsTimestamps(rawExisting));
+      if (existing.length > 0 && existing[0]) {
+        if (existing[0].text !== c.text) {
+          throw new ContentHashCollisionError();
+        }
+        return { claim: existing[0], isNew: false };
       }
-      return { claim: existing[0], isNew: false };
+      throw e;
     }
-    throw e;
-  }
+  });
 }
 
 /**
@@ -463,11 +464,12 @@ export async function listClaimsByFilter(options: ClaimFilterOptions): Promise<C
  * @param boundaryClass 新しいboundary_class
  */
 export async function updateClaimBoundaryClass(id: string, boundaryClass: string): Promise<void> {
-  const conn = await getConnection();
-  await conn.run(
-    'UPDATE claims SET boundary_class = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-    [boundaryClass, id]
-  );
+  await withWriteConnection(async (conn) => {
+    await conn.run(
+      'UPDATE claims SET boundary_class = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [boundaryClass, id]
+    );
+  });
 }
 
 export interface UpdateClaimSyncMetadataInput {
@@ -496,21 +498,23 @@ export async function updateClaimSyncMetadata(
     return;
   }
 
-  const conn = await getConnection();
   assignments.push('updated_at = CURRENT_TIMESTAMP');
-  await conn.run(`UPDATE claims SET ${assignments.join(', ')} WHERE id = $${values.length + 1}`, [
-    ...values,
-    id,
-  ]);
+  await withWriteConnection(async (conn) => {
+    await conn.run(`UPDATE claims SET ${assignments.join(', ')} WHERE id = $${values.length + 1}`, [
+      ...values,
+      id,
+    ]);
+  });
 }
 
 async function feedbackTableExists(): Promise<boolean> {
-  const conn = await getConnection();
-  const reader = await conn.runAndReadAll(
-    "SELECT COUNT(*)::INTEGER AS cnt FROM information_schema.tables WHERE table_name = 'feedback'"
-  );
-  const rows = reader.getRowObjects() as Array<{ cnt: number | bigint }>;
-  return Number(rows[0]?.cnt ?? 0) > 0;
+  return withDedicatedConnection(async (conn) => {
+    const reader = await conn.runAndReadAll(
+      "SELECT COUNT(*)::INTEGER AS cnt FROM information_schema.tables WHERE table_name = 'feedback'"
+    );
+    const rows = reader.getRowObjects() as Array<{ cnt: number | bigint }>;
+    return Number(rows[0]?.cnt ?? 0) > 0;
+  });
 }
 
 function resolveStaleAfterDays(staleAfterDays: number | undefined): number {
@@ -520,11 +524,12 @@ function resolveStaleAfterDays(staleAfterDays: number | undefined): number {
 }
 
 export async function updateClaimStatus(id: string, status: ClaimStatus): Promise<void> {
-  const conn = await getConnection();
-  await conn.run('UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
-    status,
-    id,
-  ]);
+  await withWriteConnection(async (conn) => {
+    await conn.run('UPDATE claims SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
+      status,
+      id,
+    ]);
+  });
 }
 
 export async function recordClaimRetrievals(
@@ -536,15 +541,16 @@ export async function recordClaimRetrievals(
     return;
   }
 
-  const conn = await getConnection();
   const placeholders = uniqueIds.map((_, index) => `$${index + 2}`).join(',');
-  await conn.run(
-    `UPDATE claims
-     SET retrieval_count = COALESCE(retrieval_count, 0) + 1,
-         last_retrieved_at = $1
-     WHERE id IN (${placeholders})`,
-    [retrievedAt, ...uniqueIds]
-  );
+  await withWriteConnection(async (conn) => {
+    await conn.run(
+      `UPDATE claims
+       SET retrieval_count = COALESCE(retrieval_count, 0) + 1,
+           last_retrieved_at = $1
+       WHERE id IN (${placeholders})`,
+      [retrievedAt, ...uniqueIds]
+    );
+  });
 }
 
 export async function markStaleWorkingStateClaims(
@@ -552,7 +558,6 @@ export async function markStaleWorkingStateClaims(
     staleAfterDays?: number;
   } = {}
 ): Promise<string[]> {
-  const conn = await getConnection();
   const staleAfterDays = resolveStaleAfterDays(options.staleAfterDays);
   const feedbackExists = await feedbackTableExists();
   const recentFeedbackGuard = feedbackExists
@@ -564,33 +569,22 @@ export async function markStaleWorkingStateClaims(
        )`
     : '';
 
-  const reader = await conn.runAndReadAll(
-    `
-      SELECT c.id
-      FROM claims c
-      WHERE c.memory_type = 'working_state'
-        AND COALESCE(c.status, 'active') = 'active'
-        AND COALESCE(c.recency_anchor, c.created_at) < CURRENT_TIMESTAMP - INTERVAL '${staleAfterDays} days'
-        ${recentFeedbackGuard}
-    `
-  );
-  const rows = reader.getRowObjects() as Array<{ id: string }>;
-  const claimIds = rows.map((row) => row.id);
-
-  if (claimIds.length === 0) {
-    return [];
-  }
-
-  const placeholders = claimIds.map((_, index) => `$${index + 1}`).join(',');
-  await conn.run(
-    `UPDATE claims
-     SET status = 'stale',
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id IN (${placeholders})`,
-    claimIds
-  );
-
-  return claimIds;
+  return withWriteConnection(async (writeConn) => {
+    const reader = await writeConn.runAndReadAll(
+      `
+        UPDATE claims c
+        SET status = 'stale',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE c.memory_type = 'working_state'
+          AND COALESCE(c.status, 'active') = 'active'
+          AND COALESCE(c.recency_anchor, c.created_at) < CURRENT_TIMESTAMP - INTERVAL '${staleAfterDays} days'
+          ${recentFeedbackGuard}
+        RETURNING id
+      `
+    );
+    const rows = reader.getRowObjects() as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  });
 }
 
 export interface RollbackClaimInput {
@@ -600,17 +594,18 @@ export interface RollbackClaimInput {
 }
 
 export async function markClaimRolledBack(id: string, input: RollbackClaimInput): Promise<void> {
-  const conn = await getConnection();
-  await conn.run(
-    `UPDATE claims
-     SET tombstone = TRUE,
-         tombstone_at = $1::TIMESTAMP,
-         rollback_reason = $2,
-         superseded_by = $3,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE id = $4`,
-    [input.tombstone_at, input.rollback_reason, input.superseded_by, id]
-  );
+  await withWriteConnection(async (conn) => {
+    await conn.run(
+      `UPDATE claims
+       SET tombstone = TRUE,
+           tombstone_at = $1::TIMESTAMP,
+           rollback_reason = $2,
+           superseded_by = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [input.tombstone_at, input.rollback_reason, input.superseded_by, id]
+    );
+  });
 }
 
 export async function findClaimsByIds(ids: string[]): Promise<Claim[]> {
@@ -638,14 +633,15 @@ export async function findClaimsByIds(ids: string[]): Promise<Claim[]> {
  * サーバー再起動時の状態復元に使用
  */
 export async function countClaims(): Promise<number> {
-  const conn = await getConnection();
-  const reader = await conn.runAndReadAll(
-    `SELECT COUNT(*) as cnt
-     FROM claims c
-     WHERE ${activeClaimFilter('c')}`
-  );
-  const rows = reader.getRowObjects() as unknown as { cnt: number | bigint }[];
-  return rows[0] ? Number(rows[0].cnt) : 0;
+  return withDedicatedConnection(async (conn) => {
+    const reader = await conn.runAndReadAll(
+      `SELECT COUNT(*) as cnt
+       FROM claims c
+       WHERE ${activeClaimFilter('c')}`
+    );
+    const rows = reader.getRowObjects() as unknown as { cnt: number | bigint }[];
+    return rows[0] ? Number(rows[0].cnt) : 0;
+  });
 }
 
 /**
@@ -661,10 +657,11 @@ export async function countClaims(): Promise<number> {
  */
 export async function upsertClaimWithEmbedding(
   c: ClaimInput,
-  embeddingService: EmbeddingService
+  embeddingService: EmbeddingService,
+  connection?: DuckDBConnection
 ): Promise<UpsertResult> {
   // 1. 既存upsertClaim呼び出し
-  const result = await upsertClaim(c);
+  const result = await upsertClaim(c, connection);
 
   // 2. 新規の場合のみ埋め込み生成・保存
   if (result.isNew) {
@@ -686,7 +683,8 @@ export async function upsertClaimWithEmbedding(
         await saveClaimVector(
           result.claim.id,
           embedResult.right.embedding,
-          embedResult.right.modelVersion
+          embedResult.right.modelVersion,
+          connection
         );
       } catch {
         // ベクトル保存失敗は無視（ベストエフォート）
