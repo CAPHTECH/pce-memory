@@ -8,6 +8,7 @@ AI autonomously operates pce-memory. No manual user interaction required.
 
 - **Auto-bootstrap**: Checks state, initializes, and recalls knowledge at session start
 - **Auto-activate**: Detects task-like prompts and recalls relevant knowledge automatically
+- **Pre-injected persistence guidance**: Session-start and prompt-submit hooks tell the agent how to persist context before ending, without relying on a stop hook
 - **V2 write path guidance**: Durable memory follows `observe -> distill -> promote`, with `upsert` reserved as an escape hatch for already-distilled knowledge
 - **Layer-aware recall/sync**: Skills describe micro/meso/macro behavior, memory types, and sync boundaries
 
@@ -40,9 +41,8 @@ observe -> distill -> promote -> activate(intent) -> feedback -> rollback
 
 | Event                    | Behavior                                                            |
 | ------------------------ | ------------------------------------------------------------------- |
-| SessionStart             | Check state → policy_apply → activate (also fires after compaction) |
+| SessionStart             | Check state → policy_apply → activate; inject persistence guidance (also fires after compaction) |
 | UserPromptSubmit         | Inject base protocol every message + activate on task detection     |
-| Stop                     | Final reminder to persist important context                         |
 | PostToolUse(Write\|Edit) | Remind the agent to record architecturally significant changes      |
 
 The runtime hooks remain lightweight. The v2 durable-memory contract is documented in the skills so agents can choose `observe`, `distill`, `promote`, `activate(intent)`, `feedback`, and `rollback` correctly.

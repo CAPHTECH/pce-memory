@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Plugin v0.11.0**: Remove the Stop hook and move end-of-session persistence guidance into SessionStart and UserPromptSubmit pre-injected prompts
+
 ## [0.13.0] - 2026-03-25
 
 ### Changed
